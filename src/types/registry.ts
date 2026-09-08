@@ -323,8 +323,6 @@ export interface Wave {
   itemIds: string[];
 }
 
-export const HARDWARE_GROUP_ID = 'GRP-HW';
-
 export function itemKind(id: string): 'capability' | 'epic' | 'feature' | 'story' | 'unknown' {
   if (id.startsWith('CAP-')) return 'capability';
   if (id.startsWith('EPIC-')) return 'epic';

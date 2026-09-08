@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill, TONE_DOT } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
-import { HARDWARE_GROUP_ID, REQUIREMENT_LABEL, STORY_STAGES, TRACKS } from '../types/registry';
+import { REQUIREMENT_LABEL, STORY_STAGES, TRACKS } from '../types/registry';
 
 function ProcessModal({ group, onClose }: {group: CapabilityGroup | null;onClose: () => void;}) {
   if (!group) return null;
@@ -115,7 +115,7 @@ export function GroupsPage() {
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
                   {TRACKS[g.track].label} · {TRACKS[g.track].stages.length} stages
                 </span>
-                {g.id === HARDWARE_GROUP_ID &&
+                {g.track === 'hardware' &&
                 <span className="rounded border border-aqua/40 px-1.5 py-0.5 text-2xs text-aqua">
                     equipment-bound
                   </span>

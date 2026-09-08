@@ -1,13 +1,11 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { initialCapabilities } from '../data/capabilities';
-import { initialEpics, initialFeatures, initialStories } from '../data/delivery';
-import {
-  domainCategories,
-  domains as initialDomains,
-  equipment as initialEquipment,
-  initialGroups } from
-'../data/taxonomy';
-import { initialWaves } from '../data/waves';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import type { DatasetId, ImportResult } from '../utils/datasets';
 import type { SheetRow } from '../utils/excel';
 import type {
@@ -22,15 +20,15 @@ import type {
   RecordCounts,
   TrackId,
   UserStory,
-  Wave } from
-'../types/registry';
+  Wave,
+} from '../types/registry';
 import {
   CAPABILITY_STATUSES,
-  HARDWARE_GROUP_ID,
   STORY_STAGES,
   TRACKS,
-  stageIndex } from
-'../types/registry';
+  stageIndex,
+} from '../types/registry';
+import * as api from '../lib/registryApi';
 
 export interface NewCapabilityInput {
   name: string;
@@ -45,24 +43,28 @@ export type EpicInput = Pick<Epic, 'key' | 'name' | 'description' | 'status'>;
 export type FeatureInput = Pick<Feature, 'name' | 'description' | 'status'>;
 export type StoryInput = Pick<
   UserStory,
-  'title' |
-  'role' |
-  'want' |
-  'benefit' |
-  'criteria' |
-  'points' |
-  'status' |
-  'stage' |
-  'adrContext' |
-  'adrDecision' |
-  'adrTechnical' |
-  'adrConsequences' |
-  'adrApproved'>;
+  | 'title'
+  | 'role'
+  | 'want'
+  | 'benefit'
+  | 'criteria'
+  | 'points'
+  | 'status'
+  | 'stage'
+  | 'adrContext'
+  | 'adrDecision'
+  | 'adrTechnical'
+  | 'adrConsequences'
+  | 'adrApproved'
+>;
 
 export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type'>;
 export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
 
 interface RegistryValue {
+  loading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
   capabilities: Capability[];
   groups: CapabilityGroup[];
   domains: Domain[];
@@ -104,14 +106,13 @@ interface RegistryValue {
   capabilityOfEpic: (epicId: string) => Capability | undefined;
   countsOf: (capabilityId: string) => RecordCounts;
   hardwareCapabilities: Capability[];
-  /** Excel transfer — rows are keyed by the column labels declared in utils/datasets. */
   exportDataset: (dataset: DatasetId, parentId?: string) => SheetRow[];
   importDataset: (dataset: DatasetId, rows: SheetRow[], parentId?: string) => ImportResult;
 }
 
 const RegistryContext = createContext<RegistryValue | null>(null);
 
-function nextId(prefix: string, existing: {id: string;}[], pad = 3): string {
+function nextId(prefix: string, existing: { id: string }[], pad = 3): string {
   const max = existing.reduce((acc, item) => {
     const n = Number(item.id.replace(`${prefix}-`, ''));
     return Number.isFinite(n) && n > acc ? n : acc;
@@ -119,15 +120,57 @@ function nextId(prefix: string, existing: {id: string;}[], pad = 3): string {
   return `${prefix}-${String(max + 1).padStart(pad, '0')}`;
 }
 
-export function RegistryProvider({ children }: {children: React.ReactNode;}) {
-  const [capabilities, setCapabilities] = useState<Capability[]>(initialCapabilities);
-  const [groups, setGroups] = useState<CapabilityGroup[]>(initialGroups);
-  const [epics, setEpics] = useState<Epic[]>(initialEpics);
-  const [features, setFeatures] = useState<Feature[]>(initialFeatures);
-  const [stories, setStories] = useState<UserStory[]>(initialStories);
-  const [waves, setWaves] = useState<Wave[]>(initialWaves);
-  const [equipment, setEquipment] = useState<Equipment[]>(initialEquipment);
-  const [domains, setDomains] = useState<Domain[]>(initialDomains);
+function persistError(action: string, err: unknown): void {
+  console.error(`[registry] ${action}`, err);
+}
+
+export function RegistryProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [groups, setGroups] = useState<CapabilityGroup[]>([]);
+  const [categories, setCategories] = useState<DomainCategory[]>([]);
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [stories, setStories] = useState<UserStory[]>([]);
+  const [waves, setWaves] = useState<Wave[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [domains, setDomains] = useState<Domain[]>([]);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const snap = await api.fetchRegistry();
+      setCategories(snap.categories);
+      setDomains(snap.domains);
+      setGroups(snap.groups);
+      setEquipment(snap.equipment);
+      setCapabilities(snap.capabilities);
+      setEpics(snap.epics);
+      setFeatures(snap.features);
+      setStories(snap.stories);
+      setWaves(snap.waves);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load registry from Supabase');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const isHardwareGroup = useCallback(
+    (groupId: string) => groups.find((g) => g.id === groupId)?.track === 'hardware',
+    [groups]
+  );
+
+  const trackOfGroup = useCallback(
+    (groupId: string): TrackId => groups.find((g) => g.id === groupId)?.track ?? 'delivery',
+    [groups]
+  );
 
   const addEquipment = useCallback(
     (input: EquipmentInput) => {
@@ -136,17 +179,13 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         name: input.name.trim(),
         vendor: input.vendor.trim(),
         model: input.model.trim(),
-        type: input.type.trim()
+        type: input.type.trim(),
       };
       setEquipment((prev) => [...prev, created]);
+      void api.upsertEquipment(created).catch((err) => persistError('addEquipment', err));
       return created;
     },
     [equipment]
-  );
-
-  const trackOfGroup = useCallback(
-    (groupId: string): TrackId => groups.find((g) => g.id === groupId)?.track ?? 'delivery',
-    [groups]
   );
 
   const addCapability = useCallback(
@@ -158,84 +197,105 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         groupId: input.groupId,
         domainIds: input.domainIds,
         jiraEpic: input.jiraEpic.trim(),
-        equipmentIds: input.groupId === HARDWARE_GROUP_ID ? input.equipmentIds : [],
+        equipmentIds: isHardwareGroup(input.groupId) ? input.equipmentIds : [],
         progress: 'Identified',
-        status: null
+        status: null,
       };
       setCapabilities((prev) => [created, ...prev]);
+      void api.upsertCapability(created).catch((err) => persistError('addCapability', err));
       return created;
     },
-    [capabilities]
+    [capabilities, isHardwareGroup]
   );
 
   const updateCapability = useCallback(
     (id: string, patch: Partial<Omit<Capability, 'id'>>) => {
-      setCapabilities((prev) =>
-      prev.map((cap) => {
-        if (cap.id !== id) return cap;
-        const next: Capability = { ...cap, ...patch };
-        if (next.groupId !== HARDWARE_GROUP_ID) next.equipmentIds = [];
-        const track = trackOfGroup(next.groupId);
-        // A stage only exists inside one track — reset when the group moves the capability.
-        if (stageIndex(track, next.progress) < 0) {
-          next.progress = TRACKS[track].stages[0].name;
-        }
+      setCapabilities((prev) => {
+        const next = prev.map((cap) => {
+          if (cap.id !== id) return cap;
+          const updated: Capability = { ...cap, ...patch };
+          if (!isHardwareGroup(updated.groupId)) updated.equipmentIds = [];
+          const track = trackOfGroup(updated.groupId);
+          if (stageIndex(track, updated.progress) < 0) {
+            updated.progress = TRACKS[track].stages[0].name;
+          }
+          void api.upsertCapability(updated).catch((err) => persistError('updateCapability', err));
+          return updated;
+        });
         return next;
-      })
-      );
+      });
     },
-    [trackOfGroup]
+    [isHardwareGroup, trackOfGroup]
   );
 
   const addGroup = useCallback((name: string, description: string, track: TrackId, process: string) => {
-    setGroups((prev) => [
-    ...prev,
-    {
-      id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name.
-      replace(/[^a-zA-Z]/g, '').
-      slice(0, 3).
-      toUpperCase()}`,
-      name: name.trim(),
-      description: description.trim(),
-      track,
-      process: process.trim()
-    }]
-    );
+    setGroups((prev) => {
+      const created: CapabilityGroup = {
+        id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
+          .replace(/[^a-zA-Z]/g, '')
+          .slice(0, 3)
+          .toUpperCase()}`,
+        name: name.trim(),
+        description: description.trim(),
+        track,
+        process: process.trim(),
+      };
+      void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
+      return [...prev, created];
+    });
   }, []);
 
-  const setEquipmentCapabilities = useCallback((equipmentId: string, capabilityIds: string[]) => {
-    setCapabilities((prev) =>
-    prev.map((cap) => {
-      if (cap.groupId !== HARDWARE_GROUP_ID) return cap;
-      const shouldHave = capabilityIds.includes(cap.id);
-      const has = cap.equipmentIds.includes(equipmentId);
-      if (shouldHave === has) return cap;
-      return {
-        ...cap,
-        equipmentIds: shouldHave ?
-        [...cap.equipmentIds, equipmentId] :
-        cap.equipmentIds.filter((id) => id !== equipmentId)
-      };
-    })
-    );
-  }, []);
+  const setEquipmentCapabilities = useCallback(
+    (equipmentId: string, capabilityIds: string[]) => {
+      setCapabilities((prev) => {
+        const next = prev.map((cap) => {
+          if (!isHardwareGroup(cap.groupId)) return cap;
+          const shouldHave = capabilityIds.includes(cap.id);
+          const has = cap.equipmentIds.includes(equipmentId);
+          if (shouldHave === has) return cap;
+          return {
+            ...cap,
+            equipmentIds: shouldHave
+              ? [...cap.equipmentIds, equipmentId]
+              : cap.equipmentIds.filter((id) => id !== equipmentId),
+          };
+        });
+        const changed = next.filter((cap, i) => cap !== prev[i]);
+        if (changed.length > 0) {
+          void api.upsertCapabilities(changed).catch((err) =>
+            persistError('setEquipmentCapabilities', err)
+          );
+        }
+        return next;
+      });
+    },
+    [isHardwareGroup]
+  );
 
   const addEpic = useCallback((capabilityId: string, input: EpicInput) => {
-    setEpics((prev) => [
-    ...prev,
-    {
-      id: nextId('EPIC', prev),
-      capabilityId,
-      key: input.key.trim(),
-      name: input.name.trim(),
-      description: input.description.trim(),
-      status: input.status
-    }]
-    );
+    setEpics((prev) => {
+      const created: Epic = {
+        id: nextId('EPIC', prev),
+        capabilityId,
+        key: input.key.trim(),
+        name: input.name.trim(),
+        description: input.description.trim(),
+        status: input.status,
+      };
+      void api.upsertEpic(created).catch((err) => persistError('addEpic', err));
+      return [...prev, created];
+    });
   }, []);
 
   const updateEpic = useCallback((id: string, patch: Partial<EpicInput>) => {
-    setEpics((prev) => prev.map((e) => e.id === id ? { ...e, ...patch } : e));
+    setEpics((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        const updated = { ...e, ...patch };
+        void api.upsertEpic(updated).catch((err) => persistError('updateEpic', err));
+        return updated;
+      })
+    );
   }, []);
 
   const removeEpic = useCallback((id: string) => {
@@ -245,82 +305,110 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
       return prevFeatures.filter((f) => f.epicId !== id);
     });
     setEpics((prev) => prev.filter((e) => e.id !== id));
+    void api.deleteEpic(id).catch((err) => persistError('removeEpic', err));
   }, []);
 
   const addFeature = useCallback((epicId: string, input: FeatureInput) => {
-    setFeatures((prev) => [
-    ...prev,
-    {
-      id: nextId('FEAT', prev),
-      epicId,
-      name: input.name.trim(),
-      description: input.description.trim(),
-      status: input.status
-    }]
-    );
+    setFeatures((prev) => {
+      const created: Feature = {
+        id: nextId('FEAT', prev),
+        epicId,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        status: input.status,
+      };
+      void api.upsertFeature(created).catch((err) => persistError('addFeature', err));
+      return [...prev, created];
+    });
   }, []);
 
   const updateFeature = useCallback((id: string, patch: Partial<FeatureInput>) => {
-    setFeatures((prev) => prev.map((f) => f.id === id ? { ...f, ...patch } : f));
+    setFeatures((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        const updated = { ...f, ...patch };
+        void api.upsertFeature(updated).catch((err) => persistError('updateFeature', err));
+        return updated;
+      })
+    );
   }, []);
 
   const removeFeature = useCallback((id: string) => {
     setStories((prev) => prev.filter((s) => s.featureId !== id));
     setFeatures((prev) => prev.filter((f) => f.id !== id));
+    void api.deleteFeature(id).catch((err) => persistError('removeFeature', err));
   }, []);
 
   const addStory = useCallback((featureId: string, input: StoryInput) => {
-    setStories((prev) => [
-    ...prev,
-    {
-      id: nextId('US', prev),
-      featureId,
-      title: input.title.trim(),
-      role: input.role.trim(),
-      want: input.want.trim(),
-      benefit: input.benefit.trim(),
-      criteria: input.criteria.filter((c) => c.trim() !== ''),
-      points: input.points,
-      status: input.status,
-      stage: input.stage,
-      adrContext: input.adrContext,
-      adrDecision: input.adrDecision,
-      adrTechnical: input.adrTechnical,
-      adrConsequences: input.adrConsequences,
-      adrApproved: input.adrApproved
-    }]
-    );
+    setStories((prev) => {
+      const created: UserStory = {
+        id: nextId('US', prev),
+        featureId,
+        title: input.title.trim(),
+        role: input.role.trim(),
+        want: input.want.trim(),
+        benefit: input.benefit.trim(),
+        criteria: input.criteria.filter((c) => c.trim() !== ''),
+        points: input.points,
+        status: input.status,
+        stage: input.stage,
+        adrContext: input.adrContext,
+        adrDecision: input.adrDecision,
+        adrTechnical: input.adrTechnical,
+        adrConsequences: input.adrConsequences,
+        adrApproved: input.adrApproved,
+      };
+      void api.upsertStory(created).catch((err) => persistError('addStory', err));
+      return [...prev, created];
+    });
   }, []);
 
   const updateStory = useCallback((id: string, patch: Partial<StoryInput>) => {
-    setStories((prev) => prev.map((s) => s.id === id ? { ...s, ...patch } : s));
+    setStories((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const updated = { ...s, ...patch };
+        void api.upsertStory(updated).catch((err) => persistError('updateStory', err));
+        return updated;
+      })
+    );
   }, []);
 
   const removeStory = useCallback((id: string) => {
     setStories((prev) => prev.filter((s) => s.id !== id));
+    void api.deleteStory(id).catch((err) => persistError('removeStory', err));
   }, []);
 
   const addWave = useCallback(
     (input: WaveInput) => {
       const created: Wave = { id: nextId('WAVE', waves), ...input };
       setWaves((prev) => [...prev, created]);
+      void api.upsertWave(created).catch((err) => persistError('addWave', err));
       return created;
     },
     [waves]
   );
 
   const updateWave = useCallback((id: string, patch: Partial<WaveInput>) => {
-    setWaves((prev) => prev.map((w) => w.id === id ? { ...w, ...patch } : w));
+    setWaves((prev) =>
+      prev.map((w) => {
+        if (w.id !== id) return w;
+        const updated = { ...w, ...patch };
+        void api.upsertWave(updated).catch((err) => persistError('updateWave', err));
+        return updated;
+      })
+    );
   }, []);
 
   const removeWave = useCallback((id: string) => {
     setWaves((prev) => prev.filter((w) => w.id !== id));
+    void api.deleteWave(id).catch((err) => persistError('removeWave', err));
   }, []);
 
   const value = useMemo<RegistryValue>(() => {
     const domainMap = new Map(domains.map((d) => [d.id, d]));
     const groupMap = new Map(groups.map((g) => [g.id, g]));
-    const categoryMap = new Map(domainCategories.map((c) => [c.id, c]));
+    const categoryMap = new Map(categories.map((c) => [c.id, c]));
     const capabilityMap = new Map(capabilities.map((c) => [c.id, c]));
     const epicMap = new Map(epics.map((e) => [e.id, e]));
     const featureMap = new Map(features.map((f) => [f.id, f]));
@@ -342,7 +430,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         epics: capEpics.length,
         features: capFeatures.length,
         stories: capStories.length,
-        equipment: capabilityMap.get(capabilityId)?.equipmentIds.length ?? 0
+        equipment: capabilityMap.get(capabilityId)?.equipmentIds.length ?? 0,
       };
     };
 
@@ -351,10 +439,10 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
       return hit ?? null;
     };
     const list = (raw: string) =>
-    raw.
-    split(/[;,\n]/).
-    map((v) => v.trim()).
-    filter(Boolean);
+      raw
+        .split(/[;,\n]/)
+        .map((v) => v.trim())
+        .filter(Boolean);
 
     const exportDataset = (dataset: DatasetId, parentId?: string): SheetRow[] => {
       if (dataset === 'capabilities') {
@@ -367,52 +455,52 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           'Epic Key': c.jiraEpic,
           'Equipment IDs': c.equipmentIds.join('; '),
           Progress: c.progress,
-          Status: c.status ?? ''
+          Status: c.status ?? '',
         }));
       }
       if (dataset === 'epics') {
-        return epics.
-        filter((e) => !parentId || e.capabilityId === parentId).
-        map((e) => ({
-          'Epic ID': e.id,
-          'Capability ID': e.capabilityId,
-          Key: e.key,
-          Name: e.name,
-          Description: e.description,
-          Status: e.status ?? ''
-        }));
+        return epics
+          .filter((e) => !parentId || e.capabilityId === parentId)
+          .map((e) => ({
+            'Epic ID': e.id,
+            'Capability ID': e.capabilityId,
+            Key: e.key,
+            Name: e.name,
+            Description: e.description,
+            Status: e.status ?? '',
+          }));
       }
       if (dataset === 'features') {
-        return features.
-        filter((f) => !parentId || f.epicId === parentId).
-        map((f) => ({
-          'Feature ID': f.id,
-          'Epic ID': f.epicId,
-          Name: f.name,
-          Description: f.description,
-          Status: f.status ?? ''
-        }));
+        return features
+          .filter((f) => !parentId || f.epicId === parentId)
+          .map((f) => ({
+            'Feature ID': f.id,
+            'Epic ID': f.epicId,
+            Name: f.name,
+            Description: f.description,
+            Status: f.status ?? '',
+          }));
       }
       if (dataset === 'stories') {
-        return stories.
-        filter((s) => !parentId || s.featureId === parentId).
-        map((s) => ({
-          'Story ID': s.id,
-          'Feature ID': s.featureId,
-          Title: s.title,
-          'As a': s.role,
-          'I want to': s.want,
-          'So that': s.benefit,
-          'Acceptance Criteria': s.criteria.join('; '),
-          Points: s.points == null ? '' : String(s.points),
-          'Progress Stage': s.stage,
-          Status: s.status ?? '',
-          'ADR Context': s.adrContext ?? '',
-          'ADR Decision': s.adrDecision ?? '',
-          'ADR Technical': s.adrTechnical ?? '',
-          'ADR Consequences': s.adrConsequences ?? '',
-          'ADR Approved': s.adrApproved ? 'Yes' : 'No'
-        }));
+        return stories
+          .filter((s) => !parentId || s.featureId === parentId)
+          .map((s) => ({
+            'Story ID': s.id,
+            'Feature ID': s.featureId,
+            Title: s.title,
+            'As a': s.role,
+            'I want to': s.want,
+            'So that': s.benefit,
+            'Acceptance Criteria': s.criteria.join('; '),
+            Points: s.points == null ? '' : String(s.points),
+            'Progress Stage': s.stage,
+            Status: s.status ?? '',
+            'ADR Context': s.adrContext ?? '',
+            'ADR Decision': s.adrDecision ?? '',
+            'ADR Technical': s.adrTechnical ?? '',
+            'ADR Consequences': s.adrConsequences ?? '',
+            'ADR Approved': s.adrApproved ? 'Yes' : 'No',
+          }));
       }
       if (dataset === 'equipment') {
         return equipment.map((e) => ({
@@ -420,7 +508,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           Name: e.name,
           Vendor: e.vendor,
           Model: e.model,
-          Type: e.type
+          Type: e.type,
         }));
       }
       if (dataset === 'domains') {
@@ -428,7 +516,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           'Domain ID': d.id,
           Name: d.name,
           Description: d.description,
-          'Category ID': d.categoryId
+          'Category ID': d.categoryId,
         }));
       }
       return groups.map((g) => ({
@@ -436,7 +524,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         Name: g.name,
         Description: g.description,
         Track: g.track,
-        Process: g.process
+        Process: g.process,
       }));
     };
 
@@ -452,13 +540,14 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         rows.forEach((r, i) => {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
-          const groupId = (r['Group ID'] ?? '').trim() || groups[0].id;
-          if (!groups.some((g) => g.id === groupId)) return note(i, `unknown group "${groupId}"`);
+          const groupId = (r['Group ID'] ?? '').trim() || groups[0]?.id;
+          if (!groupId || !groups.some((g) => g.id === groupId))
+            return note(i, `unknown group "${groupId ?? ''}"`);
           const track = groupMap.get(groupId)?.track ?? 'delivery';
           const progressRaw = (r['Progress'] ?? '').trim();
           const progress =
-          TRACKS[track].stages.find((s) => s.name.toLowerCase() === progressRaw.toLowerCase())?.name ??
-          TRACKS[track].stages[0].name;
+            TRACKS[track].stages.find((s) => s.name.toLowerCase() === progressRaw.toLowerCase())
+              ?.name ?? TRACKS[track].stages[0].name;
           const id = (r['Capability ID'] ?? '').trim();
           const patch = {
             name,
@@ -467,11 +556,11 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
             domainIds: list(r['Domain IDs'] ?? '').filter((d) => domainMap.has(d)),
             jiraEpic: (r['Epic Key'] ?? '').trim(),
             equipmentIds:
-            groupId === HARDWARE_GROUP_ID ?
-            list(r['Equipment IDs'] ?? '').filter((e) => equipment.some((eq) => eq.id === e)) :
-            [],
+              groupMap.get(groupId)?.track === 'hardware'
+                ? list(r['Equipment IDs'] ?? '').filter((e) => equipment.some((eq) => eq.id === e))
+                : [],
             progress,
-            status: asStatus(r['Status'] ?? '')
+            status: asStatus(r['Status'] ?? ''),
           };
           const at = id ? next.findIndex((c) => c.id === id) : -1;
           if (at >= 0) {
@@ -483,6 +572,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setCapabilities(next);
+        void api.upsertCapabilities(next).catch((err) => persistError('import capabilities', err));
         return result;
       }
 
@@ -499,7 +589,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
             key: (r['Key'] ?? '').trim(),
             name,
             description: (r['Description'] ?? '').trim(),
-            status: asStatus(r['Status'] ?? '')
+            status: asStatus(r['Status'] ?? ''),
           };
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
@@ -511,6 +601,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setEpics(next);
+        void api.upsertEpics(next).catch((err) => persistError('import epics', err));
         return result;
       }
 
@@ -526,7 +617,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
             epicId,
             name,
             description: (r['Description'] ?? '').trim(),
-            status: asStatus(r['Status'] ?? '')
+            status: asStatus(r['Status'] ?? ''),
           };
           const at = id ? next.findIndex((f) => f.id === id) : -1;
           if (at >= 0) {
@@ -538,6 +629,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setFeatures(next);
+        void api.upsertFeatures(next).catch((err) => persistError('import features', err));
         return result;
       }
 
@@ -561,13 +653,13 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
             points: Number.isFinite(points) && (r['Points'] ?? '').trim() !== '' ? points : null,
             status: asStatus(r['Status'] ?? ''),
             stage:
-            STORY_STAGES.find((s) => s.name.toLowerCase() === stageRaw.toLowerCase())?.name ??
-            STORY_STAGES[0].name,
+              STORY_STAGES.find((s) => s.name.toLowerCase() === stageRaw.toLowerCase())?.name ??
+              STORY_STAGES[0].name,
             adrContext: (r['ADR Context'] ?? '').trim(),
             adrDecision: (r['ADR Decision'] ?? '').trim(),
             adrTechnical: (r['ADR Technical'] ?? '').trim(),
             adrConsequences: (r['ADR Consequences'] ?? '').trim(),
-            adrApproved: /^(yes|true|1|x)$/i.test((r['ADR Approved'] ?? '').trim())
+            adrApproved: /^(yes|true|1|x)$/i.test((r['ADR Approved'] ?? '').trim()),
           };
           const at = id ? next.findIndex((s) => s.id === id) : -1;
           if (at >= 0) {
@@ -579,6 +671,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setStories(next);
+        void api.upsertStories(next).catch((err) => persistError('import stories', err));
         return result;
       }
 
@@ -592,7 +685,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
             name,
             vendor: (r['Vendor'] ?? '').trim(),
             model: (r['Model'] ?? '').trim(),
-            type: (r['Type'] ?? '').trim()
+            type: (r['Type'] ?? '').trim(),
           };
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
@@ -604,6 +697,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setEquipment(next);
+        void api.upsertEquipmentMany(next).catch((err) => persistError('import equipment', err));
         return result;
       }
 
@@ -627,6 +721,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           }
         });
         setDomains(next);
+        void api.upsertDomains(next).catch((err) => persistError('import domains', err));
         return result;
       }
 
@@ -641,7 +736,7 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
           name,
           description: (r['Description'] ?? '').trim(),
           track,
-          process: (r['Process'] ?? '').trim()
+          process: (r['Process'] ?? '').trim(),
         };
         const at = id ? next.findIndex((g) => g.id === id) : -1;
         if (at >= 0) {
@@ -650,25 +745,33 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         } else {
           next.push({
             id:
-            id ||
-            `GRP-${String(next.length + 1).padStart(2, '0')}-${name.
-            replace(/[^a-zA-Z]/g, '').
-            slice(0, 3).
-            toUpperCase()}`,
-            ...patch
+              id ||
+              `GRP-${String(next.length + 1).padStart(2, '0')}-${name
+                .replace(/[^a-zA-Z]/g, '')
+                .slice(0, 3)
+                .toUpperCase()}`,
+            ...patch,
           });
           result.created += 1;
         }
       });
       setGroups(next);
+      void api.upsertGroups(next).catch((err) => persistError('import groups', err));
       return result;
     };
 
+    const hardwareGroupIds = new Set(
+      groups.filter((g) => g.track === 'hardware').map((g) => g.id)
+    );
+
     return {
+      loading,
+      error,
+      reload,
       capabilities,
       groups,
       domains,
-      categories: domainCategories,
+      categories,
       equipment,
       epics,
       features,
@@ -711,37 +814,65 @@ export function RegistryProvider({ children }: {children: React.ReactNode;}) {
         return e ? capabilityMap.get(e.capabilityId) : undefined;
       },
       countsOf,
-      hardwareCapabilities: capabilities.filter((c) => c.groupId === HARDWARE_GROUP_ID),
+      hardwareCapabilities: capabilities.filter((c) => hardwareGroupIds.has(c.groupId)),
       exportDataset,
-      importDataset
+      importDataset,
     };
   }, [
-  capabilities,
-  groups,
-  domains,
-  epics,
-  features,
-  stories,
-  waves,
-  equipment,
-  addCapability,
-  updateCapability,
-  addGroup,
-  setEquipmentCapabilities,
-  addEpic,
-  updateEpic,
-  removeEpic,
-  addFeature,
-  updateFeature,
-  removeFeature,
-  addStory,
-  updateStory,
-  removeStory,
-  addEquipment,
-  addWave,
-  updateWave,
-  removeWave]
-  );
+    loading,
+    error,
+    reload,
+    capabilities,
+    groups,
+    domains,
+    categories,
+    epics,
+    features,
+    stories,
+    waves,
+    equipment,
+    addCapability,
+    updateCapability,
+    addGroup,
+    setEquipmentCapabilities,
+    addEpic,
+    updateEpic,
+    removeEpic,
+    addFeature,
+    updateFeature,
+    removeFeature,
+    addStory,
+    updateStory,
+    removeStory,
+    addEquipment,
+    addWave,
+    updateWave,
+    removeWave,
+  ]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-canvas text-soft">
+        <p className="text-sm">Loading registry from Supabase…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas px-6 text-center">
+        <p className="text-sm text-strong">Could not load registry</p>
+        <p className="max-w-lg text-sm text-mute">{error}</p>
+        <button
+          type="button"
+          onClick={() => void reload()}
+          className="rounded border border-line-strong px-3 py-1.5 text-sm text-soft hover:text-strong"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return <RegistryContext.Provider value={value}>{children}</RegistryContext.Provider>;
 }

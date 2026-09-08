@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
-import { CAPABILITY_STATUSES, HARDWARE_GROUP_ID, TRACKS, stageIndex } from '../types/registry';
+import { CAPABILITY_STATUSES, TRACKS, stageIndex } from '../types/registry';
 
 interface Props {
   open: boolean;
@@ -65,8 +65,8 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
     }
   }, [open, capability, groups]);
 
-  const isHardware = groupId === HARDWARE_GROUP_ID;
   const track = groups.find((g) => g.id === groupId)?.track ?? 'delivery';
+  const isHardware = track === 'hardware';
   const valid = name.trim().length > 1 && domainIds.length > 0 && groupId !== '';
 
   // Each lifecycle has its own stages — moving group resets an invalid one.
