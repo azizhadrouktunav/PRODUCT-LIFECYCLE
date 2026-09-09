@@ -60,6 +60,8 @@ export type StoryInput = Pick<
 
 export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type'>;
 export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
+export type CategoryInput = Pick<DomainCategory, 'id' | 'name' | 'shortName' | 'prefix' | 'description'>;
+export type DomainInput = Pick<Domain, 'id' | 'name' | 'description' | 'categoryId'>;
 
 interface RegistryValue {
   loading: boolean;
@@ -77,6 +79,8 @@ interface RegistryValue {
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
   addGroup: (name: string, description: string, track: TrackId, process: string) => void;
+  addCategory: (input: CategoryInput) => DomainCategory;
+  addDomain: (input: DomainInput) => Domain;
   setEquipmentCapabilities: (equipmentId: string, capabilityIds: string[]) => void;
   addEpic: (capabilityId: string, input: EpicInput) => void;
   updateEpic: (id: string, patch: Partial<EpicInput>) => void;
@@ -186,6 +190,47 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     [equipment]
+  );
+
+  const addCategory = useCallback(
+    (input: CategoryInput) => {
+      const created: DomainCategory = {
+        id: input.id.trim(),
+        name: input.name.trim(),
+        shortName: input.shortName.trim(),
+        prefix: input.prefix.trim(),
+        description: input.description.trim(),
+      };
+      setCategories((prev) => {
+        if (prev.some((c) => c.id === created.id)) {
+          return prev.map((c) => (c.id === created.id ? created : c));
+        }
+        return [...prev, created];
+      });
+      void api.upsertCategory(created).catch((err) => persistError('addCategory', err));
+      return created;
+    },
+    []
+  );
+
+  const addDomain = useCallback(
+    (input: DomainInput) => {
+      const created: Domain = {
+        id: input.id.trim(),
+        name: input.name.trim(),
+        description: input.description.trim(),
+        categoryId: input.categoryId.trim(),
+      };
+      setDomains((prev) => {
+        if (prev.some((d) => d.id === created.id)) {
+          return prev.map((d) => (d.id === created.id ? created : d));
+        }
+        return [...prev, created];
+      });
+      void api.upsertDomain(created).catch((err) => persistError('addDomain', err));
+      return created;
+    },
+    []
   );
 
   const addCapability = useCallback(
@@ -780,6 +825,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addCapability,
       updateCapability,
       addGroup,
+      addCategory,
+      addDomain,
       setEquipmentCapabilities,
       addEpic,
       updateEpic,
@@ -834,6 +881,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addCapability,
     updateCapability,
     addGroup,
+    addCategory,
+    addDomain,
     setEquipmentCapabilities,
     addEpic,
     updateEpic,

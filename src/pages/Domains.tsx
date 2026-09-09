@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { PlusIcon } from 'lucide-react';
+import { AddDomainModal } from '../components/AddDomainModal';
 import { DataTransfer } from '../components/DataTransfer';
-import { PageHeader } from '../components/Primitives';
+import { Button, PageHeader } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 
 export function DomainsPage() {
   const { categories, domains, capabilities } = useRegistry();
   const [activeId, setActiveId] = useState(categories[0]?.id ?? '');
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (categories.length === 0) {
+      setActiveId('');
+      return;
+    }
+    if (!categories.some((c) => c.id === activeId)) {
+      setActiveId(categories[0].id);
+    }
+  }, [categories, activeId]);
+
   const active = categories.find((c) => c.id === activeId) ?? categories[0];
   const list = active ? domains.filter((d) => d.categoryId === active.id) : [];
 
@@ -15,13 +29,21 @@ export function DomainsPage() {
         title="Domains"
         count={`${domains.length} across ${categories.length} categories`}
         description="Domains are the fixed coordinate system of the register. Every capability is mapped to one or more of them, which is how ownership and impact are traced."
-        action={<DataTransfer dataset="domains" />}
+        action={
+          <div className="flex flex-wrap items-center gap-1.5">
+            <DataTransfer dataset="domains" />
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add domain
+            </Button>
+          </div>
+        }
       />
 
       {categories.length === 0 || !active ? (
         <p className="mt-8 border-t border-line pt-8 text-sm text-mute">
-          No domain categories yet. Import a Domains sheet (with Category IDs that already exist in
-          Supabase) or add categories to the database first, then refresh.
+          No domain categories yet. Use <span className="text-soft">Add domain</span> to create a
+          category and the first domain, or import a Domains sheet after categories exist.
         </p>
       ) : (
         <>
@@ -51,7 +73,10 @@ export function DomainsPage() {
           <p className="mt-5 max-w-3xl text-sm leading-relaxed text-mute">{active.description}</p>
 
           {list.length === 0 ? (
-            <p className="mt-6 text-sm text-mute">No domains in this category yet.</p>
+            <p className="mt-6 text-sm text-mute">
+              No domains in this category yet. Use{' '}
+              <span className="text-soft">Add domain</span> to create one.
+            </p>
           ) : (
             <div className="mt-4 grid gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((d) => {
@@ -73,6 +98,13 @@ export function DomainsPage() {
           )}
         </>
       )}
+
+      <AddDomainModal
+        open={adding}
+        onClose={() => setAdding(false)}
+        defaultCategoryId={active?.id ?? ''}
+        onCreated={(categoryId) => setActiveId(categoryId)}
+      />
     </div>
   );
 }
