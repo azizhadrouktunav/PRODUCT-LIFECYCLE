@@ -1,13 +1,127 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model DomainCategory {
+  id          String   @id
+  name        String
+  shortName   String   @map("short_name")
+  prefix      String
+  description String   @default("")
+  domains     Domain[]
+
+  @@map("domain_categories")
+}
+
+model Domain {
+  id          String         @id
+  name        String
+  description String         @default("")
+  categoryId  String         @map("category_id")
+  category    DomainCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([categoryId])
+  @@map("domains")
+}
+
+model CapabilityGroup {
+  id           String       @id
+  name         String
+  description  String       @default("")
+  track        String
+  process      String       @default("")
+  capabilities Capability[]
+
+  @@map("capability_groups")
+}
+
+model Equipment {
+  id     String @id
+  name   String
+  vendor String @default("")
+  model  String @default("")
+  type   String @default("")
+
+  @@map("equipment")
+}
+
+model Capability {
+  id           String          @id
+  name         String
+  description  String          @default("")
+  groupId      String          @map("group_id")
+  group        CapabilityGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  domainIds    String[]        @default([]) @map("domain_ids")
+  jiraEpic     String          @default("") @map("jira_epic")
+  equipmentIds String[]        @default([]) @map("equipment_ids")
+  progress     String          @default("Identified")
+  status       String?
+  epics        Epic[]
+
+  @@index([groupId])
+  @@map("capabilities")
+}
+
+model Epic {
+  id           String     @id
+  capabilityId String     @map("capability_id")
+  capability   Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+  key          String     @default("")
+  name         String
+  description  String     @default("")
+  status       String?
+  features     Feature[]
+
+  @@index([capabilityId])
+  @@map("epics")
+}
+
+model Feature {
+  id          String      @id
+  epicId      String      @map("epic_id")
+  epic        Epic        @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  name        String
+  description String      @default("")
+  status      String?
+  stories     UserStory[]
+
+  @@index([epicId])
+  @@map("features")
+}
+
+model UserStory {
+  id              String   @id
+  featureId       String   @map("feature_id")
+  feature         Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  title           String
+  role            String   @default("")
+  want            String   @default("")
+  benefit         String   @default("")
+  criteria        String[] @default([])
+  points          Int?
+  status          String?
+  stage           String   @default("In UI/UX Design")
+  adrContext      String   @default("") @map("adr_context")
+  adrDecision     String   @default("") @map("adr_decision")
+  adrTechnical    String   @default("") @map("adr_technical")
+  adrConsequences String   @default("") @map("adr_consequences")
+  adrApproved     Boolean  @default(false) @map("adr_approved")
+
+  @@index([featureId])
+  @@map("user_stories")
+}
+
+model Wave {
+  id          String   @id
+  code        String   @default("")
+  name        String
+  description String   @default("")
+  state       String   @default("Planned")
+  itemIds     String[] @default([]) @map("item_ids")
+
+  @@map("waves")
 }
