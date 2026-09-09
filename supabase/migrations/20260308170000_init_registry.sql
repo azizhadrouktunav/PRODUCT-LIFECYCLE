@@ -149,3 +149,7 @@ create policy "Allow all for anon and authenticated on user_stories"
 create policy "Allow all for anon and authenticated on waves"
   on public.waves for all to anon, authenticated
   using (true) with check (true);
+
+-- API roles need table privileges (RLS still applies)
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
