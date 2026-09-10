@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { AddCategoryModal } from '../components/AddCategoryModal';
 import { AddDomainModal } from '../components/AddDomainModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Button, PageHeader } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Domain } from '../types/registry';
+import type { Domain, DomainCategory } from '../types/registry';
 
 export function DomainsPage() {
-  const { categories, domains, capabilities, removeDomain } = useRegistry();
+  const { categories, domains, capabilities, removeDomain, removeCategory } = useRegistry();
   const [activeId, setActiveId] = useState(categories[0]?.id ?? '');
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<Domain | null>(null);
+  const [addingDomain, setAddingDomain] = useState(false);
+  const [editingDomain, setEditingDomain] = useState<Domain | null>(null);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<DomainCategory | null>(null);
 
   useEffect(() => {
     if (categories.length === 0) {
@@ -25,6 +28,12 @@ export function DomainsPage() {
   const active = categories.find((c) => c.id === activeId) ?? categories[0];
   const list = active ? domains.filter((d) => d.categoryId === active.id) : [];
 
+  function handleDeleteCategory() {
+    if (!active) return;
+    const ok = removeCategory(active.id);
+    if (ok) setActiveId('');
+  }
+
   return (
     <div>
       <PageHeader
@@ -34,7 +43,11 @@ export function DomainsPage() {
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             <DataTransfer dataset="domains" />
-            <Button variant="primary" onClick={() => setAdding(true)}>
+            <Button variant="quiet" onClick={() => setAddingCategory(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add category
+            </Button>
+            <Button variant="primary" onClick={() => setAddingDomain(true)}>
               <PlusIcon className="h-3.5 w-3.5" />
               Add domain
             </Button>
@@ -44,12 +57,12 @@ export function DomainsPage() {
 
       {categories.length === 0 || !active ? (
         <p className="mt-8 border-t border-line pt-8 text-sm text-mute">
-          No domain categories yet. Use <span className="text-soft">Add domain</span> to create a
-          category and the first domain, or import a Domains sheet after categories exist.
+          No domain categories yet. Use <span className="text-soft">Add category</span> first, then
+          add domains under it.
         </p>
       ) : (
         <>
-          <div className="mt-3 flex flex-wrap gap-1 border-b border-line">
+          <div className="mt-3 flex flex-wrap items-center gap-1 border-b border-line">
             {categories.map((c) => {
               const isActive = c.id === active.id;
               const count = domains.filter((d) => d.categoryId === c.id).length;
@@ -70,6 +83,26 @@ export function DomainsPage() {
                 </button>
               );
             })}
+            <div className="ml-auto flex items-center gap-1 pb-2">
+              <button
+                type="button"
+                onClick={() => setEditingCategory(active)}
+                aria-label={`Edit ${active.name}`}
+                title="Edit category"
+                className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteCategory}
+                aria-label={`Delete ${active.name}`}
+                title="Delete category"
+                className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-danger"
+              >
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           <p className="mt-5 max-w-3xl text-sm leading-relaxed text-mute">{active.description}</p>
@@ -90,7 +123,7 @@ export function DomainsPage() {
                       <h3 className="min-w-0 flex-1 text-sm font-medium text-strong">{d.name}</h3>
                       <button
                         type="button"
-                        onClick={() => setEditing(d)}
+                        onClick={() => setEditingDomain(d)}
                         aria-label={`Edit ${d.name}`}
                         title="Edit domain"
                         className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
@@ -119,16 +152,26 @@ export function DomainsPage() {
         </>
       )}
 
+      <AddCategoryModal
+        open={addingCategory}
+        onClose={() => setAddingCategory(false)}
+        onCreated={(categoryId) => setActiveId(categoryId)}
+      />
+      <AddCategoryModal
+        open={!!editingCategory}
+        onClose={() => setEditingCategory(null)}
+        category={editingCategory}
+      />
       <AddDomainModal
-        open={adding}
-        onClose={() => setAdding(false)}
+        open={addingDomain}
+        onClose={() => setAddingDomain(false)}
         defaultCategoryId={active?.id ?? ''}
         onCreated={(categoryId) => setActiveId(categoryId)}
       />
       <AddDomainModal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        domain={editing}
+        open={!!editingDomain}
+        onClose={() => setEditingDomain(null)}
+        domain={editingDomain}
         onCreated={(categoryId) => setActiveId(categoryId)}
       />
     </div>

@@ -236,6 +236,11 @@ export async function upsertCategory(cat: DomainCategory): Promise<void> {
   throwIfError(error, 'Upsert domain_category');
 }
 
+export async function deleteCategory(id: string): Promise<void> {
+  const { error } = await supabase.from('domain_categories').delete().eq('id', id);
+  throwIfError(error, 'Delete domain_category');
+}
+
 export async function upsertDomain(domain: Domain): Promise<void> {
   const { error } = await supabase.from('domains').upsert({
     id: domain.id,

@@ -88,6 +88,11 @@ interface RegistryValue {
   ) => void;
   removeGroup: (id: string) => boolean;
   addCategory: (input: CategoryInput) => DomainCategory;
+  updateCategory: (
+    id: string,
+    patch: Partial<Pick<DomainCategory, 'name' | 'shortName' | 'prefix' | 'description'>>
+  ) => void;
+  removeCategory: (id: string) => boolean;
   addDomain: (input: DomainInput) => Domain;
   updateDomain: (
     id: string,
@@ -301,6 +306,46 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     []
+  );
+
+  const updateCategory = useCallback(
+    (
+      id: string,
+      patch: Partial<Pick<DomainCategory, 'name' | 'shortName' | 'prefix' | 'description'>>
+    ) => {
+      setCategories((prev) =>
+        prev.map((c) => {
+          if (c.id !== id) return c;
+          const updated = {
+            ...c,
+            ...patch,
+            name: patch.name !== undefined ? patch.name.trim() : c.name,
+            shortName: patch.shortName !== undefined ? patch.shortName.trim() : c.shortName,
+            prefix: patch.prefix !== undefined ? patch.prefix.trim() : c.prefix,
+            description: patch.description !== undefined ? patch.description.trim() : c.description,
+          };
+          void api.upsertCategory(updated).catch((err) => persistError('updateCategory', err));
+          return updated;
+        })
+      );
+    },
+    []
+  );
+
+  const removeCategory = useCallback(
+    (id: string) => {
+      const members = domains.filter((d) => d.categoryId === id);
+      if (members.length > 0) {
+        window.alert(
+          `Cannot delete this category: ${members.length} domain${members.length === 1 ? '' : 's'} still belong to it. Move or delete them first.`
+        );
+        return false;
+      }
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      void api.deleteCategory(id).catch((err) => persistError('removeCategory', err));
+      return true;
+    },
+    [domains]
   );
 
   const addDomain = useCallback(
@@ -1043,6 +1088,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       updateGroup,
       removeGroup,
       addCategory,
+      updateCategory,
+      removeCategory,
       addDomain,
       updateDomain,
       removeDomain,
@@ -1109,6 +1156,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     updateGroup,
     removeGroup,
     addCategory,
+    updateCategory,
+    removeCategory,
     addDomain,
     updateDomain,
     removeDomain,
