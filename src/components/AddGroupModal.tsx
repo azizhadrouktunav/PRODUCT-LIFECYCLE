@@ -1,26 +1,50 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { TrackId } from '../types/registry';
+import type { CapabilityGroup, TrackId } from '../types/registry';
 import { TRACKS } from '../types/registry';
 
-export function AddGroupModal({ open, onClose }: {open: boolean;onClose: () => void;}) {
-  const { addGroup } = useRegistry();
+export function AddGroupModal({
+  open,
+  onClose,
+  group = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  group?: CapabilityGroup | null;
+}) {
+  const { addGroup, updateGroup } = useRegistry();
+  const isEdit = !!group;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [track, setTrack] = useState<TrackId>('delivery');
   const [process, setProcess] = useState('');
 
+  useEffect(() => {
+    if (!open) return;
+    if (group) {
+      setName(group.name);
+      setDescription(group.description);
+      setTrack(group.track);
+      setProcess(group.process);
+    } else {
+      setName('');
+      setDescription('');
+      setTrack('delivery');
+      setProcess('');
+    }
+  }, [open, group]);
+
   const valid = name.trim().length > 1;
 
   function submit() {
     if (!valid) return;
-    addGroup(name, description, track, process);
-    setName('');
-    setDescription('');
-    setProcess('');
-    setTrack('delivery');
+    if (group) {
+      updateGroup(group.id, { name, description, track, process });
+    } else {
+      addGroup(name, description, track, process);
+    }
     onClose();
   }
 
@@ -29,35 +53,39 @@ export function AddGroupModal({ open, onClose }: {open: boolean;onClose: () => v
       open={open}
       onClose={onClose}
       width="max-w-xl"
-      title="Add a capability group"
-      subtitle="Groups classify capabilities by the layer that delivers them, and decide which lifecycle they follow."
+      title={isEdit ? 'Edit capability group' : 'Add a capability group'}
+      subtitle={
+        isEdit
+          ? `${group?.id} · changes apply across the register immediately`
+          : 'Groups classify capabilities by the layer that delivers them, and decide which lifecycle they follow.'
+      }
       footer={
-      <>
+        <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={!valid}>
-            Add group
+            {isEdit ? 'Save changes' : 'Add group'}
           </Button>
         </>
-      }>
-      
+      }
+    >
       <div className="space-y-5">
         <Field label="Group name" required>
           <input
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Integration Capability" />
-          
+            placeholder="e.g. Integration Capability"
+          />
         </Field>
         <Field label="Description">
           <textarea
             className={`${inputClass} min-h-[72px] resize-y`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What belongs in this group, and what does not." />
-          
+            placeholder="What belongs in this group, and what does not."
+          />
         </Field>
 
         <div>
@@ -73,15 +101,16 @@ export function AddGroupModal({ open, onClose }: {open: boolean;onClose: () => v
                   aria-pressed={active}
                   onClick={() => setTrack(id)}
                   className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
-                  active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'}`
-                  }>
-                  
+                    active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
+                  }`}
+                >
                   <span className="block text-xs font-medium text-strong">{t.label}</span>
                   <span className="mt-1 block text-2xs leading-relaxed text-mute">
-                    {t.stages.length} stages · {id === 'hardware' ? 'no decomposition' : 'epics → features → stories'}
+                    {t.stages.length} stages ·{' '}
+                    {id === 'hardware' ? 'no decomposition' : 'epics → features → stories'}
                   </span>
-                </button>);
-
+                </button>
+              );
             })}
           </div>
         </div>
@@ -91,10 +120,10 @@ export function AddGroupModal({ open, onClose }: {open: boolean;onClose: () => v
             className={`${inputClass} min-h-[96px] resize-y`}
             value={process}
             onChange={(e) => setProcess(e.target.value)}
-            placeholder="How capabilities in this group are worked, from identification to release." />
-          
+            placeholder="How capabilities in this group are worked, from identification to release."
+          />
         </Field>
       </div>
-    </Modal>);
-
+    </Modal>
+  );
 }

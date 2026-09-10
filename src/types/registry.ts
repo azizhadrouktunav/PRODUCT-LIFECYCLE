@@ -162,6 +162,11 @@ export const ALL_STAGE_NAMES: string[] = Array.from(
   new Set([...HARDWARE_STAGES, ...DELIVERY_STAGES].map((s) => s.name))
 );
 
+export interface EquipmentType {
+  id: string;
+  name: string;
+}
+
 export interface Equipment {
   id: string;
   name: string;

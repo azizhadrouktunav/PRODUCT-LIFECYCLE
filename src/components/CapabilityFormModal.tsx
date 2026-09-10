@@ -15,18 +15,6 @@ interface Props {
   onCreated?: (capability: Capability) => void;
 }
 
-const EPICS = [
-'CORE-1001',
-'CORE-1042',
-'CORE-1120',
-'FIQ-2001',
-'FIQ-2215',
-'FIQ-2301',
-'FIQ-2501',
-'CIQ-3001',
-'CIQ-3050'];
-
-
 export function CapabilityFormModal({ open, onClose, capability = null, onCreated }: Props) {
   const { groups, domains, categories, equipment, addCapability, updateCapability } = useRegistry();
   const isEdit = !!capability;
@@ -35,7 +23,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
   const [description, setDescription] = useState('');
   const [groupId, setGroupId] = useState(groups[0]?.id ?? '');
   const [domainIds, setDomainIds] = useState<string[]>([]);
-  const [jiraEpic, setJiraEpic] = useState('');
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<string>('Identified');
   const [status, setStatus] = useState<CapabilityStatus | ''>('');
@@ -49,7 +36,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       setDescription(capability.description);
       setGroupId(capability.groupId);
       setDomainIds(capability.domainIds);
-      setJiraEpic(capability.jiraEpic);
       setEquipmentIds(capability.equipmentIds);
       setProgress(capability.progress);
       setStatus(capability.status ?? '');
@@ -58,7 +44,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       setDescription('');
       setGroupId(groups[0]?.id ?? '');
       setDomainIds([]);
-      setJiraEpic('');
       setEquipmentIds([]);
       setProgress('Identified');
       setStatus('');
@@ -88,13 +73,20 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
         description: description.trim(),
         groupId,
         domainIds,
-        jiraEpic: jiraEpic.trim(),
+        jiraEpic: capability.jiraEpic,
         equipmentIds: isHardware ? equipmentIds : [],
         progress,
         status: status === '' ? null : status
       });
     } else {
-      const created = addCapability({ name, description, groupId, domainIds, jiraEpic, equipmentIds });
+      const created = addCapability({
+        name,
+        description,
+        groupId,
+        domainIds,
+        jiraEpic: '',
+        equipmentIds
+      });
       onCreated?.(created);
     }
     onClose();
@@ -144,31 +136,15 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
           
         </Field>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Capability group" required>
-            <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-              {groups.map((g) =>
-              <option key={g.id} value={g.id}>
-                  {g.name} — {TRACKS[g.track].label}
-                </option>
-              )}
-            </select>
-          </Field>
-          <Field label="Proposed Jira epic" hint="optional">
-            <input
-              className={inputClass}
-              value={jiraEpic}
-              onChange={(e) => setJiraEpic(e.target.value)}
-              placeholder="CORE-1234"
-              list="epic-options" />
-            
-            <datalist id="epic-options">
-              {EPICS.map((e) =>
-              <option key={e} value={e} />
-              )}
-            </datalist>
-          </Field>
-        </div>
+        <Field label="Capability group" required>
+          <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+            {groups.map((g) =>
+            <option key={g.id} value={g.id}>
+                {g.name} — {TRACKS[g.track].label}
+              </option>
+            )}
+          </select>
+        </Field>
 
         {isEdit &&
         <div className="grid gap-5 sm:grid-cols-2">

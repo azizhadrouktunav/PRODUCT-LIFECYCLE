@@ -1,16 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckIcon, PlusIcon } from 'lucide-react';
+import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { EquipmentModal } from '../components/EquipmentModal';
 import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
+import type { Equipment } from '../types/registry';
 
 export function EquipmentPage() {
-  const { equipment, hardwareCapabilities, setEquipmentCapabilities } = useRegistry();
+  const {
+    equipment,
+    equipmentTypes,
+    hardwareCapabilities,
+    setEquipmentCapabilities,
+    removeEquipment,
+    removeEquipmentType,
+  } = useRegistry();
   const [activeId, setActiveId] = useState(equipment[0]?.id ?? '');
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
+  const [addingType, setAddingType] = useState(false);
+  const [editing, setEditing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
 
   useEffect(() => {
@@ -32,6 +43,11 @@ export function EquipmentPage() {
     [hardwareCapabilities, active]
   );
 
+  const sortedTypes = useMemo(
+    () => [...equipmentTypes].sort((a, b) => a.name.localeCompare(b.name)),
+    [equipmentTypes]
+  );
+
   function openAssign() {
     if (!active) return;
     setDraft(supported.map((c) => c.id));
@@ -44,6 +60,11 @@ export function EquipmentPage() {
     setAssigning(false);
   }
 
+  function handleDelete() {
+    if (!active) return;
+    removeEquipment(active.id);
+  }
+
   return (
     <div>
       <PageHeader
@@ -53,6 +74,10 @@ export function EquipmentPage() {
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             <DataTransfer dataset="equipment" />
+            <Button variant="quiet" onClick={() => setAddingType(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add type
+            </Button>
             <Button variant="primary" onClick={() => setAddingEquipment(true)}>
               <PlusIcon className="h-3.5 w-3.5" />
               Add equipment
@@ -61,13 +86,51 @@ export function EquipmentPage() {
         }
       />
 
+      <section className="mt-4 border-t border-line pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+            Equipment types · {sortedTypes.length}
+          </h2>
+        </div>
+        {sortedTypes.length === 0 ? (
+          <p className="mt-3 text-sm text-mute">
+            No types yet. Use <span className="text-soft">Add type</span> before registering
+            equipment models.
+          </p>
+        ) : (
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {sortedTypes.map((t) => {
+              const count = equipment.filter((e) => e.type === t.name).length;
+              return (
+                <li
+                  key={t.id}
+                  className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5"
+                >
+                  <span className="text-xs text-strong">{t.name}</span>
+                  <span className="font-mono text-2xs text-ink-500">{count}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeEquipmentType(t.id)}
+                    aria-label={`Delete type ${t.name}`}
+                    title="Delete type"
+                    className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
+                  >
+                    <Trash2Icon className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {equipment.length === 0 || !active ? (
         <p className="mt-8 border-t border-line pt-8 text-sm text-mute">
           No equipment models yet. Use <span className="text-soft">Add equipment</span> or import an
           Equipment sheet to get started.
         </p>
       ) : (
-        <div className="mt-4 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
           <nav aria-label="Equipment models" className="border-t border-line">
             {equipment.map((e) => {
               const isActive = e.id === active.id;
@@ -107,10 +170,20 @@ export function EquipmentPage() {
                   {active.model} · {active.type}
                 </p>
               </div>
-              <Button variant="primary" onClick={openAssign}>
-                <PlusIcon className="h-3.5 w-3.5" />
-                Assign capabilities
-              </Button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button variant="quiet" onClick={() => setEditing(active)}>
+                  <PencilIcon className="h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button variant="quiet" onClick={handleDelete}>
+                  <Trash2Icon className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+                <Button variant="primary" onClick={openAssign}>
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Assign capabilities
+                </Button>
+              </div>
             </div>
 
             <h3 className="mt-6 text-2xs uppercase tracking-[0.14em] text-ink-500">
@@ -199,11 +272,13 @@ export function EquipmentPage() {
         </ul>
       </Modal>
 
+      <AddEquipmentTypeModal open={addingType} onClose={() => setAddingType(false)} />
       <EquipmentModal
         open={addingEquipment}
         onClose={() => setAddingEquipment(false)}
         onCreated={(id) => setActiveId(id)}
       />
+      <EquipmentModal open={!!editing} onClose={() => setEditing(null)} equipment={editing} />
     </div>
   );
 }

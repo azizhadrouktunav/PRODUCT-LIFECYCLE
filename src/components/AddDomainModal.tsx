@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
+import type { Domain } from '../types/registry';
 
 const NEW_CATEGORY = '__new__';
 
@@ -10,13 +11,16 @@ export function AddDomainModal({
   onClose,
   onCreated,
   defaultCategoryId = '',
+  domain = null,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated?: (categoryId: string, domainId: string) => void;
   defaultCategoryId?: string;
+  domain?: Domain | null;
 }) {
-  const { categories, domains, addCategory, addDomain } = useRegistry();
+  const { categories, domains, addCategory, addDomain, updateDomain } = useRegistry();
+  const isEdit = !!domain;
 
   const [categoryChoice, setCategoryChoice] = useState(NEW_CATEGORY);
   const [catId, setCatId] = useState('');
@@ -32,6 +36,18 @@ export function AddDomainModal({
   useEffect(() => {
     if (!open) return;
     setTouched(false);
+    if (domain) {
+      setCategoryChoice(domain.categoryId);
+      setCatId('');
+      setCatName('');
+      setCatShortName('');
+      setCatPrefix('');
+      setCatDescription('');
+      setDomainId(domain.id);
+      setName(domain.name);
+      setDescription(domain.description);
+      return;
+    }
     const initial =
       defaultCategoryId && categories.some((c) => c.id === defaultCategoryId)
         ? defaultCategoryId
@@ -45,9 +61,9 @@ export function AddDomainModal({
     setDomainId('');
     setName('');
     setDescription('');
-  }, [open, categories, defaultCategoryId]);
+  }, [open, categories, defaultCategoryId, domain]);
 
-  const creatingCategory = categoryChoice === NEW_CATEGORY;
+  const creatingCategory = !isEdit && categoryChoice === NEW_CATEGORY;
   const categoryId = creatingCategory ? catId.trim() : categoryChoice;
 
   const categoryValid =
@@ -57,21 +73,34 @@ export function AddDomainModal({
       catShortName.trim() !== '' &&
       catPrefix.trim() !== '');
 
-  const domainIdTaken = domains.some((d) => d.id === domainId.trim());
+  const domainIdTaken =
+    !isEdit && domains.some((d) => d.id === domainId.trim());
   const categoryIdTaken =
     creatingCategory && categories.some((c) => c.id === catId.trim());
 
-  const valid =
-    categoryValid &&
-    !categoryIdTaken &&
-    domainId.trim() !== '' &&
-    !domainIdTaken &&
-    name.trim().length > 1 &&
-    categoryId !== '';
+  const valid = isEdit
+    ? name.trim().length > 1 && categoryId !== ''
+    : categoryValid &&
+      !categoryIdTaken &&
+      domainId.trim() !== '' &&
+      !domainIdTaken &&
+      name.trim().length > 1 &&
+      categoryId !== '';
 
   function submit() {
     setTouched(true);
     if (!valid) return;
+
+    if (isEdit && domain) {
+      updateDomain(domain.id, {
+        name,
+        description,
+        categoryId,
+      });
+      onCreated?.(categoryId, domain.id);
+      onClose();
+      return;
+    }
 
     if (creatingCategory) {
       addCategory({
@@ -98,15 +127,19 @@ export function AddDomainModal({
       open={open}
       onClose={onClose}
       width="max-w-xl"
-      title="Add domain"
-      subtitle="Domains sit under a category. Create a category first if the register is empty."
+      title={isEdit ? 'Edit domain' : 'Add domain'}
+      subtitle={
+        isEdit
+          ? `${domain?.id} · changes apply across the register immediately`
+          : 'Domains sit under a category. Create a category first if the register is empty.'
+      }
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={!valid}>
-            Add domain
+            {isEdit ? 'Save changes' : 'Add domain'}
           </Button>
         </>
       }
@@ -123,7 +156,7 @@ export function AddDomainModal({
                 {c.name} ({c.id})
               </option>
             ))}
-            <option value={NEW_CATEGORY}>Create new category…</option>
+            {!isEdit && <option value={NEW_CATEGORY}>Create new category…</option>}
           </select>
         </Field>
 
@@ -186,6 +219,7 @@ export function AddDomainModal({
               value={domainId}
               onChange={(e) => setDomainId(e.target.value)}
               placeholder="CORE-D01"
+              disabled={isEdit}
             />
           </Field>
           <Field label="Name" required>

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { PlusIcon } from 'lucide-react';
+import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { AddDomainModal } from '../components/AddDomainModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Button, PageHeader } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
+import type { Domain } from '../types/registry';
 
 export function DomainsPage() {
-  const { categories, domains, capabilities } = useRegistry();
+  const { categories, domains, capabilities, removeDomain } = useRegistry();
   const [activeId, setActiveId] = useState(categories[0]?.id ?? '');
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Domain | null>(null);
 
   useEffect(() => {
     if (categories.length === 0) {
@@ -86,6 +88,24 @@ export function DomainsPage() {
                     <div className="flex items-baseline gap-2">
                       <span className="font-mono text-2xs text-brand-bright">{d.id}</span>
                       <h3 className="min-w-0 flex-1 text-sm font-medium text-strong">{d.name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => setEditing(d)}
+                        aria-label={`Edit ${d.name}`}
+                        title="Edit domain"
+                        className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeDomain(d.id)}
+                        aria-label={`Delete ${d.name}`}
+                        title="Delete domain"
+                        className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                     <p className="mt-1.5 text-xs leading-relaxed text-mute">{d.description}</p>
                     <p className="mt-auto pt-3 font-mono text-2xs text-ink-500">
@@ -103,6 +123,12 @@ export function DomainsPage() {
         open={adding}
         onClose={() => setAdding(false)}
         defaultCategoryId={active?.id ?? ''}
+        onCreated={(categoryId) => setActiveId(categoryId)}
+      />
+      <AddDomainModal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        domain={editing}
         onCreated={(categoryId) => setActiveId(categoryId)}
       />
     </div>

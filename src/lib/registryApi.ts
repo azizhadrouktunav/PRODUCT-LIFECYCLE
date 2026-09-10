@@ -7,6 +7,7 @@ import type {
   DomainCategory,
   Epic,
   Equipment,
+  EquipmentType,
   Feature,
   TrackId,
   UserStory,
@@ -19,6 +20,7 @@ export interface RegistrySnapshot {
   domains: Domain[];
   groups: CapabilityGroup[];
   equipment: Equipment[];
+  equipmentTypes: EquipmentType[];
   capabilities: Capability[];
   epics: Epic[];
   features: Feature[];
@@ -67,6 +69,13 @@ function mapEquipment(row: Record<string, unknown>): Equipment {
     vendor: String(row.vendor ?? ''),
     model: String(row.model ?? ''),
     type: String(row.type ?? ''),
+  };
+}
+
+function mapEquipmentType(row: Record<string, unknown>): EquipmentType {
+  return {
+    id: String(row.id),
+    name: String(row.name),
   };
 }
 
@@ -146,6 +155,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     domainsRes,
     groupsRes,
     equipmentRes,
+    equipmentTypesRes,
     capabilitiesRes,
     epicsRes,
     featuresRes,
@@ -156,6 +166,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     supabase.from('domains').select('*'),
     supabase.from('capability_groups').select('*'),
     supabase.from('equipment').select('*'),
+    supabase.from('equipment_types').select('*'),
     supabase.from('capabilities').select('*'),
     supabase.from('epics').select('*'),
     supabase.from('features').select('*'),
@@ -167,17 +178,45 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   throwIfError(domainsRes.error, 'Load domains');
   throwIfError(groupsRes.error, 'Load capability_groups');
   throwIfError(equipmentRes.error, 'Load equipment');
+  throwIfError(equipmentTypesRes.error, 'Load equipment_types');
   throwIfError(capabilitiesRes.error, 'Load capabilities');
   throwIfError(epicsRes.error, 'Load epics');
   throwIfError(featuresRes.error, 'Load features');
   throwIfError(storiesRes.error, 'Load user_stories');
   throwIfError(wavesRes.error, 'Load waves');
 
+  const equipment = (equipmentRes.data ?? []).map((r) => mapEquipment(r as Record<string, unknown>));
+  let equipmentTypes = (equipmentTypesRes.data ?? []).map((r) =>
+    mapEquipmentType(r as Record<string, unknown>)
+  );
+
+  // Bootstrap types from existing equipment.type values (no hardcoded defaults).
+  const knownNames = new Set(equipmentTypes.map((t) => t.name));
+  const missing = [
+    ...new Set(
+      equipment
+        .map((e) => e.type.trim())
+        .filter((name) => name !== '' && !knownNames.has(name))
+    ),
+  ];
+  if (missing.length > 0) {
+    const toCreate: EquipmentType[] = missing.map((name, i) => ({
+      id: `EQT-${String(equipmentTypes.length + i + 1).padStart(3, '0')}`,
+      name,
+    }));
+    const { error } = await supabase.from('equipment_types').upsert(
+      toCreate.map((t) => ({ id: t.id, name: t.name }))
+    );
+    throwIfError(error, 'Bootstrap equipment_types');
+    equipmentTypes = [...equipmentTypes, ...toCreate];
+  }
+
   return {
     categories: (categoriesRes.data ?? []).map((r) => mapCategory(r as Record<string, unknown>)),
     domains: (domainsRes.data ?? []).map((r) => mapDomain(r as Record<string, unknown>)),
     groups: (groupsRes.data ?? []).map((r) => mapGroup(r as Record<string, unknown>)),
-    equipment: (equipmentRes.data ?? []).map((r) => mapEquipment(r as Record<string, unknown>)),
+    equipment,
+    equipmentTypes,
     capabilities: (capabilitiesRes.data ?? []).map((r) => mapCapability(r as Record<string, unknown>)),
     epics: (epicsRes.data ?? []).map((r) => mapEpic(r as Record<string, unknown>)),
     features: (featuresRes.data ?? []).map((r) => mapFeature(r as Record<string, unknown>)),
@@ -227,6 +266,19 @@ export async function upsertEquipment(item: Equipment): Promise<void> {
     type: item.type,
   });
   throwIfError(error, 'Upsert equipment');
+}
+
+export async function upsertEquipmentType(item: EquipmentType): Promise<void> {
+  const { error } = await supabase.from('equipment_types').upsert({
+    id: item.id,
+    name: item.name,
+  });
+  throwIfError(error, 'Upsert equipment_type');
+}
+
+export async function deleteEquipmentType(id: string): Promise<void> {
+  const { error } = await supabase.from('equipment_types').delete().eq('id', id);
+  throwIfError(error, 'Delete equipment_type');
 }
 
 export async function upsertCapability(cap: Capability): Promise<void> {
@@ -318,6 +370,26 @@ export async function deleteStory(id: string): Promise<void> {
 export async function deleteWave(id: string): Promise<void> {
   const { error } = await supabase.from('waves').delete().eq('id', id);
   throwIfError(error, 'Delete wave');
+}
+
+export async function deleteCapability(id: string): Promise<void> {
+  const { error } = await supabase.from('capabilities').delete().eq('id', id);
+  throwIfError(error, 'Delete capability');
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  const { error } = await supabase.from('capability_groups').delete().eq('id', id);
+  throwIfError(error, 'Delete capability_group');
+}
+
+export async function deleteDomain(id: string): Promise<void> {
+  const { error } = await supabase.from('domains').delete().eq('id', id);
+  throwIfError(error, 'Delete domain');
+}
+
+export async function deleteEquipment(id: string): Promise<void> {
+  const { error } = await supabase.from('equipment').delete().eq('id', id);
+  throwIfError(error, 'Delete equipment');
 }
 
 export async function upsertCapabilities(items: Capability[]): Promise<void> {

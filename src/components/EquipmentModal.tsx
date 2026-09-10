@@ -1,48 +1,63 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
-
-const TYPES = [
-'GPS Tracker',
-'MDVR / Video',
-'AI Dashcam',
-'Fuel Sensor',
-'Tire Sensor',
-'CAN Reader',
-'OEM Gateway',
-'Temperature Sensor'];
-
+import type { Equipment } from '../types/registry';
 
 export function EquipmentModal({
   open,
   onClose,
-  onCreated
-
-
-
-
-}: {open: boolean;onClose: () => void;onCreated?: (id: string) => void;}) {
-  const { addEquipment } = useRegistry();
+  onCreated,
+  equipment = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated?: (id: string) => void;
+  equipment?: Equipment | null;
+}) {
+  const { addEquipment, updateEquipment, equipmentTypes } = useRegistry();
+  const isEdit = !!equipment;
   const [name, setName] = useState('');
   const [vendor, setVendor] = useState('');
   const [model, setModel] = useState('');
-  const [type, setType] = useState(TYPES[0]);
+  const [type, setType] = useState('');
+
+  const sortedTypes = useMemo(
+    () => [...equipmentTypes].sort((a, b) => a.name.localeCompare(b.name)),
+    [equipmentTypes]
+  );
 
   useEffect(() => {
     if (!open) return;
-    setName('');
-    setVendor('');
-    setModel('');
-    setType(TYPES[0]);
-  }, [open]);
+    if (equipment) {
+      setName(equipment.name);
+      setVendor(equipment.vendor);
+      setModel(equipment.model);
+      setType(equipment.type || '');
+    } else {
+      setName('');
+      setVendor('');
+      setModel('');
+      setType(equipmentTypes[0]?.name ?? '');
+    }
+  }, [open, equipment, equipmentTypes]);
 
-  const valid = name.trim().length > 1 && vendor.trim() !== '' && model.trim() !== '';
+  const hasTypes = sortedTypes.length > 0;
+  const valid =
+    name.trim().length > 1 &&
+    vendor.trim() !== '' &&
+    model.trim() !== '' &&
+    type.trim() !== '' &&
+    hasTypes;
 
   function submit() {
     if (!valid) return;
-    const created = addEquipment({ name, vendor, model, type });
-    onCreated?.(created.id);
+    if (equipment) {
+      updateEquipment(equipment.id, { name, vendor, model, type });
+    } else {
+      const created = addEquipment({ name, vendor, model, type });
+      onCreated?.(created.id);
+    }
     onClose();
   }
 
@@ -51,27 +66,31 @@ export function EquipmentModal({
       open={open}
       onClose={onClose}
       width="max-w-lg"
-      title="Add equipment"
-      subtitle="Register a device model so hardware capabilities can be assigned to it."
+      title={isEdit ? 'Edit equipment' : 'Add equipment'}
+      subtitle={
+        isEdit
+          ? `${equipment?.id} · changes apply across the register immediately`
+          : 'Register a device model so hardware capabilities can be assigned to it.'
+      }
       footer={
-      <>
+        <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={!valid}>
-            Add equipment
+            {isEdit ? 'Save changes' : 'Add equipment'}
           </Button>
         </>
-      }>
-      
+      }
+    >
       <div className="space-y-5">
         <Field label="Display name" required hint="how it appears in the register">
           <input
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Teltonika FMB640" />
-          
+            placeholder="e.g. Teltonika FMB640"
+          />
         </Field>
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Vendor" required>
@@ -79,28 +98,38 @@ export function EquipmentModal({
               className={inputClass}
               value={vendor}
               onChange={(e) => setVendor(e.target.value)}
-              placeholder="Teltonika" />
-            
+              placeholder="Teltonika"
+            />
           </Field>
           <Field label="Model" required>
             <input
               className={inputClass}
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="FMB640" />
-            
+              placeholder="FMB640"
+            />
           </Field>
         </div>
-        <Field label="Type">
-          <select className={inputClass} value={type} onChange={(e) => setType(e.target.value)}>
-            {TYPES.map((t) =>
-            <option key={t} value={t}>
-                {t}
-              </option>
-            )}
-          </select>
+        <Field label="Type" required>
+          {hasTypes ? (
+            <select
+              className={inputClass}
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+            >
+              {sortedTypes.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="rounded-md border border-line-strong bg-ink-900 px-3 py-2 text-xs text-mute">
+              Create an equipment type first from the Equipment page.
+            </p>
+          )}
         </Field>
       </div>
-    </Modal>);
-
+    </Modal>
+  );
 }

@@ -39,6 +39,13 @@ model CapabilityGroup {
   @@map("capability_groups")
 }
 
+model EquipmentType {
+  id   String @id
+  name String @unique
+
+  @@map("equipment_types")
+}
+
 model Equipment {
   id     String @id
   name   String

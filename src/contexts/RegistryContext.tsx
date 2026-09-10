@@ -16,6 +16,7 @@ import type {
   DomainCategory,
   Epic,
   Equipment,
+  EquipmentType,
   Feature,
   RecordCounts,
   TrackId,
@@ -72,15 +73,27 @@ interface RegistryValue {
   domains: Domain[];
   categories: DomainCategory[];
   equipment: Equipment[];
+  equipmentTypes: EquipmentType[];
   epics: Epic[];
   features: Feature[];
   stories: UserStory[];
   waves: Wave[];
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
+  removeCapability: (id: string) => void;
   addGroup: (name: string, description: string, track: TrackId, process: string) => void;
+  updateGroup: (
+    id: string,
+    patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process'>>
+  ) => void;
+  removeGroup: (id: string) => boolean;
   addCategory: (input: CategoryInput) => DomainCategory;
   addDomain: (input: DomainInput) => Domain;
+  updateDomain: (
+    id: string,
+    patch: Partial<Pick<Domain, 'name' | 'description' | 'categoryId'>>
+  ) => void;
+  removeDomain: (id: string) => void;
   setEquipmentCapabilities: (equipmentId: string, capabilityIds: string[]) => void;
   addEpic: (capabilityId: string, input: EpicInput) => void;
   updateEpic: (id: string, patch: Partial<EpicInput>) => void;
@@ -92,6 +105,10 @@ interface RegistryValue {
   updateStory: (id: string, patch: Partial<StoryInput>) => void;
   removeStory: (id: string) => void;
   addEquipment: (input: EquipmentInput) => Equipment;
+  updateEquipment: (id: string, patch: Partial<EquipmentInput>) => void;
+  removeEquipment: (id: string) => void;
+  addEquipmentType: (name: string) => EquipmentType | null;
+  removeEquipmentType: (id: string) => boolean;
   addWave: (input: WaveInput) => Wave;
   updateWave: (id: string, patch: Partial<WaveInput>) => void;
   removeWave: (id: string) => void;
@@ -139,6 +156,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [stories, setStories] = useState<UserStory[]>([]);
   const [waves, setWaves] = useState<Wave[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
 
   const reload = useCallback(async () => {
@@ -150,6 +168,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setDomains(snap.domains);
       setGroups(snap.groups);
       setEquipment(snap.equipment);
+      setEquipmentTypes(snap.equipmentTypes);
       setCapabilities(snap.capabilities);
       setEpics(snap.epics);
       setFeatures(snap.features);
@@ -190,6 +209,77 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     [equipment]
+  );
+
+  const updateEquipment = useCallback((id: string, patch: Partial<EquipmentInput>) => {
+    setEquipment((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = {
+          ...item,
+          ...patch,
+          name: patch.name !== undefined ? patch.name.trim() : item.name,
+          vendor: patch.vendor !== undefined ? patch.vendor.trim() : item.vendor,
+          model: patch.model !== undefined ? patch.model.trim() : item.model,
+          type: patch.type !== undefined ? patch.type.trim() : item.type,
+        };
+        void api.upsertEquipment(updated).catch((err) => persistError('updateEquipment', err));
+        return updated;
+      })
+    );
+  }, []);
+
+  const removeEquipment = useCallback((id: string) => {
+    setEquipment((prev) => prev.filter((e) => e.id !== id));
+    setCapabilities((prev) => {
+      const next = prev.map((cap) => {
+        if (!cap.equipmentIds.includes(id)) return cap;
+        const updated = { ...cap, equipmentIds: cap.equipmentIds.filter((e) => e !== id) };
+        void api.upsertCapability(updated).catch((err) =>
+          persistError('removeEquipment capability', err)
+        );
+        return updated;
+      });
+      return next;
+    });
+    void api.deleteEquipment(id).catch((err) => persistError('removeEquipment', err));
+  }, []);
+
+  const addEquipmentType = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      if (equipmentTypes.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+        window.alert(`Equipment type "${trimmed}" already exists.`);
+        return null;
+      }
+      const created: EquipmentType = {
+        id: nextId('EQT', equipmentTypes),
+        name: trimmed,
+      };
+      setEquipmentTypes((prev) => [...prev, created]);
+      void api.upsertEquipmentType(created).catch((err) => persistError('addEquipmentType', err));
+      return created;
+    },
+    [equipmentTypes]
+  );
+
+  const removeEquipmentType = useCallback(
+    (id: string) => {
+      const target = equipmentTypes.find((t) => t.id === id);
+      if (!target) return false;
+      const inUse = equipment.filter((e) => e.type === target.name);
+      if (inUse.length > 0) {
+        window.alert(
+          `Cannot delete type "${target.name}": ${inUse.length} equipment model${inUse.length === 1 ? '' : 's'} still use it.`
+        );
+        return false;
+      }
+      setEquipmentTypes((prev) => prev.filter((t) => t.id !== id));
+      void api.deleteEquipmentType(id).catch((err) => persistError('removeEquipmentType', err));
+      return true;
+    },
+    [equipment, equipmentTypes]
   );
 
   const addCategory = useCallback(
@@ -233,6 +323,42 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const updateDomain = useCallback(
+    (id: string, patch: Partial<Pick<Domain, 'name' | 'description' | 'categoryId'>>) => {
+      setDomains((prev) =>
+        prev.map((d) => {
+          if (d.id !== id) return d;
+          const updated = {
+            ...d,
+            ...patch,
+            name: patch.name !== undefined ? patch.name.trim() : d.name,
+            description: patch.description !== undefined ? patch.description.trim() : d.description,
+            categoryId: patch.categoryId !== undefined ? patch.categoryId.trim() : d.categoryId,
+          };
+          void api.upsertDomain(updated).catch((err) => persistError('updateDomain', err));
+          return updated;
+        })
+      );
+    },
+    []
+  );
+
+  const removeDomain = useCallback((id: string) => {
+    setDomains((prev) => prev.filter((d) => d.id !== id));
+    setCapabilities((prev) => {
+      const next = prev.map((cap) => {
+        if (!cap.domainIds.includes(id)) return cap;
+        const updated = { ...cap, domainIds: cap.domainIds.filter((d) => d !== id) };
+        void api.upsertCapability(updated).catch((err) =>
+          persistError('removeDomain capability', err)
+        );
+        return updated;
+      });
+      return next;
+    });
+    void api.deleteDomain(id).catch((err) => persistError('removeDomain', err));
+  }, []);
+
   const addCapability = useCallback(
     (input: NewCapabilityInput) => {
       const created: Capability = {
@@ -273,6 +399,35 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [isHardwareGroup, trackOfGroup]
   );
 
+  const removeCapability = useCallback(
+    (id: string) => {
+      const doomedEpics = epics.filter((e) => e.capabilityId === id).map((e) => e.id);
+      const doomedFeatures = features
+        .filter((f) => doomedEpics.includes(f.epicId))
+        .map((f) => f.id);
+      const doomedStories = stories
+        .filter((s) => doomedFeatures.includes(s.featureId))
+        .map((s) => s.id);
+      const removeIds = new Set<string>([id, ...doomedEpics, ...doomedFeatures, ...doomedStories]);
+
+      setStories((prev) => prev.filter((s) => !doomedFeatures.includes(s.featureId)));
+      setFeatures((prev) => prev.filter((f) => !doomedEpics.includes(f.epicId)));
+      setEpics((prev) => prev.filter((e) => e.capabilityId !== id));
+      setCapabilities((prev) => prev.filter((c) => c.id !== id));
+      setWaves((prev) =>
+        prev.map((w) => {
+          const itemIds = w.itemIds.filter((itemId) => !removeIds.has(itemId));
+          if (itemIds.length === w.itemIds.length) return w;
+          const updated = { ...w, itemIds };
+          void api.upsertWave(updated).catch((err) => persistError('removeCapability waves', err));
+          return updated;
+        })
+      );
+      void api.deleteCapability(id).catch((err) => persistError('removeCapability', err));
+    },
+    [epics, features, stories]
+  );
+
   const addGroup = useCallback((name: string, description: string, track: TrackId, process: string) => {
     setGroups((prev) => {
       const created: CapabilityGroup = {
@@ -289,6 +444,42 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return [...prev, created];
     });
   }, []);
+
+  const updateGroup = useCallback(
+    (id: string, patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process'>>) => {
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id !== id) return g;
+          const updated = {
+            ...g,
+            ...patch,
+            name: patch.name !== undefined ? patch.name.trim() : g.name,
+            description: patch.description !== undefined ? patch.description.trim() : g.description,
+            process: patch.process !== undefined ? patch.process.trim() : g.process,
+          };
+          void api.upsertGroup(updated).catch((err) => persistError('updateGroup', err));
+          return updated;
+        })
+      );
+    },
+    []
+  );
+
+  const removeGroup = useCallback(
+    (id: string) => {
+      const members = capabilities.filter((c) => c.groupId === id);
+      if (members.length > 0) {
+        window.alert(
+          `Cannot delete this group: ${members.length} capability${members.length === 1 ? '' : 'ies'} still belong to it. Move or delete them first.`
+        );
+        return false;
+      }
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+      void api.deleteGroup(id).catch((err) => persistError('removeGroup', err));
+      return true;
+    },
+    [capabilities]
+  );
 
   const setEquipmentCapabilities = useCallback(
     (equipmentId: string, capabilityIds: string[]) => {
@@ -722,15 +913,29 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
       if (dataset === 'equipment') {
         const next = [...equipment];
+        let nextTypes = [...equipmentTypes];
+        const createdTypes: EquipmentType[] = [];
         rows.forEach((r, i) => {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
           const id = (r['Equipment ID'] ?? '').trim();
+          const typeName = (r['Type'] ?? '').trim();
+          if (
+            typeName &&
+            !nextTypes.some((t) => t.name.toLowerCase() === typeName.toLowerCase())
+          ) {
+            const created: EquipmentType = {
+              id: nextId('EQT', nextTypes),
+              name: typeName,
+            };
+            nextTypes = [...nextTypes, created];
+            createdTypes.push(created);
+          }
           const patch = {
             name,
             vendor: (r['Vendor'] ?? '').trim(),
             model: (r['Model'] ?? '').trim(),
-            type: (r['Type'] ?? '').trim(),
+            type: typeName,
           };
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
@@ -741,6 +946,14 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             result.created += 1;
           }
         });
+        if (createdTypes.length > 0) {
+          setEquipmentTypes(nextTypes);
+          createdTypes.forEach((t) => {
+            void api.upsertEquipmentType(t).catch((err) =>
+              persistError('import equipment type', err)
+            );
+          });
+        }
         setEquipment(next);
         void api.upsertEquipmentMany(next).catch((err) => persistError('import equipment', err));
         return result;
@@ -818,15 +1031,21 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       domains,
       categories,
       equipment,
+      equipmentTypes,
       epics,
       features,
       stories,
       waves,
       addCapability,
       updateCapability,
+      removeCapability,
       addGroup,
+      updateGroup,
+      removeGroup,
       addCategory,
       addDomain,
+      updateDomain,
+      removeDomain,
       setEquipmentCapabilities,
       addEpic,
       updateEpic,
@@ -838,6 +1057,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       updateStory,
       removeStory,
       addEquipment,
+      updateEquipment,
+      removeEquipment,
+      addEquipmentType,
+      removeEquipmentType,
       addWave,
       updateWave,
       removeWave,
@@ -878,11 +1101,17 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     stories,
     waves,
     equipment,
+    equipmentTypes,
     addCapability,
     updateCapability,
+    removeCapability,
     addGroup,
+    updateGroup,
+    removeGroup,
     addCategory,
     addDomain,
+    updateDomain,
+    removeDomain,
     setEquipmentCapabilities,
     addEpic,
     updateEpic,
@@ -894,6 +1123,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     updateStory,
     removeStory,
     addEquipment,
+    updateEquipment,
+    removeEquipment,
+    addEquipmentType,
+    removeEquipmentType,
     addWave,
     updateWave,
     removeWave,

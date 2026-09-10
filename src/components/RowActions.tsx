@@ -9,7 +9,8 @@ import {
   LayersIcon,
   ListTreeIcon,
   MoreHorizontalIcon,
-  PencilIcon } from
+  PencilIcon,
+  Trash2Icon } from
 'lucide-react';
 import { TONE_DOT } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
@@ -24,7 +25,7 @@ interface Props {
 }
 
 export function RowActions({ capability, onEdit }: Props) {
-  const { updateCapability, countsOf, trackOf } = useRegistry();
+  const { updateCapability, removeCapability, countsOf, trackOf } = useRegistry();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>('root');
@@ -161,6 +162,17 @@ export function RowActions({ capability, onEdit }: Props) {
                 
                     <PencilIcon className="h-3.5 w-3.5" />
                     Edit capability
+                  </button>
+                  <button
+                type="button"
+                className={`${itemClass} text-danger hover:bg-danger/10 hover:text-danger`}
+                onClick={() => {
+                  setOpen(false);
+                  removeCapability(capability.id);
+                }}>
+                
+                    <Trash2Icon className="h-3.5 w-3.5" />
+                    Delete capability
                   </button>
                   <button type="button" className={itemClass} onClick={() => setPanel('progress')}>
                     <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
