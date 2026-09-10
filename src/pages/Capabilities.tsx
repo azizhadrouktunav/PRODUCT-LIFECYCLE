@@ -6,7 +6,7 @@ import { RowActions } from '../components/RowActions';
 import { Button, Chip, PageHeader, StagePill, StatusTag, inputClass } from '../components/Primitives';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import { CAPABILITY_STATUSES, TRACKS, isStageAhead } from '../types/registry';
+import { CAPABILITY_STATUSES, isStageAhead } from '../types/registry';
 
 const selectClass =
 'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
@@ -28,14 +28,12 @@ export function CapabilitiesPage() {
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [domainFilter, setDomainFilter] = useState('all');
-  const [progressFilter, setProgressFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return capabilities.filter((c) => {
       if (groupFilter !== 'all' && c.groupId !== groupFilter) return false;
-      if (progressFilter !== 'all' && c.progress !== progressFilter) return false;
       if (statusFilter !== 'all' && (c.status ?? 'none') !== statusFilter) return false;
       if (
       domainFilter !== 'all' &&
@@ -51,12 +49,11 @@ export function CapabilitiesPage() {
         c.domainIds.some((d) => d.toLowerCase().includes(q)));
 
     });
-  }, [capabilities, query, groupFilter, domainFilter, progressFilter, statusFilter, getDomain]);
+  }, [capabilities, query, groupFilter, domainFilter, statusFilter, getDomain]);
 
   const filtered =
   groupFilter !== 'all' ||
   domainFilter !== 'all' ||
-  progressFilter !== 'all' ||
   statusFilter !== 'all' ||
   query.trim() !== '';
 
@@ -64,17 +61,7 @@ export function CapabilitiesPage() {
     setQuery('');
     setGroupFilter('all');
     setDomainFilter('all');
-    setProgressFilter('all');
     setStatusFilter('all');
-  }
-
-  // The status progression depends on the group, so picking a group re-scopes it.
-  const selectedGroup = groups.find((g) => g.id === groupFilter);
-  const stageOptions = selectedGroup ? TRACKS[selectedGroup.track].stages.map((s) => s.name) : [];
-
-  function changeGroup(value: string) {
-    setGroupFilter(value);
-    setProgressFilter('all');
   }
 
   return (
@@ -108,7 +95,7 @@ export function CapabilitiesPage() {
         <select
           className={selectClass}
           value={groupFilter}
-          onChange={(e) => changeGroup(e.target.value)}
+          onChange={(e) => setGroupFilter(e.target.value)}
           aria-label="Filter by capability group">
           
           <option value="all">All groups</option>
@@ -128,23 +115,6 @@ export function CapabilitiesPage() {
           {categories.map((cat) =>
           <option key={cat.id} value={cat.id}>
               {cat.name}
-            </option>
-          )}
-        </select>
-        <select
-          className={`${selectClass} disabled:cursor-not-allowed disabled:text-ink-500`}
-          value={progressFilter}
-          disabled={!selectedGroup}
-          onChange={(e) => setProgressFilter(e.target.value)}
-          aria-label="Filter by status progress"
-          title={selectedGroup ? undefined : 'Select a capability group first'}>
-          
-          <option value="all">
-            {selectedGroup ? `All ${TRACKS[selectedGroup.track].label} stages` : 'Select a group first'}
-          </option>
-          {stageOptions.map((s, i) =>
-          <option key={s} value={s}>
-              {i + 1}. {s}
             </option>
           )}
         </select>
