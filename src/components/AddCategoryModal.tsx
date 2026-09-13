@@ -54,7 +54,6 @@ export function AddCategoryModal({
   const isEdit = !!category;
 
   const [catName, setCatName] = useState('');
-  const [catShortName, setCatShortName] = useState('');
   const [catDescription, setCatDescription] = useState('');
   const [touched, setTouched] = useState(false);
 
@@ -63,11 +62,9 @@ export function AddCategoryModal({
     setTouched(false);
     if (category) {
       setCatName(category.name);
-      setCatShortName(category.shortName);
       setCatDescription(category.description);
     } else {
       setCatName('');
-      setCatShortName('');
       setCatDescription('');
     }
   }, [open, category]);
@@ -83,19 +80,18 @@ export function AddCategoryModal({
   }, [isEdit, category, catName, categories]);
 
   const valid =
-    catName.trim().length > 1 &&
-    catShortName.trim() !== '' &&
-    generated.id !== '' &&
-    generated.prefix !== '';
+    catName.trim().length > 1 && generated.id !== '' && generated.prefix !== '';
 
   function submit() {
     setTouched(true);
     if (!valid) return;
 
+    const shortName = catName.trim();
+
     if (isEdit && category) {
       updateCategory(category.id, {
         name: catName,
-        shortName: catShortName,
+        shortName,
         description: catDescription,
       });
       onCreated?.(category.id);
@@ -106,7 +102,7 @@ export function AddCategoryModal({
     const created = addCategory({
       id: generated.id,
       name: catName,
-      shortName: catShortName,
+      shortName,
       prefix: generated.prefix,
       description: catDescription,
     });
@@ -145,14 +141,6 @@ export function AddCategoryModal({
             placeholder="TUNAV ONE Core"
           />
         </Field>
-        <Field label="Short name" required>
-          <input
-            className={inputClass}
-            value={catShortName}
-            onChange={(e) => setCatShortName(e.target.value)}
-            placeholder="TunavOne Core"
-          />
-        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Category ID" hint="generated automatically">
             <input
@@ -180,7 +168,7 @@ export function AddCategoryModal({
           />
         </Field>
         {touched && !valid && (
-          <p className="text-xs text-red-400">Give the category a name and a short name.</p>
+          <p className="text-xs text-red-400">Give the category a name.</p>
         )}
       </div>
     </Modal>
