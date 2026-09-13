@@ -1,8 +1,43 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { DomainCategory } from '../types/registry';
+
+/** Initials from words, uppercase, 2–6 chars. Fallback from letters only. */
+function basePrefixFromName(name: string): string {
+  const words = name
+    .trim()
+    .split(/[\s/_-]+/)
+    .filter(Boolean);
+  let prefix = words
+    .map((w) => w.replace(/[^a-zA-Z0-9]/g, '')[0] ?? '')
+    .join('')
+    .toUpperCase();
+  if (prefix.length < 2) {
+    prefix = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+  }
+  if (prefix.length < 2) prefix = 'CAT';
+  return prefix.slice(0, 6);
+}
+
+function uniquePrefixAndId(
+  name: string,
+  categories: DomainCategory[]
+): { prefix: string; id: string } {
+  const base = basePrefixFromName(name);
+  const takenIds = new Set(categories.map((c) => c.id));
+  const takenPrefixes = new Set(categories.map((c) => c.prefix.toUpperCase()));
+
+  let prefix = base;
+  let n = 2;
+  while (takenPrefixes.has(prefix) || takenIds.has(`CAT-${prefix}`)) {
+    const suffix = String(n);
+    prefix = `${base.slice(0, Math.max(1, 6 - suffix.length))}${suffix}`;
+    n += 1;
+  }
+  return { prefix, id: `CAT-${prefix}` };
+}
 
 export function AddCategoryModal({
   open,
@@ -18,10 +53,8 @@ export function AddCategoryModal({
   const { categories, addCategory, updateCategory } = useRegistry();
   const isEdit = !!category;
 
-  const [catId, setCatId] = useState('');
   const [catName, setCatName] = useState('');
   const [catShortName, setCatShortName] = useState('');
-  const [catPrefix, setCatPrefix] = useState('');
   const [catDescription, setCatDescription] = useState('');
   const [touched, setTouched] = useState(false);
 
@@ -29,29 +62,31 @@ export function AddCategoryModal({
     if (!open) return;
     setTouched(false);
     if (category) {
-      setCatId(category.id);
       setCatName(category.name);
       setCatShortName(category.shortName);
-      setCatPrefix(category.prefix);
       setCatDescription(category.description);
     } else {
-      setCatId('');
       setCatName('');
       setCatShortName('');
-      setCatPrefix('');
       setCatDescription('');
     }
   }, [open, category]);
 
-  const categoryIdTaken =
-    !isEdit && categories.some((c) => c.id === catId.trim());
+  const generated = useMemo(() => {
+    if (isEdit && category) {
+      return { prefix: category.prefix, id: category.id };
+    }
+    if (catName.trim().length < 2) {
+      return { prefix: '', id: '' };
+    }
+    return uniquePrefixAndId(catName, categories);
+  }, [isEdit, category, catName, categories]);
 
   const valid =
-    catId.trim() !== '' &&
     catName.trim().length > 1 &&
     catShortName.trim() !== '' &&
-    catPrefix.trim() !== '' &&
-    !categoryIdTaken;
+    generated.id !== '' &&
+    generated.prefix !== '';
 
   function submit() {
     setTouched(true);
@@ -61,7 +96,6 @@ export function AddCategoryModal({
       updateCategory(category.id, {
         name: catName,
         shortName: catShortName,
-        prefix: catPrefix,
         description: catDescription,
       });
       onCreated?.(category.id);
@@ -70,10 +104,10 @@ export function AddCategoryModal({
     }
 
     const created = addCategory({
-      id: catId,
+      id: generated.id,
       name: catName,
       shortName: catShortName,
-      prefix: catPrefix,
+      prefix: generated.prefix,
       description: catDescription,
     });
     onCreated?.(created.id);
@@ -89,7 +123,7 @@ export function AddCategoryModal({
       subtitle={
         isEdit
           ? `${category?.id} · changes apply across the register immediately`
-          : 'Categories group domains by product surface. Create one before adding domains.'
+          : 'Categories group domains by product surface. ID and prefix are assigned automatically from the name.'
       }
       footer={
         <>
@@ -103,25 +137,6 @@ export function AddCategoryModal({
       }
     >
       <div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Category ID" required hint="e.g. CAT-CORE">
-            <input
-              className={inputClass}
-              value={catId}
-              onChange={(e) => setCatId(e.target.value)}
-              placeholder="CAT-CORE"
-              disabled={isEdit}
-            />
-          </Field>
-          <Field label="Prefix" required hint="used in domain IDs">
-            <input
-              className={inputClass}
-              value={catPrefix}
-              onChange={(e) => setCatPrefix(e.target.value)}
-              placeholder="CORE"
-            />
-          </Field>
-        </div>
         <Field label="Name" required>
           <input
             className={inputClass}
@@ -138,6 +153,24 @@ export function AddCategoryModal({
             placeholder="TunavOne Core"
           />
         </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Category ID" hint="generated automatically">
+            <input
+              className={`${inputClass} text-mute`}
+              value={generated.id || '—'}
+              readOnly
+              disabled
+            />
+          </Field>
+          <Field label="Prefix" hint="generated automatically">
+            <input
+              className={`${inputClass} text-mute`}
+              value={generated.prefix || '—'}
+              readOnly
+              disabled
+            />
+          </Field>
+        </div>
         <Field label="Description">
           <textarea
             className={`${inputClass} min-h-[64px] resize-y`}
@@ -146,8 +179,8 @@ export function AddCategoryModal({
             placeholder="What this product surface covers."
           />
         </Field>
-        {touched && categoryIdTaken && (
-          <p className="text-xs text-red-400">A category with this ID already exists.</p>
+        {touched && !valid && (
+          <p className="text-xs text-red-400">Give the category a name and a short name.</p>
         )}
       </div>
     </Modal>

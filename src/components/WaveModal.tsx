@@ -70,7 +70,7 @@ function Row({
 }
 
 export function WaveModal({ open, onClose, wave = null }: Props) {
-  const { capabilities, epicsOf, featuresOf, storiesOf, addWave, updateWave } = useRegistry();
+  const { capabilities, epicsOf, featuresOf, storiesOf, waves, addWave, updateWave } = useRegistry();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -79,16 +79,26 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string[]>([]);
 
+  function nextWaveCode(): string {
+    const max = waves.reduce((acc, w) => {
+      const m = /^W-(\d+)$/i.exec(w.code.trim());
+      if (!m) return acc;
+      const n = Number(m[1]);
+      return Number.isFinite(n) && n > acc ? n : acc;
+    }, 0);
+    return `W-${String(max + 1).padStart(2, '0')}`;
+  }
+
   useEffect(() => {
     if (!open) return;
-    setCode(wave?.code ?? '');
+    setCode(wave?.code ?? nextWaveCode());
     setName(wave?.name ?? '');
     setDescription(wave?.description ?? '');
     setState(wave?.state ?? 'Planned');
     setItemIds(wave?.itemIds ?? []);
     setQuery('');
     setExpanded(wave?.itemIds.filter((id) => id.startsWith('CAP-') || id.startsWith('EPIC-')) ?? []);
-  }, [open, wave]);
+  }, [open, wave, waves]);
 
   const valid = name.trim().length > 1 && code.trim() !== '';
 
@@ -140,13 +150,13 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
       
       <div className="space-y-5">
         <div className="grid gap-5 sm:grid-cols-[120px_minmax(0,1fr)]">
-          <Field label="Code" required>
+          <Field label="Code" hint="generated automatically">
             <input
-              className={inputClass}
+              className={`${inputClass} text-mute`}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="W-04" />
-            
+              readOnly
+              disabled
+            />
           </Field>
           <Field label="Wave name" required>
             <input
