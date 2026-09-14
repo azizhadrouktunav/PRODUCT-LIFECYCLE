@@ -1,6 +1,7 @@
 import React from 'react';
-import type { CapabilityStatus, StageTone, TrackId, WaveState } from '../types/registry';
-import { stageDef, storyStageDef } from '../types/registry';
+import type { CapabilityStatus, Lifecycle, StageTone, TrackId, WaveState } from '../types/registry';
+import { DEFAULT_STORY_STAGES, stageDef, storyStageDef } from '../types/registry';
+import { useRegistry } from '../contexts/RegistryContext';
 
 export const TONE_DOT: Record<StageTone, string> = {
   blue: 'bg-brand',
@@ -27,7 +28,8 @@ export const TONE_TEXT: Record<StageTone, string> = {
 };
 
 export function StagePill({ track, stage }: {track: TrackId;stage: string;}) {
-  const def = stageDef(track, stage);
+  const { getLifecycle } = useRegistry();
+  const def = stageDef(getLifecycle(track), stage);
   const tone: StageTone = def?.tone ?? 'gray';
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs text-soft" title={def?.description}>
@@ -58,8 +60,18 @@ export function StatusTag({ status }: {status: CapabilityStatus | null;}) {
 
 }
 
-export function StoryStagePill({ stage }: {stage: string;}) {
-  const def = storyStageDef(stage);
+export function StoryStagePill({
+  stage,
+  lifecycle,
+}: {
+  stage: string;
+  lifecycle?: Lifecycle;
+}) {
+  const { lifecycles } = useRegistry();
+  const def =
+    (lifecycle ? storyStageDef(lifecycle, stage) : undefined) ??
+    lifecycles.flatMap((l) => l.storyStages).find((s) => s.name === stage) ??
+    DEFAULT_STORY_STAGES.find((s) => s.name === stage);
   const tone: StageTone = def?.tone ?? 'gray';
   return (
     <span

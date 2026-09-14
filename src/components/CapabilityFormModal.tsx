@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
-import { CAPABILITY_STATUSES, TRACKS, stageIndex } from '../types/registry';
+import { CAPABILITY_STATUSES, stageIndex, usesEquipment } from '../types/registry';
 
 interface Props {
   open: boolean;
@@ -16,7 +16,8 @@ interface Props {
 }
 
 export function CapabilityFormModal({ open, onClose, capability = null, onCreated }: Props) {
-  const { groups, domains, categories, equipment, addCapability, updateCapability } = useRegistry();
+  const { groups, domains, categories, equipment, addCapability, updateCapability, getLifecycle } =
+    useRegistry();
   const isEdit = !!capability;
 
   const [name, setName] = useState('');
@@ -50,14 +51,17 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
     }
   }, [open, capability, groups]);
 
-  const track = groups.find((g) => g.id === groupId)?.track ?? 'delivery';
-  const isHardware = track === 'hardware';
+  const trackId = groups.find((g) => g.id === groupId)?.track ?? '';
+  const lifecycle = getLifecycle(trackId);
+  const isHardware = usesEquipment(lifecycle);
   const valid = name.trim().length > 1 && domainIds.length > 0 && groupId !== '';
 
   // Each lifecycle has its own stages — moving group resets an invalid one.
   useEffect(() => {
-    if (stageIndex(track, progress) < 0) setProgress(TRACKS[track].stages[0].name);
-  }, [track, progress]);
+    if (stageIndex(lifecycle, progress) < 0) {
+      setProgress(lifecycle.stages[0]?.name ?? 'Identified');
+    }
+  }, [lifecycle, progress]);
 
   const domainsByCategory = useMemo(
     () => categories.map((cat) => ({ cat, items: domains.filter((d) => d.categoryId === cat.id) })),
@@ -140,7 +144,7 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
           <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
             {groups.map((g) =>
             <option key={g.id} value={g.id}>
-                {g.name} — {TRACKS[g.track].label}
+                {g.name} — {getLifecycle(g.track).label}
               </option>
             )}
           </select>
@@ -154,7 +158,7 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
               value={progress}
               onChange={(e) => setProgress(e.target.value)}>
               
-                {TRACKS[track].stages.map((s, i) =>
+                {lifecycle.stages.map((s, i) =>
               <option key={s.name} value={s.name}>
                     {i + 1}. {s.name}
                   </option>

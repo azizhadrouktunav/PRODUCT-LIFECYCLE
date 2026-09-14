@@ -5,7 +5,7 @@ import { WaveModal } from '../components/WaveModal';
 import { Button, Chip, PageHeader, ProgressBar, WaveTag } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Wave } from '../types/registry';
-import { isStoryDone } from '../types/registry';
+import { storyIsDone } from '../types/registry';
 import { waveCounts, waveStories } from '../utils/scope';
 
 export function WavesPage() {
@@ -44,7 +44,7 @@ export function WavesPage() {
       <div className="mt-4 space-y-5">
         {waves.map((w) => {
           const scope = waveStories(w, { epics, features, stories });
-          const done = scope.filter(isStoryDone).length;
+          const done = scope.filter(storyIsDone).length;
           const counts = waveCounts(w);
 
           return (

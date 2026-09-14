@@ -3,17 +3,22 @@ import type {
   Capability,
   CapabilityGroup,
   CapabilityStatus,
+  DecompositionMode,
   Domain,
   DomainCategory,
   Epic,
   Equipment,
   EquipmentType,
   Feature,
-  TrackId,
+  Lifecycle,
+  StageDef,
+  StageRequirement,
+  StageTone,
   UserStory,
   Wave,
   WaveState,
 } from '../types/registry';
+import { FALLBACK_LIFECYCLE, LIFECYCLE_TEMPLATES, TRACKS } from '../types/registry';
 
 export interface RegistrySnapshot {
   categories: DomainCategory[];
@@ -21,11 +26,90 @@ export interface RegistrySnapshot {
   groups: CapabilityGroup[];
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
+  lifecycles: Lifecycle[];
   capabilities: Capability[];
   epics: Epic[];
   features: Feature[];
   stories: UserStory[];
   waves: Wave[];
+}
+
+const VALID_TONES = new Set<StageTone>([
+  'blue',
+  'cyan',
+  'amber',
+  'orange',
+  'green',
+  'red',
+  'violet',
+  'pink',
+  'gray',
+]);
+
+const VALID_REQUIREMENTS = new Set<StageRequirement>([
+  'none',
+  'epics',
+  'features',
+  'stories',
+  'equipment',
+]);
+
+function mapStageDef(raw: unknown): StageDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const name = String(row.name ?? '').trim();
+  if (!name) return null;
+  const toneRaw = String(row.tone ?? 'blue') as StageTone;
+  const reqRaw = String(row.requirement ?? 'none') as StageRequirement;
+  return {
+    name,
+    description: String(row.description ?? ''),
+    tone: VALID_TONES.has(toneRaw) ? toneRaw : 'blue',
+    requirement: VALID_REQUIREMENTS.has(reqRaw) ? reqRaw : 'none',
+  };
+}
+
+function mapStages(raw: unknown): StageDef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(mapStageDef).filter((s): s is StageDef => s != null);
+}
+
+function mapLifecycle(row: Record<string, unknown>): Lifecycle {
+  const decomposition: DecompositionMode =
+    row.decomposition === 'none' ? 'none' : 'delivery';
+  const stages = mapStages(row.stages);
+  const storyStages = mapStages(row.story_stages);
+  return {
+    id: String(row.id),
+    label: String(row.label ?? ''),
+    summary: String(row.summary ?? ''),
+    decomposition,
+    stages: stages.length > 0 ? stages : LIFECYCLE_TEMPLATES[decomposition].stages,
+    storyStages:
+      decomposition === 'delivery'
+        ? storyStages.length > 0
+          ? storyStages
+          : LIFECYCLE_TEMPLATES.delivery.storyStages
+        : [],
+  };
+}
+
+function lifecycleToRow(lc: Lifecycle) {
+  return {
+    id: lc.id,
+    label: lc.label,
+    summary: lc.summary,
+    decomposition: lc.decomposition,
+    stages: lc.stages,
+    story_stages: lc.decomposition === 'delivery' ? lc.storyStages : [],
+  };
+}
+
+async function ensureDefaultLifecycles(): Promise<Lifecycle[]> {
+  const defaults = Object.values(TRACKS);
+  const { error } = await supabase.from('lifecycles').upsert(defaults.map(lifecycleToRow));
+  throwIfError(error, 'Seed default lifecycles');
+  return defaults;
 }
 
 function asStatus(raw: string | null | undefined): CapabilityStatus | null {
@@ -57,7 +141,7 @@ function mapGroup(row: Record<string, unknown>): CapabilityGroup {
     id: String(row.id),
     name: String(row.name),
     description: String(row.description ?? ''),
-    track: (row.track === 'hardware' ? 'hardware' : 'delivery') as TrackId,
+    track: String(row.track ?? FALLBACK_LIFECYCLE.id),
     process: String(row.process ?? ''),
   };
 }
@@ -156,6 +240,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     groupsRes,
     equipmentRes,
     equipmentTypesRes,
+    lifecyclesRes,
     capabilitiesRes,
     epicsRes,
     featuresRes,
@@ -167,6 +252,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     supabase.from('capability_groups').select('*'),
     supabase.from('equipment').select('*'),
     supabase.from('equipment_types').select('*'),
+    supabase.from('lifecycles').select('*'),
     supabase.from('capabilities').select('*'),
     supabase.from('epics').select('*'),
     supabase.from('features').select('*'),
@@ -179,11 +265,28 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   throwIfError(groupsRes.error, 'Load capability_groups');
   throwIfError(equipmentRes.error, 'Load equipment');
   throwIfError(equipmentTypesRes.error, 'Load equipment_types');
+  throwIfError(lifecyclesRes.error, 'Load lifecycles');
   throwIfError(capabilitiesRes.error, 'Load capabilities');
   throwIfError(epicsRes.error, 'Load epics');
   throwIfError(featuresRes.error, 'Load features');
   throwIfError(storiesRes.error, 'Load user_stories');
   throwIfError(wavesRes.error, 'Load waves');
+
+  let lifecycles = (lifecyclesRes.data ?? []).map((r) => mapLifecycle(r as Record<string, unknown>));
+  if (lifecycles.length === 0) {
+    lifecycles = await ensureDefaultLifecycles();
+  } else {
+    // Ensure seeded hardware/delivery exist even if only custom lifecycles were present.
+    const known = new Set(lifecycles.map((l) => l.id));
+    const missingDefaults = Object.values(TRACKS).filter((t) => !known.has(t.id));
+    if (missingDefaults.length > 0) {
+      const { error } = await supabase
+        .from('lifecycles')
+        .upsert(missingDefaults.map(lifecycleToRow));
+      throwIfError(error, 'Seed missing default lifecycles');
+      lifecycles = [...lifecycles, ...missingDefaults];
+    }
+  }
 
   const equipment = (equipmentRes.data ?? []).map((r) => mapEquipment(r as Record<string, unknown>));
   let equipmentTypes = (equipmentTypesRes.data ?? []).map((r) =>
@@ -217,12 +320,23 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     groups: (groupsRes.data ?? []).map((r) => mapGroup(r as Record<string, unknown>)),
     equipment,
     equipmentTypes,
+    lifecycles,
     capabilities: (capabilitiesRes.data ?? []).map((r) => mapCapability(r as Record<string, unknown>)),
     epics: (epicsRes.data ?? []).map((r) => mapEpic(r as Record<string, unknown>)),
     features: (featuresRes.data ?? []).map((r) => mapFeature(r as Record<string, unknown>)),
     stories: (storiesRes.data ?? []).map((r) => mapStory(r as Record<string, unknown>)),
     waves: (wavesRes.data ?? []).map((r) => mapWave(r as Record<string, unknown>)),
   };
+}
+
+export async function upsertLifecycle(lifecycle: Lifecycle): Promise<void> {
+  const { error } = await supabase.from('lifecycles').upsert(lifecycleToRow(lifecycle));
+  throwIfError(error, 'Upsert lifecycle');
+}
+
+export async function deleteLifecycle(id: string): Promise<void> {
+  const { error } = await supabase.from('lifecycles').delete().eq('id', id);
+  throwIfError(error, 'Delete lifecycle');
 }
 
 export async function upsertCategory(cat: DomainCategory): Promise<void> {

@@ -16,7 +16,7 @@ import { FeatureModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Feature } from '../types/registry';
-import { CAPABILITY_STATUSES, isStoryDone } from '../types/registry';
+import { CAPABILITY_STATUSES, storyIsDone } from '../types/registry';
 
 export function ManageFeaturesPage() {
   const { capabilityId = '', epicId = '' } = useParams();
@@ -104,7 +104,7 @@ export function ManageFeaturesPage() {
           <tbody>
             {features.map((feature) => {
               const stories = storiesOf(feature.id);
-              const done = stories.filter(isStoryDone).length;
+              const done = stories.filter(storyIsDone).length;
               return (
                 <tr key={feature.id} className="border-t border-line-soft align-top">
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{feature.id}</td>

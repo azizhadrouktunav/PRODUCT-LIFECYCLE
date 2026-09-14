@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { Chip, StatusTag, TONE_DOT, TONE_TEXT } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
-import { STORY_STAGES, TRACKS, stageDef, stageIndex, isStoryDone } from '../types/registry';
+import { stageDef, stageIndex, isStoryDone, usesEquipment } from '../types/registry';
 
 function Metric({ label, value, hint }: {label: string;value: string | number;hint?: string;}) {
   return (
@@ -33,7 +33,7 @@ export function CapabilityDetailPage() {
     getDomain,
     equipment,
     countsOf,
-    trackOf,
+    lifecycleOf,
     waves,
     epicsOf,
     featuresOf,
@@ -56,16 +56,16 @@ export function CapabilityDetailPage() {
 
   const counts = countsOf(capability.id);
   const group = getGroup(capability.groupId);
-  const track = trackOf(capability);
-  const isHardware = track === 'hardware';
-  const stages = TRACKS[track].stages;
-  const idx = stageIndex(track, capability.progress);
-  const current = stageDef(track, capability.progress);
+  const lifecycle = lifecycleOf(capability);
+  const isHardware = usesEquipment(lifecycle);
+  const stages = lifecycle.stages;
+  const idx = stageIndex(lifecycle, capability.progress);
+  const current = stageDef(lifecycle, capability.progress);
   const linked = equipment.filter((e) => capability.equipmentIds.includes(e.id));
   const inWaves = waves.filter((w) => w.itemIds.includes(capability.id));
   const epics = epicsOf(capability.id);
   const capStories = epics.flatMap((e) => featuresOf(e.id)).flatMap((f) => storiesOf(f.id));
-  const released = capStories.filter(isStoryDone).length;
+  const released = capStories.filter((s) => isStoryDone(s, lifecycle)).length;
 
   return (
     <div>
@@ -162,7 +162,7 @@ export function CapabilityDetailPage() {
               <div className="mt-6">
                 <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">User story pipeline</h2>
                 <ul className="mt-1.5 grid gap-1.5 sm:grid-cols-3 xl:grid-cols-6">
-                  {STORY_STAGES.map((s) => {
+                  {lifecycle.storyStages.map((s) => {
                   const n = capStories.filter((st) => st.stage === s.name).length;
                   return (
                     <li
@@ -216,7 +216,7 @@ export function CapabilityDetailPage() {
                             <StatusTag status={epic.status} />
                             <span className="ml-auto font-mono text-2xs text-mute">
                               {featuresOf(epic.id).length}F · {epicStories.length}S ·{' '}
-                              {epicStories.filter(isStoryDone).length} released
+                              {epicStories.filter((s) => isStoryDone(s, lifecycle)).length} released
                             </span>
                           </div>
                         </li>);

@@ -3,7 +3,7 @@ import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup, TrackId } from '../types/registry';
-import { TRACKS } from '../types/registry';
+import { DECOMPOSITION_LABEL } from '../types/registry';
 
 export function AddGroupModal({
   open,
@@ -14,11 +14,12 @@ export function AddGroupModal({
   onClose: () => void;
   group?: CapabilityGroup | null;
 }) {
-  const { addGroup, updateGroup } = useRegistry();
+  const { addGroup, updateGroup, lifecycles } = useRegistry();
   const isEdit = !!group;
+  const defaultTrack = lifecycles.find((l) => l.decomposition === 'delivery')?.id ?? lifecycles[0]?.id ?? '';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [track, setTrack] = useState<TrackId>('delivery');
+  const [track, setTrack] = useState<TrackId>(defaultTrack);
   const [process, setProcess] = useState('');
 
   useEffect(() => {
@@ -31,12 +32,12 @@ export function AddGroupModal({
     } else {
       setName('');
       setDescription('');
-      setTrack('delivery');
+      setTrack(defaultTrack);
       setProcess('');
     }
-  }, [open, group]);
+  }, [open, group, defaultTrack]);
 
-  const valid = name.trim().length > 1;
+  const valid = name.trim().length > 1 && track !== '';
 
   function submit() {
     if (!valid) return;
@@ -90,29 +91,31 @@ export function AddGroupModal({
 
         <div>
           <span className="mb-1.5 block text-xs font-medium text-soft">Lifecycle</span>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(Object.keys(TRACKS) as TrackId[]).map((id) => {
-              const t = TRACKS[id];
-              const active = track === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setTrack(id)}
-                  className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
-                    active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
-                  }`}
-                >
-                  <span className="block text-xs font-medium text-strong">{t.label}</span>
-                  <span className="mt-1 block text-2xs leading-relaxed text-mute">
-                    {t.stages.length} stages ·{' '}
-                    {id === 'hardware' ? 'no decomposition' : 'epics → features → stories'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {lifecycles.length === 0 ? (
+            <p className="text-xs text-mute">Create a lifecycle first on the Lifecycles page.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {lifecycles.map((t) => {
+                const active = track === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setTrack(t.id)}
+                    className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
+                      active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
+                    }`}
+                  >
+                    <span className="block text-xs font-medium text-strong">{t.label}</span>
+                    <span className="mt-1 block text-2xs leading-relaxed text-mute">
+                      {t.stages.length} stages · {DECOMPOSITION_LABEL[t.decomposition]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <Field label="Process description" hint="shown behind the info icon">

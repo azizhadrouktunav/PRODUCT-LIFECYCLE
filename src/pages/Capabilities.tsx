@@ -6,7 +6,7 @@ import { RowActions } from '../components/RowActions';
 import { Button, Chip, PageHeader, StagePill, StatusTag, inputClass } from '../components/Primitives';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import { CAPABILITY_STATUSES, isStageAhead } from '../types/registry';
+import { CAPABILITY_STATUSES, isStageAhead, usesEquipment } from '../types/registry';
 
 const selectClass =
 'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
@@ -20,7 +20,7 @@ export function CapabilitiesPage() {
     getGroup,
     getDomain,
     countsOf,
-    trackOf
+    lifecycleOf
   } = useRegistry();
   const getEquipment = (id: string) => equipment.find((e) => e.id === id);
   const { openCreate, openEdit } = useCapabilityEditor();
@@ -165,8 +165,9 @@ export function CapabilitiesPage() {
           <tbody>
             {rows.map((c) => {
               const counts = countsOf(c.id);
-              const track = trackOf(c);
-              const ahead = isStageAhead(track, c.progress, counts);
+              const lifecycle = lifecycleOf(c);
+              const ahead = isStageAhead(lifecycle, c.progress, counts);
+              const equipmentBound = usesEquipment(lifecycle);
               return (
                 <tr
                   key={c.id}
@@ -181,7 +182,7 @@ export function CapabilitiesPage() {
                   <td className="py-3 pr-4">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-strong">{c.name}</span>
-                      {track === 'hardware' && <Chip tone="aqua">{counts.equipment} equip.</Chip>}
+                      {equipmentBound && <Chip tone="aqua">{counts.equipment} equip.</Chip>}
                     </div>
                     <p className="mt-0.5 line-clamp-1 max-w-xl text-xs text-mute">{c.description}</p>
                   </td>
@@ -200,7 +201,7 @@ export function CapabilitiesPage() {
                   </td>
                   <td className="py-3 pr-4 font-mono text-2xs text-brand-bright">{c.jiraEpic || '—'}</td>
                   <td className="py-3 pr-4">
-                    {track === 'hardware' ?
+                    {equipmentBound ?
                     c.equipmentIds.length === 0 ?
                     <span className="text-2xs text-ink-500">No equipment</span> :
 
@@ -225,7 +226,7 @@ export function CapabilitiesPage() {
                   </td>
                   <td className="py-3 pr-4">
                     <span className="flex items-center gap-1.5">
-                      <StagePill track={track} stage={c.progress} />
+                      <StagePill track={lifecycle.id} stage={c.progress} />
                       {ahead &&
                       <AlertTriangleIcon
                         className="h-3 w-3 shrink-0 text-warn"

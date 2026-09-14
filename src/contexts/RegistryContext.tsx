@@ -12,24 +12,36 @@ import type {
   Capability,
   CapabilityGroup,
   CapabilityStatus,
+  DecompositionMode,
   Domain,
   DomainCategory,
   Epic,
   Equipment,
   EquipmentType,
   Feature,
+  Lifecycle,
   RecordCounts,
+  StageDef,
   TrackId,
   UserStory,
   Wave,
 } from '../types/registry';
 import {
   CAPABILITY_STATUSES,
-  STORY_STAGES,
-  TRACKS,
+  DEFAULT_STORY_STAGES,
+  FALLBACK_LIFECYCLE,
   stageIndex,
+  usesEquipment,
 } from '../types/registry';
 import * as api from '../lib/registryApi';
+
+export type LifecycleInput = {
+  label: string;
+  summary: string;
+  decomposition: DecompositionMode;
+  stages: StageDef[];
+  storyStages: StageDef[];
+};
 
 export interface NewCapabilityInput {
   name: string;
@@ -74,6 +86,7 @@ interface RegistryValue {
   categories: DomainCategory[];
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
+  lifecycles: Lifecycle[];
   epics: Epic[];
   features: Feature[];
   stories: UserStory[];
@@ -87,6 +100,12 @@ interface RegistryValue {
     patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process'>>
   ) => void;
   removeGroup: (id: string) => boolean;
+  addLifecycle: (input: LifecycleInput) => Lifecycle;
+  updateLifecycle: (id: string, patch: Partial<LifecycleInput>) => void;
+  removeLifecycle: (id: string) => boolean;
+  getLifecycle: (id: string) => Lifecycle;
+  lifecycleOf: (capability: Capability) => Lifecycle;
+  lifecycleOfGroup: (groupId: string) => Lifecycle;
   addCategory: (input: CategoryInput) => DomainCategory;
   updateCategory: (
     id: string,
@@ -162,6 +181,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [waves, setWaves] = useState<Wave[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
+  const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
 
   const reload = useCallback(async () => {
@@ -174,6 +194,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setGroups(snap.groups);
       setEquipment(snap.equipment);
       setEquipmentTypes(snap.equipmentTypes);
+      setLifecycles(snap.lifecycles);
       setCapabilities(snap.capabilities);
       setEpics(snap.epics);
       setFeatures(snap.features);
@@ -190,14 +211,26 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     void reload();
   }, [reload]);
 
-  const isHardwareGroup = useCallback(
-    (groupId: string) => groups.find((g) => g.id === groupId)?.track === 'hardware',
-    [groups]
+  const resolveLifecycle = useCallback(
+    (id: string | undefined): Lifecycle => {
+      if (!id) return lifecycles[0] ?? FALLBACK_LIFECYCLE;
+      return lifecycles.find((l) => l.id === id) ?? lifecycles[0] ?? FALLBACK_LIFECYCLE;
+    },
+    [lifecycles]
+  );
+
+  const isEquipmentGroup = useCallback(
+    (groupId: string) => {
+      const track = groups.find((g) => g.id === groupId)?.track;
+      return usesEquipment(resolveLifecycle(track));
+    },
+    [groups, resolveLifecycle]
   );
 
   const trackOfGroup = useCallback(
-    (groupId: string): TrackId => groups.find((g) => g.id === groupId)?.track ?? 'delivery',
-    [groups]
+    (groupId: string): TrackId =>
+      groups.find((g) => g.id === groupId)?.track ?? resolveLifecycle(undefined).id,
+    [groups, resolveLifecycle]
   );
 
   const addEquipment = useCallback(
@@ -413,15 +446,15 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         groupId: input.groupId,
         domainIds: input.domainIds,
         jiraEpic: input.jiraEpic.trim(),
-        equipmentIds: isHardwareGroup(input.groupId) ? input.equipmentIds : [],
-        progress: 'Identified',
+        equipmentIds: isEquipmentGroup(input.groupId) ? input.equipmentIds : [],
+        progress: resolveLifecycle(trackOfGroup(input.groupId)).stages[0]?.name ?? 'Identified',
         status: null,
       };
       setCapabilities((prev) => [created, ...prev]);
       void api.upsertCapability(created).catch((err) => persistError('addCapability', err));
       return created;
     },
-    [capabilities, isHardwareGroup]
+    [capabilities, isEquipmentGroup, resolveLifecycle, trackOfGroup]
   );
 
   const updateCapability = useCallback(
@@ -430,10 +463,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         const next = prev.map((cap) => {
           if (cap.id !== id) return cap;
           const updated: Capability = { ...cap, ...patch };
-          if (!isHardwareGroup(updated.groupId)) updated.equipmentIds = [];
-          const track = trackOfGroup(updated.groupId);
-          if (stageIndex(track, updated.progress) < 0) {
-            updated.progress = TRACKS[track].stages[0].name;
+          if (!isEquipmentGroup(updated.groupId)) updated.equipmentIds = [];
+          const lifecycle = resolveLifecycle(trackOfGroup(updated.groupId));
+          if (stageIndex(lifecycle, updated.progress) < 0) {
+            updated.progress = lifecycle.stages[0]?.name ?? 'Identified';
           }
           void api.upsertCapability(updated).catch((err) => persistError('updateCapability', err));
           return updated;
@@ -441,7 +474,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [isHardwareGroup, trackOfGroup]
+    [isEquipmentGroup, resolveLifecycle, trackOfGroup]
   );
 
   const removeCapability = useCallback(
@@ -506,8 +539,30 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           return updated;
         })
       );
+      if (patch.track !== undefined) {
+        const lifecycle = resolveLifecycle(patch.track);
+        setCapabilities((prev) => {
+          const next = prev.map((cap) => {
+            if (cap.groupId !== id) return cap;
+            let updated = { ...cap };
+            if (!usesEquipment(lifecycle)) updated.equipmentIds = [];
+            if (stageIndex(lifecycle, updated.progress) < 0) {
+              updated = {
+                ...updated,
+                progress: lifecycle.stages[0]?.name ?? 'Identified',
+              };
+            }
+            if (updated === cap) return cap;
+            void api.upsertCapability(updated).catch((err) =>
+              persistError('updateGroup capability', err)
+            );
+            return updated;
+          });
+          return next;
+        });
+      }
     },
-    []
+    [resolveLifecycle]
   );
 
   const removeGroup = useCallback(
@@ -530,7 +585,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     (equipmentId: string, capabilityIds: string[]) => {
       setCapabilities((prev) => {
         const next = prev.map((cap) => {
-          if (!isHardwareGroup(cap.groupId)) return cap;
+          if (!isEquipmentGroup(cap.groupId)) return cap;
           const shouldHave = capabilityIds.includes(cap.id);
           const has = cap.equipmentIds.includes(equipmentId);
           if (shouldHave === has) return cap;
@@ -550,7 +605,66 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [isHardwareGroup]
+    [isEquipmentGroup]
+  );
+
+  const addLifecycle = useCallback(
+    (input: LifecycleInput) => {
+      const created: Lifecycle = {
+        id: nextId('LC', lifecycles),
+        label: input.label.trim(),
+        summary: input.summary.trim(),
+        decomposition: input.decomposition,
+        stages: input.stages,
+        storyStages: input.decomposition === 'delivery' ? input.storyStages : [],
+      };
+      setLifecycles((prev) => [...prev, created]);
+      void api.upsertLifecycle(created).catch((err) => persistError('addLifecycle', err));
+      return created;
+    },
+    [lifecycles]
+  );
+
+  const updateLifecycle = useCallback((id: string, patch: Partial<LifecycleInput>) => {
+    setLifecycles((prev) =>
+      prev.map((lc) => {
+        if (lc.id !== id) return lc;
+        const decomposition = patch.decomposition ?? lc.decomposition;
+        const updated: Lifecycle = {
+          ...lc,
+          label: patch.label !== undefined ? patch.label.trim() : lc.label,
+          summary: patch.summary !== undefined ? patch.summary.trim() : lc.summary,
+          decomposition,
+          stages: patch.stages ?? lc.stages,
+          storyStages:
+            decomposition === 'delivery'
+              ? (patch.storyStages ?? lc.storyStages)
+              : [],
+        };
+        void api.upsertLifecycle(updated).catch((err) => persistError('updateLifecycle', err));
+        return updated;
+      })
+    );
+  }, []);
+
+  const removeLifecycle = useCallback(
+    (id: string) => {
+      const inUse = groups.filter((g) => g.track === id);
+      if (inUse.length > 0) {
+        window.alert(
+          `Cannot delete this lifecycle: ${inUse.length} capability group${inUse.length === 1 ? '' : 's'} still use it. Reassign them first.`
+        );
+        return false;
+      }
+      if (lifecycles.length <= 1) {
+        window.alert('Cannot delete the last lifecycle.');
+        return false;
+      }
+      setLifecycles((prev) => prev.filter((l) => l.id !== id));
+      void api.deleteLifecycle(id).catch((err) => persistError('removeLifecycle', err));
+      return true;
+    },
+    [groups, lifecycles.length]
   );
 
   const addEpic = useCallback((capabilityId: string, input: EpicInput) => {
@@ -824,11 +938,11 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const groupId = (r['Group ID'] ?? '').trim() || groups[0]?.id;
           if (!groupId || !groups.some((g) => g.id === groupId))
             return note(i, `unknown group "${groupId ?? ''}"`);
-          const track = groupMap.get(groupId)?.track ?? 'delivery';
+          const lifecycle = resolveLifecycle(groupMap.get(groupId)?.track);
           const progressRaw = (r['Progress'] ?? '').trim();
           const progress =
-            TRACKS[track].stages.find((s) => s.name.toLowerCase() === progressRaw.toLowerCase())
-              ?.name ?? TRACKS[track].stages[0].name;
+            lifecycle.stages.find((s) => s.name.toLowerCase() === progressRaw.toLowerCase())
+              ?.name ?? lifecycle.stages[0]?.name ?? 'Identified';
           const id = (r['Capability ID'] ?? '').trim();
           const patch = {
             name,
@@ -836,10 +950,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             groupId,
             domainIds: list(r['Domain IDs'] ?? '').filter((d) => domainMap.has(d)),
             jiraEpic: (r['Epic Key'] ?? '').trim(),
-            equipmentIds:
-              groupMap.get(groupId)?.track === 'hardware'
-                ? list(r['Equipment IDs'] ?? '').filter((e) => equipment.some((eq) => eq.id === e))
-                : [],
+            equipmentIds: usesEquipment(lifecycle)
+              ? list(r['Equipment IDs'] ?? '').filter((e) => equipment.some((eq) => eq.id === e))
+              : [],
             progress,
             status: asStatus(r['Status'] ?? ''),
           };
@@ -916,6 +1029,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
       if (dataset === 'stories') {
         const next = [...stories];
+        const lifecycleByFeature = (featureId: string): Lifecycle => {
+          const feature = featureMap.get(featureId);
+          const epic = feature ? epicMap.get(feature.epicId) : undefined;
+          const cap = epic ? capabilityMap.get(epic.capabilityId) : undefined;
+          return resolveLifecycle(cap ? groupMap.get(cap.groupId)?.track : undefined);
+        };
         rows.forEach((r, i) => {
           const title = (r['Title'] ?? '').trim();
           if (!title) return note(i, 'no title');
@@ -924,6 +1043,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const stageRaw = (r['Progress Stage'] ?? '').trim();
           const points = Number((r['Points'] ?? '').trim());
           const id = (r['Story ID'] ?? '').trim();
+          const storyStages = lifecycleByFeature(featureId).storyStages;
+          const stages = storyStages.length > 0 ? storyStages : DEFAULT_STORY_STAGES;
           const patch = {
             featureId,
             title,
@@ -934,8 +1055,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             points: Number.isFinite(points) && (r['Points'] ?? '').trim() !== '' ? points : null,
             status: asStatus(r['Status'] ?? ''),
             stage:
-              STORY_STAGES.find((s) => s.name.toLowerCase() === stageRaw.toLowerCase())?.name ??
-              STORY_STAGES[0].name,
+              stages.find((s) => s.name.toLowerCase() === stageRaw.toLowerCase())?.name ??
+              stages[0].name,
             adrContext: (r['ADR Context'] ?? '').trim(),
             adrDecision: (r['ADR Decision'] ?? '').trim(),
             adrTechnical: (r['ADR Technical'] ?? '').trim(),
@@ -1029,11 +1150,16 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       }
 
       const next = [...groups];
+      const lifecycleIds = new Set(lifecycles.map((l) => l.id));
       rows.forEach((r, i) => {
         const name = (r['Name'] ?? '').trim();
         if (!name) return note(i, 'no name');
-        const trackRaw = (r['Track'] ?? '').trim().toLowerCase();
-        const track: TrackId = trackRaw === 'hardware' ? 'hardware' : 'delivery';
+        const trackRaw = (r['Track'] ?? '').trim();
+        const track =
+          lifecycleIds.has(trackRaw)
+            ? trackRaw
+            : [...lifecycleIds].find((id) => id.toLowerCase() === trackRaw.toLowerCase()) ??
+              resolveLifecycle(undefined).id;
         const id = (r['Group ID'] ?? '').trim();
         const patch = {
           name,
@@ -1063,8 +1189,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return result;
     };
 
-    const hardwareGroupIds = new Set(
-      groups.filter((g) => g.track === 'hardware').map((g) => g.id)
+    const equipmentGroupIds = new Set(
+      groups.filter((g) => usesEquipment(resolveLifecycle(g.track))).map((g) => g.id)
     );
 
     return {
@@ -1077,6 +1203,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       categories,
       equipment,
       equipmentTypes,
+      lifecycles,
       epics,
       features,
       stories,
@@ -1087,6 +1214,13 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addGroup,
       updateGroup,
       removeGroup,
+      addLifecycle,
+      updateLifecycle,
+      removeLifecycle,
+      getLifecycle: (id) => resolveLifecycle(id),
+      lifecycleOf: (capability) =>
+        resolveLifecycle(groupMap.get(capability.groupId)?.track),
+      lifecycleOfGroup: (groupId) => resolveLifecycle(groupMap.get(groupId)?.track),
       addCategory,
       updateCategory,
       removeCategory,
@@ -1121,7 +1255,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       getEpic: (id) => epicMap.get(id),
       getFeature: (id) => featureMap.get(id),
       getStory: (id) => storyMap.get(id),
-      trackOf: (capability) => groupMap.get(capability.groupId)?.track ?? 'delivery',
+      trackOf: (capability) =>
+        groupMap.get(capability.groupId)?.track ?? resolveLifecycle(undefined).id,
       epicsOf,
       featuresOf,
       storiesOf,
@@ -1131,7 +1266,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return e ? capabilityMap.get(e.capabilityId) : undefined;
       },
       countsOf,
-      hardwareCapabilities: capabilities.filter((c) => hardwareGroupIds.has(c.groupId)),
+      hardwareCapabilities: capabilities.filter((c) => equipmentGroupIds.has(c.groupId)),
       exportDataset,
       importDataset,
     };
@@ -1149,12 +1284,17 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     waves,
     equipment,
     equipmentTypes,
+    lifecycles,
+    resolveLifecycle,
     addCapability,
     updateCapability,
     removeCapability,
     addGroup,
     updateGroup,
     removeGroup,
+    addLifecycle,
+    updateLifecycle,
+    removeLifecycle,
     addCategory,
     updateCategory,
     removeCategory,

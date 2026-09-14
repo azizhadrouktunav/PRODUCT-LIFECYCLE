@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   BoxesIcon,
+  GitBranchIcon,
   LayersIcon,
   ListTreeIcon,
   MoonIcon,
@@ -15,6 +16,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const NAV = [
 { to: '/', label: 'Capabilities', icon: ListTreeIcon, end: true },
+{ to: '/lifecycles', label: 'Lifecycles', icon: GitBranchIcon, end: false },
 { to: '/groups', label: 'Capability Groups', icon: LayersIcon, end: false },
 { to: '/domains', label: 'Domains', icon: NetworkIcon, end: false },
 { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },

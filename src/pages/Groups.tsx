@@ -7,11 +7,12 @@ import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill, TONE_DOT } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
-import { REQUIREMENT_LABEL, STORY_STAGES, TRACKS } from '../types/registry';
+import { REQUIREMENT_LABEL, usesEquipment } from '../types/registry';
 
 function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClose: () => void }) {
+  const { getLifecycle } = useRegistry();
   if (!group) return null;
-  const track = TRACKS[group.track];
+  const track = getLifecycle(group.track);
   return (
     <Modal
       open={!!group}
@@ -46,7 +47,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
         ))}
       </ol>
 
-      {group.track === 'delivery' && (
+      {track.decomposition === 'delivery' && track.storyStages.length > 0 && (
         <>
           <h3 className="mt-6 text-2xs uppercase tracking-[0.14em] text-ink-500">
             User story status progression
@@ -56,7 +57,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
             stages.
           </p>
           <ol className="mt-2">
-            {STORY_STAGES.map((s, i) => (
+            {track.storyStages.map((s, i) => (
               <li key={s.name} className="flex gap-3 border-b border-line-soft py-2.5 last:border-0">
                 <span className="w-5 shrink-0 pt-0.5 font-mono text-2xs text-ink-500">{i + 1}</span>
                 <span
@@ -77,7 +78,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
 }
 
 export function GroupsPage() {
-  const { groups, capabilities, removeGroup } = useRegistry();
+  const { groups, capabilities, removeGroup, getLifecycle } = useRegistry();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CapabilityGroup | null>(null);
   const [process, setProcess] = useState<CapabilityGroup | null>(null);
@@ -102,6 +103,7 @@ export function GroupsPage() {
       <div className="mt-4 space-y-6">
         {groups.map((g) => {
           const members = capabilities.filter((c) => c.groupId === g.id);
+          const lifecycle = getLifecycle(g.track);
           return (
             <section key={g.id}>
               <div className="flex flex-wrap items-baseline gap-3">
@@ -135,9 +137,9 @@ export function GroupsPage() {
                 </button>
                 <span className="font-mono text-2xs text-ink-500">{g.id}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
-                  {TRACKS[g.track].label} · {TRACKS[g.track].stages.length} stages
+                  {lifecycle.label} · {lifecycle.stages.length} stages
                 </span>
-                {g.track === 'hardware' && (
+                {usesEquipment(lifecycle) && (
                   <span className="rounded border border-aqua/40 px-1.5 py-0.5 text-2xs text-aqua">
                     equipment-bound
                   </span>

@@ -9,6 +9,7 @@ import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
 import { DomainsPage } from './pages/Domains';
 import { EquipmentPage } from './pages/Equipment';
 import { GroupsPage } from './pages/Groups';
+import { LifecyclesPage } from './pages/Lifecycles';
 import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
@@ -37,6 +38,7 @@ export function App({ theme = 'light' }: AppProps) {
                   path="/capabilities/:capabilityId/epics/:epicId/features/:featureId/stories"
                   element={<ManageStoriesPage />} />
                 
+                <Route path="/lifecycles" element={<LifecyclesPage />} />
                 <Route path="/groups" element={<GroupsPage />} />
                 <Route path="/domains" element={<DomainsPage />} />
                 <Route path="/equipment" element={<EquipmentPage />} />

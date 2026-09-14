@@ -28,14 +28,28 @@ model Domain {
   @@map("domains")
 }
 
+model Lifecycle {
+  id             String            @id
+  label          String
+  summary        String            @default("")
+  decomposition  String
+  stages         Json              @default("[]")
+  storyStages    Json              @default("[]") @map("story_stages")
+  groups         CapabilityGroup[]
+
+  @@map("lifecycles")
+}
+
 model CapabilityGroup {
   id           String       @id
   name         String
   description  String       @default("")
   track        String
+  lifecycle    Lifecycle    @relation(fields: [track], references: [id], onDelete: Restrict)
   process      String       @default("")
   capabilities Capability[]
 
+  @@index([track])
   @@map("capability_groups")
 }
 

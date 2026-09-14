@@ -16,7 +16,7 @@ import { EpicModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Epic } from '../types/registry';
-import { CAPABILITY_STATUSES, isStoryDone } from '../types/registry';
+import { CAPABILITY_STATUSES, storyIsDone } from '../types/registry';
 
 export function ManageEpicsPage() {
   const { capabilityId = '' } = useParams();
@@ -101,7 +101,7 @@ export function ManageEpicsPage() {
           <tbody>
             {epics.map((epic) => {
               const stories = storiesOfEpic(epic.id);
-              const done = stories.filter(isStoryDone).length;
+              const done = stories.filter(storyIsDone).length;
               return (
                 <tr key={epic.id} className="border-t border-line-soft align-top">
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{epic.id}</td>

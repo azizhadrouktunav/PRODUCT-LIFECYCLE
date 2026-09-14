@@ -15,7 +15,7 @@ import {
 import { TONE_DOT } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
-import { CAPABILITY_STATUSES, REQUIREMENT_LABEL, TRACKS, meetsRequirement } from '../types/registry';
+import { CAPABILITY_STATUSES, REQUIREMENT_LABEL, meetsRequirement, usesEquipment, usesDecomposition } from '../types/registry';
 
 type Panel = 'root' | 'progress' | 'status';
 
@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function RowActions({ capability, onEdit }: Props) {
-  const { updateCapability, removeCapability, countsOf, trackOf } = useRegistry();
+  const { updateCapability, removeCapability, countsOf, lifecycleOf } = useRegistry();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>('root');
@@ -34,8 +34,9 @@ export function RowActions({ capability, onEdit }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const counts = countsOf(capability.id);
-  const track = trackOf(capability);
-  const isHardware = track === 'hardware';
+  const lifecycle = lifecycleOf(capability);
+  const isHardware = usesEquipment(lifecycle);
+  const canDecompose = usesDecomposition(lifecycle);
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -120,7 +121,7 @@ export function RowActions({ capability, onEdit }: Props) {
               {panel === 'root' &&
             <>
                   <p className="px-2 pb-1 pt-1 font-mono text-2xs text-ink-500">
-                    {capability.id} · {TRACKS[track].label}
+                    {capability.id} · {lifecycle.label}
                   </p>
                   <button
                 type="button"
@@ -138,7 +139,7 @@ export function RowActions({ capability, onEdit }: Props) {
                   `${counts.epics}E · ${counts.features}F · ${counts.stories}S`}
                     </span>
                   </button>
-                  {!isHardware &&
+                  {canDecompose &&
               <button
                 type="button"
                 className={itemClass}
@@ -201,11 +202,11 @@ export function RowActions({ capability, onEdit }: Props) {
                 className="mb-1 flex w-full items-center gap-1.5 border-b border-line px-2 pb-1.5 pt-1 text-2xs uppercase tracking-[0.14em] text-ink-500 transition-colors duration-150 ease-out hover:text-strong">
                 
                     <ChevronLeftIcon className="h-3 w-3" />
-                    {panel === 'progress' ? TRACKS[track].label : 'Status'}
+                    {panel === 'progress' ? lifecycle.label : 'Status'}
                   </button>
 
                   {panel === 'progress' &&
-              TRACKS[track].stages.map((s, i) => {
+              lifecycle.stages.map((s, i) => {
                 const met = meetsRequirement(s.requirement, counts);
                 const current = capability.progress === s.name;
                 return met ?

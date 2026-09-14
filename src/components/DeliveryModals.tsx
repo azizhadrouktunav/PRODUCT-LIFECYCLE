@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Epic, Feature, UserStory } from '../types/registry';
-import { CAPABILITY_STATUSES, STORY_STAGES, storyStageIndex } from '../types/registry';
+import { CAPABILITY_STATUSES, DEFAULT_STORY_STAGES } from '../types/registry';
 
 function StatusField({
   value,
@@ -212,14 +212,23 @@ export function StoryModal({
 
 
 }: {open: boolean;onClose: () => void;featureId: string;featureName: string;story?: UserStory | null;}) {
-  const { addStory, updateStory } = useRegistry();
+  const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf } = useRegistry();
+  const feature = getFeature(featureId);
+  const epic = feature ? getEpic(feature.epicId) : undefined;
+  const capability = epic ? capabilityOfEpic(epic.id) : undefined;
+  const lifecycle = capability ? lifecycleOf(capability) : undefined;
+  const storyStages =
+    lifecycle && lifecycle.storyStages.length > 0 ? lifecycle.storyStages : DEFAULT_STORY_STAGES;
+  const architectureStage =
+    storyStages.find((s) => /architecture/i.test(s.name))?.name ?? storyStages[1]?.name ?? '';
+
   const [title, setTitle] = useState('');
   const [role, setRole] = useState('');
   const [want, setWant] = useState('');
   const [benefit, setBenefit] = useState('');
   const [criteria, setCriteria] = useState('');
   const [points, setPoints] = useState('');
-  const [stage, setStage] = useState<string>(STORY_STAGES[0].name);
+  const [stage, setStage] = useState<string>(storyStages[0]?.name ?? '');
   const [status, setStatus] = useState<CapabilityStatus | ''>('');
   const [adrContext, setAdrContext] = useState('');
   const [adrDecision, setAdrDecision] = useState('');
@@ -235,16 +244,18 @@ export function StoryModal({
     setBenefit(story?.benefit ?? '');
     setCriteria(story?.criteria.join('\n') ?? '');
     setPoints(story?.points != null ? String(story.points) : '');
-    setStage(story?.stage ?? STORY_STAGES[0].name);
+    setStage(story?.stage ?? storyStages[0]?.name ?? '');
     setStatus(story?.status ?? '');
     setAdrContext(story?.adrContext ?? '');
     setAdrDecision(story?.adrDecision ?? '');
     setAdrTechnical(story?.adrTechnical ?? '');
     setAdrConsequences(story?.adrConsequences ?? '');
     setAdrApproved(story?.adrApproved ?? false);
-  }, [open, story]);
+  }, [open, story, lifecycle?.id]);
 
-  const adrBlocked = storyStageIndex(stage) > storyStageIndex('In Architecture') && !adrApproved;
+  const stageIdx = storyStages.findIndex((s) => s.name === stage);
+  const archIdx = storyStages.findIndex((s) => s.name === architectureStage);
+  const adrBlocked = archIdx >= 0 && stageIdx > archIdx && !adrApproved;
   const valid = title.trim().length > 1 && !adrBlocked;
 
   function submit() {
@@ -350,7 +361,7 @@ export function StoryModal({
           <StatusField value={status} onChange={setStatus} />
           <Field label="Progress stage">
             <select className={inputClass} value={stage} onChange={(e) => setStage(e.target.value)}>
-              {STORY_STAGES.map((s, i) =>
+              {storyStages.map((s, i) =>
               <option key={s.name} value={s.name}>
                   {i + 1}. {s.name}
                 </option>
@@ -361,7 +372,7 @@ export function StoryModal({
 
         <div
           className={`rounded-md border p-3 ${
-          stage === 'In Architecture' ? 'border-orange/40 bg-orange/5' : 'border-line-strong bg-ink-900'}`
+          stage === architectureStage ? 'border-orange/40 bg-orange/5' : 'border-line-strong bg-ink-900'}`
           }>
           
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
