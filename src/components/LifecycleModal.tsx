@@ -272,7 +272,7 @@ export function LifecycleModal({
       subtitle={
         isEdit
           ? `${lifecycle?.id} · stages and decomposition apply wherever this lifecycle is used`
-          : 'Define the process track groups can follow — stages, prerequisites, and whether work decomposes into epics, features and stories.'
+          : 'Define the process track groups can follow — capability stages, story stages, and prerequisites.'
       }
       footer={
         <>
@@ -303,39 +303,41 @@ export function LifecycleModal({
           />
         </Field>
 
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-soft">Decomposition</span>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(['none', 'delivery'] as DecompositionMode[]).map((mode) => {
-              const active = decomposition === mode;
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setMode(mode)}
-                  className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
-                    active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
-                  }`}
-                >
-                  <span className="block text-xs font-medium text-strong">
-                    {DECOMPOSITION_LABEL[mode]}
-                  </span>
-                  <span className="mt-1 block text-2xs leading-relaxed text-mute">
-                    {mode === 'none'
-                      ? 'Equipment-linked capabilities, no epics / features / stories'
-                      : 'Break work into epics, then features, then user stories'}
-                  </span>
-                </button>
-              );
-            })}
+        {isEdit && (
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-soft">Decomposition</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {(['none', 'delivery'] as DecompositionMode[]).map((mode) => {
+                const active = decomposition === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setMode(mode)}
+                    className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
+                      active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
+                    }`}
+                  >
+                    <span className="block text-xs font-medium text-strong">
+                      {DECOMPOSITION_LABEL[mode]}
+                    </span>
+                    <span className="mt-1 block text-2xs leading-relaxed text-mute">
+                      {mode === 'none'
+                        ? 'Equipment-linked capabilities, no epics / features / stories'
+                        : 'Break work into epics, then features, then user stories'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="quiet" type="button" onClick={() => applyTemplate(decomposition)}>
+                Reset stages from template
+              </Button>
+            </div>
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button variant="quiet" type="button" onClick={() => applyTemplate(decomposition)}>
-              Reset stages from template
-            </Button>
-          </div>
-        </div>
+        )}
 
         <StageListEditor
           title="Capability stages"
