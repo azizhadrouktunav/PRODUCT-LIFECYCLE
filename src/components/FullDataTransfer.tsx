@@ -1,9 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
   DownloadIcon,
   FileSpreadsheetIcon,
+  UploadIcon,
 } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button } from './Primitives';
@@ -17,12 +19,32 @@ const PACK_SHEETS = DELIVERY_PACK.map((id) => DATASETS[id].sheet);
 
 export function FullDataTransfer() {
   const { exportDeliveryPack, importDeliveryPack } = useRegistry();
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [workbook, setWorkbook] = useState<Record<string, ParsedSheet> | null>(null);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t)) return;
+      setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   function doExport() {
     const pack = exportDeliveryPack();
@@ -96,53 +118,74 @@ export function FullDataTransfer() {
     0
   );
 
+  const menuItemClass =
+    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
+
   return (
     <>
-      <Button
-        onClick={() => {
-          reset();
-          setOpen(true);
-        }}
-      >
-        <FileSpreadsheetIcon className="h-3.5 w-3.5" />
-        Import and export
-      </Button>
+      <div ref={rootRef} className="relative">
+        <Button onClick={() => setMenuOpen((v) => !v)}>
+          <FileSpreadsheetIcon className="h-3.5 w-3.5" />
+          Import and export
+          <ChevronDownIcon className="h-3.5 w-3.5" />
+        </Button>
+
+        {menuOpen && (
+          <div
+            role="menu"
+            className="elev absolute right-0 z-[80] mt-1.5 min-w-[180px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setMenuOpen(false);
+                doExport();
+              }}
+            >
+              <DownloadIcon className="h-3.5 w-3.5 text-mute" />
+              Export
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setMenuOpen(false);
+                reset();
+                setImportOpen(true);
+              }}
+            >
+              <UploadIcon className="h-3.5 w-3.5 text-mute" />
+              Import
+            </button>
+          </div>
+        )}
+      </div>
 
       <Modal
-        open={open}
-        onClose={() => setOpen(false)}
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
         width="max-w-lg"
-        title="Import and export"
+        title="Import delivery pack"
         subtitle="One workbook with Capabilities, Epics, Features and User Stories feuilles. Existing IDs are updated; blank IDs are created."
         footer={
           <>
-            <Button variant="quiet" onClick={() => setOpen(false)}>
+            <Button variant="quiet" onClick={() => setImportOpen(false)}>
               Close
             </Button>
-            <Button variant="primary" onClick={confirmImport} disabled={!workbook || totalRows === 0}>
+            <Button
+              variant="primary"
+              onClick={confirmImport}
+              disabled={!workbook || totalRows === 0}
+            >
               {workbook ? `Import ${totalRows} rows` : 'Import'}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
-          <section className="rounded-md border border-line-strong p-3">
-            <div className="flex items-start gap-3">
-              <DownloadIcon className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <h3 className="text-xs font-medium text-strong">Export</h3>
-                <p className="mt-1 text-2xs leading-relaxed text-mute">
-                  Download the current Capabilities, Epics, Features and User Stories pack as one
-                  .xlsx workbook.
-                </p>
-              </div>
-              <Button onClick={doExport}>
-                <DownloadIcon className="h-3.5 w-3.5" />
-                Export all
-              </Button>
-            </div>
-          </section>
-
           <section className="rounded-md border border-line-strong p-3">
             <div className="flex items-start gap-3">
               <FileSpreadsheetIcon className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden="true" />

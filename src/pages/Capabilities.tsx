@@ -8,7 +8,6 @@ import {
   SearchIcon,
   XIcon,
 } from 'lucide-react';
-import { DataTransfer } from '../components/DataTransfer';
 import { FullDataTransfer } from '../components/FullDataTransfer';
 import { RowActions } from '../components/RowActions';
 import { Button, Chip, PageHeader, StagePill, StatusTag, inputClass } from '../components/Primitives';
@@ -175,7 +174,6 @@ export function CapabilitiesPage() {
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             <FullDataTransfer />
-            <DataTransfer dataset="capabilities" />
             <Button variant="primary" onClick={openCreate}>
               <PlusIcon className="h-3.5 w-3.5" />
               Add capability
