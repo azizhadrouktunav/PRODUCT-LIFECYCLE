@@ -155,4 +155,9 @@ export interface ImportResult {
   updated: number;
   skipped: number;
   messages: string[];
+  /** IDs created or updated in this import — used by multi-sheet pack import. */
+  touchedIds?: string[];
 }
+
+/** Capability → epic → feature → story pack. Order is import dependency order. */
+export const DELIVERY_PACK: DatasetId[] = ['capabilities', 'epics', 'features', 'stories'];

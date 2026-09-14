@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import type { DatasetId, ImportResult } from '../utils/datasets';
+import { DATASETS, DELIVERY_PACK } from '../utils/datasets';
 import type { SheetRow } from '../utils/excel';
 import type {
   Capability,
@@ -152,7 +153,14 @@ interface RegistryValue {
   countsOf: (capabilityId: string) => RecordCounts;
   hardwareCapabilities: Capability[];
   exportDataset: (dataset: DatasetId, parentId?: string) => SheetRow[];
-  importDataset: (dataset: DatasetId, rows: SheetRow[], parentId?: string) => ImportResult;
+  importDataset: (
+    dataset: DatasetId,
+    rows: SheetRow[],
+    parentId?: string,
+    knownParents?: { capabilities?: Set<string>; epics?: Set<string>; features?: Set<string> }
+  ) => ImportResult;
+  exportDeliveryPack: () => { dataset: DatasetId; rows: SheetRow[] }[];
+  importDeliveryPack: (sheets: Partial<Record<string, SheetRow[]>>) => ImportResult;
 }
 
 const RegistryContext = createContext<RegistryValue | null>(null);
@@ -923,11 +931,25 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       }));
     };
 
-    const importDataset = (dataset: DatasetId, rows: SheetRow[], parentId?: string): ImportResult => {
-      const result: ImportResult = { created: 0, updated: 0, skipped: 0, messages: [] };
+    const importDataset = (
+      dataset: DatasetId,
+      rows: SheetRow[],
+      parentId?: string,
+      knownParents?: { capabilities?: Set<string>; epics?: Set<string>; features?: Set<string> }
+    ): ImportResult => {
+      const result: ImportResult = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        messages: [],
+        touchedIds: [],
+      };
       const note = (i: number, why: string) => {
         result.skipped += 1;
         if (result.messages.length < 6) result.messages.push(`Row ${i + 2}: ${why}`);
+      };
+      const touch = (id: string) => {
+        result.touchedIds?.push(id);
       };
 
       if (dataset === 'capabilities') {
@@ -959,9 +981,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const at = id ? next.findIndex((c) => c.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
+            touch(next[at].id);
             result.updated += 1;
           } else {
-            next.unshift({ id: id || nextId('CAP', next, 4), ...patch });
+            const createdId = id || nextId('CAP', next, 4);
+            next.unshift({ id: createdId, ...patch });
+            touch(createdId);
             result.created += 1;
           }
         });
@@ -976,7 +1001,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
           const capabilityId = parentId ?? (r['Capability ID'] ?? '').trim();
-          if (!capabilityMap.has(capabilityId)) return note(i, `unknown capability "${capabilityId}"`);
+          if (
+            !capabilityMap.has(capabilityId) &&
+            !knownParents?.capabilities?.has(capabilityId)
+          ) {
+            return note(i, `unknown capability "${capabilityId}"`);
+          }
           const id = (r['Epic ID'] ?? '').trim();
           const patch = {
             capabilityId,
@@ -988,9 +1018,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
+            touch(next[at].id);
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('EPIC', next), ...patch });
+            const createdId = id || nextId('EPIC', next);
+            next.push({ id: createdId, ...patch });
+            touch(createdId);
             result.created += 1;
           }
         });
@@ -1005,7 +1038,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
           const epicId = parentId ?? (r['Epic ID'] ?? '').trim();
-          if (!epicMap.has(epicId)) return note(i, `unknown epic "${epicId}"`);
+          if (!epicMap.has(epicId) && !knownParents?.epics?.has(epicId)) {
+            return note(i, `unknown epic "${epicId}"`);
+          }
           const id = (r['Feature ID'] ?? '').trim();
           const patch = {
             epicId,
@@ -1016,9 +1051,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const at = id ? next.findIndex((f) => f.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
+            touch(next[at].id);
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('FEAT', next), ...patch });
+            const createdId = id || nextId('FEAT', next);
+            next.push({ id: createdId, ...patch });
+            touch(createdId);
             result.created += 1;
           }
         });
@@ -1039,7 +1077,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const title = (r['Title'] ?? '').trim();
           if (!title) return note(i, 'no title');
           const featureId = parentId ?? (r['Feature ID'] ?? '').trim();
-          if (!featureMap.has(featureId)) return note(i, `unknown feature "${featureId}"`);
+          if (!featureMap.has(featureId) && !knownParents?.features?.has(featureId)) {
+            return note(i, `unknown feature "${featureId}"`);
+          }
           const stageRaw = (r['Progress Stage'] ?? '').trim();
           const points = Number((r['Points'] ?? '').trim());
           const id = (r['Story ID'] ?? '').trim();
@@ -1066,9 +1106,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const at = id ? next.findIndex((s) => s.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
+            touch(next[at].id);
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('US', next), ...patch });
+            const createdId = id || nextId('US', next);
+            next.push({ id: createdId, ...patch });
+            touch(createdId);
             result.created += 1;
           }
         });
@@ -1189,6 +1232,44 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return result;
     };
 
+    const exportDeliveryPack = (): { dataset: DatasetId; rows: SheetRow[] }[] =>
+      DELIVERY_PACK.map((dataset) => ({
+        dataset,
+        rows: exportDataset(dataset),
+      }));
+
+    const importDeliveryPack = (
+      sheets: Partial<Record<string, SheetRow[]>>
+    ): ImportResult => {
+      const aggregate: ImportResult = { created: 0, updated: 0, skipped: 0, messages: [] };
+      const known = {
+        capabilities: new Set(capabilities.map((c) => c.id)),
+        epics: new Set(epics.map((e) => e.id)),
+        features: new Set(features.map((f) => f.id)),
+      };
+
+      DELIVERY_PACK.forEach((dataset) => {
+        const def = DATASETS[dataset];
+        const rows = sheets[def.sheet];
+        if (!rows || rows.length === 0) return;
+        const part = importDataset(dataset, rows, undefined, known);
+        aggregate.created += part.created;
+        aggregate.updated += part.updated;
+        aggregate.skipped += part.skipped;
+        part.touchedIds?.forEach((id) => {
+          if (dataset === 'capabilities') known.capabilities.add(id);
+          if (dataset === 'epics') known.epics.add(id);
+          if (dataset === 'features') known.features.add(id);
+        });
+        part.messages.forEach((m) => {
+          if (aggregate.messages.length < 12) {
+            aggregate.messages.push(`${def.sheet}: ${m}`);
+          }
+        });
+      });
+      return aggregate;
+    };
+
     const equipmentGroupIds = new Set(
       groups.filter((g) => usesEquipment(resolveLifecycle(g.track))).map((g) => g.id)
     );
@@ -1269,6 +1350,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       hardwareCapabilities: capabilities.filter((c) => equipmentGroupIds.has(c.groupId)),
       exportDataset,
       importDataset,
+      exportDeliveryPack,
+      importDeliveryPack,
     };
   }, [
     loading,
