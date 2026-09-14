@@ -227,7 +227,6 @@ export function StoryModal({
   const [want, setWant] = useState('');
   const [benefit, setBenefit] = useState('');
   const [criteria, setCriteria] = useState('');
-  const [points, setPoints] = useState('');
   const [stage, setStage] = useState<string>(storyStages[0]?.name ?? '');
   const [status, setStatus] = useState<CapabilityStatus | ''>('');
   const [adrContext, setAdrContext] = useState('');
@@ -243,7 +242,6 @@ export function StoryModal({
     setWant(story?.want ?? '');
     setBenefit(story?.benefit ?? '');
     setCriteria(story?.criteria.join('\n') ?? '');
-    setPoints(story?.points != null ? String(story.points) : '');
     setStage(story?.stage ?? storyStages[0]?.name ?? '');
     setStatus(story?.status ?? '');
     setAdrContext(story?.adrContext ?? '');
@@ -266,7 +264,7 @@ export function StoryModal({
       want,
       benefit,
       criteria: criteria.split('\n').map((c) => c.replace(/^[-•]\s*/, '').trim()),
-      points: points.trim() === '' ? null : Number(points),
+      points: story?.points ?? null,
       stage,
       status: status === '' ? null : status,
       adrContext,
@@ -347,17 +345,7 @@ export function StoryModal({
           
         </Field>
 
-        <div className="grid gap-5 sm:grid-cols-3">
-          <Field label="Story points" hint="optional">
-            <input
-              className={inputClass}
-              type="number"
-              min={0}
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-              placeholder="5" />
-            
-          </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
           <StatusField value={status} onChange={setStatus} />
           <Field label="Progress stage">
             <select className={inputClass} value={stage} onChange={(e) => setStage(e.target.value)}>
