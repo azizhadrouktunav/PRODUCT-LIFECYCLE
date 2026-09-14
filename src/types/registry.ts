@@ -293,26 +293,17 @@ export const CAPABILITY_STATUSES: CapabilityStatus[] = [
   'Completed',
 ];
 
-export interface DomainCategory {
-  id: string;
-  name: string;
-  shortName: string;
-  prefix: string;
-  description: string;
-}
-
-export interface Domain {
+export interface Product {
   id: string;
   name: string;
   description: string;
-  categoryId: string;
 }
 
 export interface Actor {
   id: string;
   name: string;
   description: string;
-  categoryIds: string[];
+  productIds: string[];
 }
 
 export interface CapabilityGroup {
@@ -330,7 +321,7 @@ export interface Capability {
   name: string;
   description: string;
   groupId: string;
-  domainIds: string[];
+  productIds: string[];
   jiraEpic: string;
   /** Only meaningful for equipment-style (no-decomposition) lifecycles. */
   equipmentIds: string[];

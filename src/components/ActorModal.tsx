@@ -18,28 +18,29 @@ export function ActorModal({
   onClose: () => void;
   actor?: Actor | null;
 }) {
-  const { categories, addActor, updateActor } = useRegistry();
+  const { products, addActor, updateActor } = useRegistry();
   const isEdit = !!actor;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [productIds, setProductIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
     setName(actor?.name ?? '');
     setDescription(actor?.description ?? '');
-    setCategoryIds(actor?.categoryIds ?? []);
+    setProductIds(actor?.productIds ?? []);
   }, [open, actor]);
 
-  const valid = name.trim().length > 1 && categoryIds.length > 0;
+  const valid = name.trim().length > 1 && productIds.length > 0;
+  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
 
   function submit() {
     if (!valid) return;
     const payload = {
       name: name.trim(),
       description: description.trim(),
-      categoryIds,
+      productIds,
     };
     if (actor) updateActor(actor.id, payload);
     else addActor(payload);
@@ -52,7 +53,7 @@ export function ActorModal({
       onClose={onClose}
       width="max-w-xl"
       title={isEdit ? 'Edit actor' : 'Add actor'}
-      subtitle="Actors are the personas used in user-story statements. Assign one or more domain categories."
+      subtitle="Actors are the personas used in user-story statements. Assign one or more products."
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>
@@ -85,26 +86,25 @@ export function ActorModal({
 
         <div>
           <span className="mb-1.5 flex items-baseline gap-2 text-xs font-medium text-soft">
-            Domain categories <span className="text-brand-bright">*</span>
+            Products <span className="text-brand-bright">*</span>
             <span className="font-normal text-mute">
-              {categoryIds.length > 0 ? `${categoryIds.length} selected` : 'select one or more'}
+              {productIds.length > 0 ? `${productIds.length} selected` : 'select one or more'}
             </span>
           </span>
-          {categories.length === 0 ? (
+          {sortedProducts.length === 0 ? (
             <p className="rounded-md border border-line-strong bg-ink-900 p-3 text-xs text-mute">
-              No domain categories yet. Add categories under Domains first, then assign them to
-              actors.
+              No products yet. Add products first, then assign them to actors.
             </p>
           ) : (
             <div className="flex flex-wrap gap-1.5 rounded-md border border-line-strong bg-ink-900 p-3">
-              {categories.map((c) => {
-                const active = categoryIds.includes(c.id);
+              {sortedProducts.map((p) => {
+                const active = productIds.includes(p.id);
                 return (
                   <button
-                    key={c.id}
+                    key={p.id}
                     type="button"
-                    onClick={() => toggle(categoryIds, c.id, setCategoryIds)}
-                    title={c.description}
+                    onClick={() => toggle(productIds, p.id, setProductIds)}
+                    title={p.description}
                     aria-pressed={active}
                     className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-2xs transition-colors duration-150 ease-out ${
                       active
@@ -112,8 +112,8 @@ export function ActorModal({
                         : 'border-line-strong text-mute hover:text-strong'
                     }`}
                   >
-                    <span className="font-mono">{c.id}</span>
-                    <span className="text-soft">{c.name}</span>
+                    <span className="font-mono">{p.id}</span>
+                    <span className="text-soft">{p.name}</span>
                     {active && <CheckIcon className="h-3 w-3 text-brand-bright" />}
                   </button>
                 );

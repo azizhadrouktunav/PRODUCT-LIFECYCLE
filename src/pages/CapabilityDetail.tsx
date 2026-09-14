@@ -30,7 +30,7 @@ export function CapabilityDetailPage() {
   const {
     getCapability,
     getGroup,
-    getDomain,
+    getProduct,
     equipment,
     countsOf,
     lifecycleOf,
@@ -246,10 +246,10 @@ export function CapabilityDetailPage() {
               '—'
               }
             </MetaRow>
-            <MetaRow label="Domains">
+            <MetaRow label="Products">
               <div className="flex flex-wrap gap-1">
-                {capability.domainIds.map((id) =>
-                <Chip key={id} tone="brand" title={getDomain(id)?.name}>
+                {(capability.productIds ?? []).map((id) =>
+                <Chip key={id} tone="brand" title={getProduct(id)?.name}>
                     {id}
                   </Chip>
                 )}

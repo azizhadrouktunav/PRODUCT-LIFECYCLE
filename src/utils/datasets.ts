@@ -1,14 +1,14 @@
 import type { ColumnDef } from './excel';
 
 export type DatasetId =
-'capabilities' |
-'epics' |
-'features' |
-'stories' |
-'equipment' |
-'domains' |
-'groups' |
-'actors';
+  | 'capabilities'
+  | 'epics'
+  | 'features'
+  | 'stories'
+  | 'equipment'
+  | 'products'
+  | 'groups'
+  | 'actors';
 
 export interface DatasetDef {
   id: DatasetId;
@@ -35,16 +35,19 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     idColumn: 'Capability ID',
     requiredColumn: 'Name',
     columns: [
-    { label: 'Capability ID', example: 'CAP-0026' },
-    { label: 'Name', example: 'Driver Behaviour Scoring' },
-    { label: 'Description', example: 'Score harsh braking, acceleration and cornering per driver.' },
-    { label: 'Group ID', example: 'GRP-FIQ' },
-    { label: 'Domain IDs', example: 'FIQ-D03; FIQ-D05' },
-    { label: 'Epic Key', example: 'FIQ-2400' },
-    { label: 'Equipment IDs', example: '' },
-    { label: 'Progress', example: 'Identified' },
-    { label: 'Status', example: 'In Progress' }]
-
+      { label: 'Capability ID', example: 'CAP-0026' },
+      { label: 'Name', example: 'Driver Behaviour Scoring' },
+      {
+        label: 'Description',
+        example: 'Score harsh braking, acceleration and cornering per driver.',
+      },
+      { label: 'Group ID', example: 'GRP-FIQ' },
+      { label: 'Product IDs', example: 'PRD-001; PRD-002' },
+      { label: 'Epic Key', example: 'FIQ-2400' },
+      { label: 'Equipment IDs', example: '' },
+      { label: 'Progress', example: 'Identified' },
+      { label: 'Status', example: 'In Progress' },
+    ],
   },
   epics: {
     id: 'epics',
@@ -55,13 +58,16 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     requiredColumn: 'Name',
     parentLabel: 'capability',
     columns: [
-    { label: 'Epic ID', example: '' },
-    { label: 'Capability ID', example: 'CAP-0015' },
-    { label: 'Key', example: 'FIQ-2220' },
-    { label: 'Name', example: 'Driver scoring pipeline' },
-    { label: 'Description', example: 'Everything needed to turn raw events into a driver score.' },
-    { label: 'Status', example: 'In Progress' }]
-
+      { label: 'Epic ID', example: '' },
+      { label: 'Capability ID', example: 'CAP-0015' },
+      { label: 'Key', example: 'FIQ-2220' },
+      { label: 'Name', example: 'Driver scoring pipeline' },
+      {
+        label: 'Description',
+        example: 'Everything needed to turn raw events into a driver score.',
+      },
+      { label: 'Status', example: 'In Progress' },
+    ],
   },
   features: {
     id: 'features',
@@ -72,12 +78,15 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     requiredColumn: 'Name',
     parentLabel: 'epic',
     columns: [
-    { label: 'Feature ID', example: '' },
-    { label: 'Epic ID', example: 'EPIC-001' },
-    { label: 'Name', example: 'Harsh event detection' },
-    { label: 'Description', example: 'Detect harsh braking and acceleration from accelerometer data.' },
-    { label: 'Status', example: 'In Progress' }]
-
+      { label: 'Feature ID', example: '' },
+      { label: 'Epic ID', example: 'EPIC-001' },
+      { label: 'Name', example: 'Harsh event detection' },
+      {
+        label: 'Description',
+        example: 'Detect harsh braking and acceleration from accelerometer data.',
+      },
+      { label: 'Status', example: 'In Progress' },
+    ],
   },
   stories: {
     id: 'stories',
@@ -88,23 +97,26 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     requiredColumn: 'Title',
     parentLabel: 'feature',
     columns: [
-    { label: 'Story ID', example: '' },
-    { label: 'Feature ID', example: 'FEAT-001' },
-    { label: 'Title', example: 'See my weekly driver score' },
-    { label: 'Actor IDs', example: 'ACT-001; ACT-002' },
-    { label: 'As a', example: 'fleet manager; dispatcher' },
-    { label: 'I want to', example: 'see a weekly score per driver' },
-    { label: 'So that', example: 'I can coach the riskiest drivers first' },
-    { label: 'Acceptance Criteria', example: 'Score is 0-100; Trend versus last week is shown' },
-    { label: 'Points', example: '5' },
-    { label: 'Progress Stage', example: 'In UI/UX Design' },
-    { label: 'Status', example: 'In Progress' },
-    { label: 'ADR Context', example: '' },
-    { label: 'ADR Decision', example: '' },
-    { label: 'ADR Technical', example: '' },
-    { label: 'ADR Consequences', example: '' },
-    { label: 'ADR Approved', example: 'No' }]
-
+      { label: 'Story ID', example: '' },
+      { label: 'Feature ID', example: 'FEAT-001' },
+      { label: 'Title', example: 'See my weekly driver score' },
+      { label: 'Actor IDs', example: 'ACT-001; ACT-002' },
+      { label: 'As a', example: 'fleet manager; dispatcher' },
+      { label: 'I want to', example: 'see a weekly score per driver' },
+      { label: 'So that', example: 'I can coach the riskiest drivers first' },
+      {
+        label: 'Acceptance Criteria',
+        example: 'Score is 0-100; Trend versus last week is shown',
+      },
+      { label: 'Points', example: '5' },
+      { label: 'Progress Stage', example: 'In UI/UX Design' },
+      { label: 'Status', example: 'In Progress' },
+      { label: 'ADR Context', example: '' },
+      { label: 'ADR Decision', example: '' },
+      { label: 'ADR Technical', example: '' },
+      { label: 'ADR Consequences', example: '' },
+      { label: 'ADR Approved', example: 'No' },
+    ],
   },
   equipment: {
     id: 'equipment',
@@ -114,26 +126,25 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     idColumn: 'Equipment ID',
     requiredColumn: 'Name',
     columns: [
-    { label: 'Equipment ID', example: '' },
-    { label: 'Name', example: 'Teltonika FMC920' },
-    { label: 'Vendor', example: 'Teltonika' },
-    { label: 'Model', example: 'FMC920' },
-    { label: 'Type', example: 'Tracker' }]
-
+      { label: 'Equipment ID', example: '' },
+      { label: 'Name', example: 'Teltonika FMC920' },
+      { label: 'Vendor', example: 'Teltonika' },
+      { label: 'Model', example: 'FMC920' },
+      { label: 'Type', example: 'Tracker' },
+    ],
   },
-  domains: {
-    id: 'domains',
-    label: 'Domains',
-    sheet: 'Domains',
-    fileName: 'domains',
-    idColumn: 'Domain ID',
+  products: {
+    id: 'products',
+    label: 'Products',
+    sheet: 'Products',
+    fileName: 'products',
+    idColumn: 'Product ID',
     requiredColumn: 'Name',
     columns: [
-    { label: 'Domain ID', example: 'FIQ-D09' },
-    { label: 'Name', example: 'Driver Management' },
-    { label: 'Description', example: 'Driver identity, assignment, behaviour and coaching.' },
-    { label: 'Category ID', example: 'CAT-FIQ' }]
-
+      { label: 'Product ID', example: 'PRD-001' },
+      { label: 'Name', example: 'FleetIQ' },
+      { label: 'Description', example: 'Fleet operations and driver coaching product.' },
+    ],
   },
   actors: {
     id: 'actors',
@@ -143,11 +154,11 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     idColumn: 'Actor ID',
     requiredColumn: 'Name',
     columns: [
-    { label: 'Actor ID', example: 'ACT-001' },
-    { label: 'Name', example: 'Fleet manager' },
-    { label: 'Description', example: 'Owns day-to-day fleet operations and coaching.' },
-    { label: 'Category IDs', example: 'CAT-FIQ; CAT-CORE' }]
-
+      { label: 'Actor ID', example: 'ACT-001' },
+      { label: 'Name', example: 'Fleet manager' },
+      { label: 'Description', example: 'Owns day-to-day fleet operations and coaching.' },
+      { label: 'Product IDs', example: 'PRD-001; PRD-002' },
+    ],
   },
   groups: {
     id: 'groups',
@@ -157,13 +168,16 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     idColumn: 'Group ID',
     requiredColumn: 'Name',
     columns: [
-    { label: 'Group ID', example: '' },
-    { label: 'Name', example: 'Integration Capability' },
-    { label: 'Description', example: 'Capabilities exposing TUNAV ONE to third-party systems.' },
-    { label: 'Track', example: 'delivery' },
-    { label: 'Process', example: 'How this group is worked, stage by stage.' }]
-
-  }
+      { label: 'Group ID', example: '' },
+      { label: 'Name', example: 'Integration Capability' },
+      {
+        label: 'Description',
+        example: 'Capabilities exposing TUNAV ONE to third-party systems.',
+      },
+      { label: 'Track', example: 'delivery' },
+      { label: 'Process', example: 'How this group is worked, stage by stage.' },
+    ],
+  },
 };
 
 export interface ImportResult {

@@ -7,13 +7,13 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ActorsPage } from './pages/Actors';
 import { CapabilitiesPage } from './pages/Capabilities';
 import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
-import { DomainsPage } from './pages/Domains';
 import { EquipmentPage } from './pages/Equipment';
 import { GroupsPage } from './pages/Groups';
 import { LifecyclesPage } from './pages/Lifecycles';
 import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
+import { ProductsPage } from './pages/Products';
 import { WavesPage } from './pages/Waves';
 
 interface AppProps {
@@ -41,7 +41,7 @@ export function App({ theme = 'light' }: AppProps) {
                 
                 <Route path="/lifecycles" element={<LifecyclesPage />} />
                 <Route path="/groups" element={<GroupsPage />} />
-                <Route path="/domains" element={<DomainsPage />} />
+                <Route path="/products" element={<ProductsPage />} />
                 <Route path="/actors" element={<ActorsPage />} />
                 <Route path="/equipment" element={<EquipmentPage />} />
                 <Route path="/waves" element={<WavesPage />} />

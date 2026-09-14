@@ -212,7 +212,7 @@ export function StoryModal({
   featureName: string;
   story?: UserStory | null;
 }) {
-  const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf, actors, domains } =
+  const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf, actors } =
     useRegistry();
   const feature = getFeature(featureId);
   const epic = feature ? getEpic(feature.epicId) : undefined;
@@ -224,18 +224,13 @@ export function StoryModal({
     storyStages.find((s) => /architecture/i.test(s.name))?.name ?? storyStages[1]?.name ?? '';
 
   const availableActors = useMemo(() => {
-    const domainIds = capability?.domainIds ?? [];
-    if (domainIds.length === 0) return [];
-    const categoryIds = new Set(
-      domainIds
-        .map((id) => domains.find((d) => d.id === id)?.categoryId)
-        .filter((id): id is string => !!id)
-    );
-    if (categoryIds.size === 0) return [];
+    const productIds = capability?.productIds ?? [];
+    if (productIds.length === 0) return [];
+    const set = new Set(productIds);
     return actors
-      .filter((a) => a.categoryIds.some((c) => categoryIds.has(c)))
+      .filter((a) => (a.productIds ?? []).some((id) => set.has(id)))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [actors, capability, domains]);
+  }, [actors, capability]);
 
   const [title, setTitle] = useState('');
   const [actorIds, setActorIds] = useState<string[]>([]);
@@ -333,15 +328,15 @@ export function StoryModal({
                     : 'select one or more actors'}
                 </span>
               </span>
-              {!(capability?.domainIds?.length) ? (
+              {!(capability?.productIds?.length) ? (
                 <p className="rounded-md border border-line-strong bg-ink-800 p-2.5 text-2xs text-mute">
-                  This capability has no domains yet, so no actors are available. Assign domains on
+                  This capability has no products yet, so no actors are available. Assign products on
                   the capability first.
                 </p>
               ) : availableActors.length === 0 ? (
                 <p className="rounded-md border border-line-strong bg-ink-800 p-2.5 text-2xs text-mute">
-                  No actors match this capability’s domain categories. Add actors under Actors and
-                  assign them to those categories.
+                  No actors match this capability’s products. Add actors under Actors and assign them
+                  to those products.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">

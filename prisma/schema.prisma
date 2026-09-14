@@ -6,33 +6,19 @@ datasource db {
   provider = "postgresql"
 }
 
-model DomainCategory {
-  id          String   @id
+model Product {
+  id          String @id
   name        String
-  shortName   String   @map("short_name")
-  prefix      String
-  description String   @default("")
-  domains     Domain[]
+  description String @default("")
 
-  @@map("domain_categories")
-}
-
-model Domain {
-  id          String         @id
-  name        String
-  description String         @default("")
-  categoryId  String         @map("category_id")
-  category    DomainCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-
-  @@index([categoryId])
-  @@map("domains")
+  @@map("products")
 }
 
 model Actor {
   id          String   @id
   name        String
   description String   @default("")
-  categoryIds String[] @default([]) @map("category_ids")
+  productIds  String[] @default([]) @map("product_ids")
 
   @@map("actors")
 }
@@ -85,7 +71,7 @@ model Capability {
   description  String          @default("")
   groupId      String          @map("group_id")
   group        CapabilityGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  domainIds    String[]        @default([]) @map("domain_ids")
+  productIds   String[]        @default([]) @map("product_ids")
   jiraEpic     String          @default("") @map("jira_epic")
   equipmentIds String[]        @default([]) @map("equipment_ids")
   progress     String          @default("Identified")

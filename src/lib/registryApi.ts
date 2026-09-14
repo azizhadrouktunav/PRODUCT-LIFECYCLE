@@ -5,13 +5,12 @@ import type {
   CapabilityGroup,
   CapabilityStatus,
   DecompositionMode,
-  Domain,
-  DomainCategory,
   Epic,
   Equipment,
   EquipmentType,
   Feature,
   Lifecycle,
+  Product,
   StageDef,
   StageRequirement,
   StageTone,
@@ -22,8 +21,7 @@ import type {
 import { FALLBACK_LIFECYCLE, LIFECYCLE_TEMPLATES, TRACKS } from '../types/registry';
 
 export interface RegistrySnapshot {
-  categories: DomainCategory[];
-  domains: Domain[];
+  products: Product[];
   actors: Actor[];
   groups: CapabilityGroup[];
   equipment: Equipment[];
@@ -119,22 +117,11 @@ function asStatus(raw: string | null | undefined): CapabilityStatus | null {
   return raw as CapabilityStatus;
 }
 
-function mapCategory(row: Record<string, unknown>): DomainCategory {
-  return {
-    id: String(row.id),
-    name: String(row.name),
-    shortName: String(row.short_name),
-    prefix: String(row.prefix),
-    description: String(row.description ?? ''),
-  };
-}
-
-function mapDomain(row: Record<string, unknown>): Domain {
+function mapProduct(row: Record<string, unknown>): Product {
   return {
     id: String(row.id),
     name: String(row.name),
     description: String(row.description ?? ''),
-    categoryId: String(row.category_id),
   };
 }
 
@@ -143,7 +130,7 @@ function mapActor(row: Record<string, unknown>): Actor {
     id: String(row.id),
     name: String(row.name),
     description: String(row.description ?? ''),
-    categoryIds: (row.category_ids as string[] | null) ?? [],
+    productIds: (row.product_ids as string[] | null) ?? [],
   };
 }
 
@@ -180,7 +167,7 @@ function mapCapability(row: Record<string, unknown>): Capability {
     name: String(row.name),
     description: String(row.description ?? ''),
     groupId: String(row.group_id),
-    domainIds: (row.domain_ids as string[] | null) ?? [],
+    productIds: (row.product_ids as string[] | null) ?? [],
     jiraEpic: String(row.jira_epic ?? ''),
     equipmentIds: (row.equipment_ids as string[] | null) ?? [],
     progress: String(row.progress ?? 'Identified'),
@@ -247,8 +234,7 @@ function throwIfError(error: { message: string } | null, action: string): void {
 
 export async function fetchRegistry(): Promise<RegistrySnapshot> {
   const [
-    categoriesRes,
-    domainsRes,
+    productsRes,
     actorsRes,
     groupsRes,
     equipmentRes,
@@ -260,8 +246,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     storiesRes,
     wavesRes,
   ] = await Promise.all([
-    supabase.from('domain_categories').select('*'),
-    supabase.from('domains').select('*'),
+    supabase.from('products').select('*'),
     supabase.from('actors').select('*'),
     supabase.from('capability_groups').select('*'),
     supabase.from('equipment').select('*'),
@@ -274,8 +259,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     supabase.from('waves').select('*'),
   ]);
 
-  throwIfError(categoriesRes.error, 'Load domain_categories');
-  throwIfError(domainsRes.error, 'Load domains');
+  throwIfError(productsRes.error, 'Load products');
   throwIfError(actorsRes.error, 'Load actors');
   throwIfError(groupsRes.error, 'Load capability_groups');
   throwIfError(equipmentRes.error, 'Load equipment');
@@ -330,8 +314,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   }
 
   return {
-    categories: (categoriesRes.data ?? []).map((r) => mapCategory(r as Record<string, unknown>)),
-    domains: (domainsRes.data ?? []).map((r) => mapDomain(r as Record<string, unknown>)),
+    products: (productsRes.data ?? []).map((r) => mapProduct(r as Record<string, unknown>)),
     actors: (actorsRes.data ?? []).map((r) => mapActor(r as Record<string, unknown>)),
     groups: (groupsRes.data ?? []).map((r) => mapGroup(r as Record<string, unknown>)),
     equipment,
@@ -355,30 +338,18 @@ export async function deleteLifecycle(id: string): Promise<void> {
   throwIfError(error, 'Delete lifecycle');
 }
 
-export async function upsertCategory(cat: DomainCategory): Promise<void> {
-  const { error } = await supabase.from('domain_categories').upsert({
-    id: cat.id,
-    name: cat.name,
-    short_name: cat.shortName,
-    prefix: cat.prefix,
-    description: cat.description,
+export async function upsertProduct(product: Product): Promise<void> {
+  const { error } = await supabase.from('products').upsert({
+    id: product.id,
+    name: product.name,
+    description: product.description,
   });
-  throwIfError(error, 'Upsert domain_category');
+  throwIfError(error, 'Upsert product');
 }
 
-export async function deleteCategory(id: string): Promise<void> {
-  const { error } = await supabase.from('domain_categories').delete().eq('id', id);
-  throwIfError(error, 'Delete domain_category');
-}
-
-export async function upsertDomain(domain: Domain): Promise<void> {
-  const { error } = await supabase.from('domains').upsert({
-    id: domain.id,
-    name: domain.name,
-    description: domain.description,
-    category_id: domain.categoryId,
-  });
-  throwIfError(error, 'Upsert domain');
+export async function deleteProduct(id: string): Promise<void> {
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  throwIfError(error, 'Delete product');
 }
 
 export async function upsertActor(actor: Actor): Promise<void> {
@@ -386,7 +357,7 @@ export async function upsertActor(actor: Actor): Promise<void> {
     id: actor.id,
     name: actor.name,
     description: actor.description,
-    category_ids: actor.categoryIds,
+    product_ids: actor.productIds,
   });
   throwIfError(error, 'Upsert actor');
 }
@@ -437,7 +408,7 @@ export async function upsertCapability(cap: Capability): Promise<void> {
     name: cap.name,
     description: cap.description,
     group_id: cap.groupId,
-    domain_ids: cap.domainIds,
+    product_ids: cap.productIds,
     jira_epic: cap.jiraEpic,
     equipment_ids: cap.equipmentIds,
     progress: cap.progress,
@@ -533,11 +504,6 @@ export async function deleteGroup(id: string): Promise<void> {
   throwIfError(error, 'Delete capability_group');
 }
 
-export async function deleteDomain(id: string): Promise<void> {
-  const { error } = await supabase.from('domains').delete().eq('id', id);
-  throwIfError(error, 'Delete domain');
-}
-
 export async function deleteEquipment(id: string): Promise<void> {
   const { error } = await supabase.from('equipment').delete().eq('id', id);
   throwIfError(error, 'Delete equipment');
@@ -551,7 +517,7 @@ export async function upsertCapabilities(items: Capability[]): Promise<void> {
       name: cap.name,
       description: cap.description,
       group_id: cap.groupId,
-      domain_ids: cap.domainIds,
+      product_ids: cap.productIds,
       jira_epic: cap.jiraEpic,
       equipment_ids: cap.equipmentIds,
       progress: cap.progress,
@@ -629,17 +595,16 @@ export async function upsertEquipmentMany(items: Equipment[]): Promise<void> {
   throwIfError(error, 'Upsert equipment batch');
 }
 
-export async function upsertDomains(items: Domain[]): Promise<void> {
+export async function upsertProducts(items: Product[]): Promise<void> {
   if (items.length === 0) return;
-  const { error } = await supabase.from('domains').upsert(
-    items.map((domain) => ({
-      id: domain.id,
-      name: domain.name,
-      description: domain.description,
-      category_id: domain.categoryId,
+  const { error } = await supabase.from('products').upsert(
+    items.map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
     }))
   );
-  throwIfError(error, 'Upsert domains');
+  throwIfError(error, 'Upsert products');
 }
 
 export async function upsertActors(items: Actor[]): Promise<void> {
@@ -649,7 +614,7 @@ export async function upsertActors(items: Actor[]): Promise<void> {
       id: actor.id,
       name: actor.name,
       description: actor.description,
-      category_ids: actor.categoryIds,
+      product_ids: actor.productIds,
     }))
   );
   throwIfError(error, 'Upsert actors');

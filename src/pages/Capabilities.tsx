@@ -19,14 +19,14 @@ import { CAPABILITY_STATUSES, isStageAhead, stageIndex, usesEquipment } from '..
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
-type SortKey = 'id' | 'name' | 'group' | 'domains' | 'epic' | 'breakdown' | 'progress' | 'status';
+type SortKey = 'id' | 'name' | 'group' | 'products' | 'epic' | 'breakdown' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
   { key: 'id', label: 'ID', className: 'w-24' },
   { key: 'name', label: 'Capability', className: '' },
   { key: 'group', label: 'Group', className: 'w-36' },
-  { key: 'domains', label: 'Domains', className: 'w-52' },
+  { key: 'products', label: 'Products', className: 'w-52' },
   { key: 'epic', label: 'Epic', className: 'w-24' },
   { key: 'breakdown', label: 'Breakdown', className: 'w-44' },
   { key: 'progress', label: 'Progress', className: 'w-44' },
@@ -58,10 +58,10 @@ export function CapabilitiesPage() {
   const {
     capabilities,
     groups,
-    categories,
+    products,
     equipment,
     getGroup,
-    getDomain,
+    getProduct,
     countsOf,
     lifecycleOf,
   } = useRegistry();
@@ -70,7 +70,7 @@ export function CapabilitiesPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
-  const [domainFilter, setDomainFilter] = useState('all');
+  const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -85,9 +85,9 @@ export function CapabilitiesPage() {
         return c.name;
       case 'group':
         return getGroup(c.groupId)?.name ?? '';
-      case 'domains':
-        return c.domainIds
-          .map((id) => getDomain(id)?.name ?? id)
+      case 'products':
+        return (c.productIds ?? [])
+          .map((id) => getProduct(id)?.name ?? id)
           .join('; ')
           .toLowerCase();
       case 'epic':
@@ -111,18 +111,14 @@ export function CapabilitiesPage() {
     const filtered = capabilities.filter((c) => {
       if (groupFilter !== 'all' && c.groupId !== groupFilter) return false;
       if (statusFilter !== 'all' && (c.status ?? 'none') !== statusFilter) return false;
-      if (
-        domainFilter !== 'all' &&
-        !c.domainIds.some((id) => getDomain(id)?.categoryId === domainFilter)
-      )
-        return false;
+      if (productFilter !== 'all' && !(c.productIds ?? []).includes(productFilter)) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
         c.jiraEpic.toLowerCase().includes(q) ||
-        c.domainIds.some((d) => d.toLowerCase().includes(q))
+        (c.productIds ?? []).some((d) => d.toLowerCase().includes(q))
       );
     });
 
@@ -133,9 +129,9 @@ export function CapabilitiesPage() {
     capabilities,
     query,
     groupFilter,
-    domainFilter,
+    productFilter,
     statusFilter,
-    getDomain,
+    getProduct,
     getGroup,
     countsOf,
     lifecycleOf,
@@ -145,14 +141,14 @@ export function CapabilitiesPage() {
 
   const filtered =
     groupFilter !== 'all' ||
-    domainFilter !== 'all' ||
+    productFilter !== 'all' ||
     statusFilter !== 'all' ||
     query.trim() !== '';
 
   function clearFilters() {
     setQuery('');
     setGroupFilter('all');
-    setDomainFilter('all');
+    setProductFilter('all');
     setStatusFilter('all');
   }
 
@@ -187,7 +183,7 @@ export function CapabilitiesPage() {
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-500" />
           <input
             className={`${inputClass} py-1.5 pl-8 text-xs`}
-            placeholder="Search name, ID, epic or domain"
+            placeholder="Search name, ID, epic or product"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search capabilities"
@@ -208,16 +204,18 @@ export function CapabilitiesPage() {
         </select>
         <select
           className={selectClass}
-          value={domainFilter}
-          onChange={(e) => setDomainFilter(e.target.value)}
-          aria-label="Filter by domain category"
+          value={productFilter}
+          onChange={(e) => setProductFilter(e.target.value)}
+          aria-label="Filter by product"
         >
-          <option value="all">All domains</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.name}
-            </option>
-          ))}
+          <option value="all">All products</option>
+          {[...products]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
         </select>
         <select
           className={selectClass}
@@ -313,13 +311,15 @@ export function CapabilitiesPage() {
                   <td className="py-3 pr-4 text-xs text-soft">{getGroup(c.groupId)?.name ?? '—'}</td>
                   <td className="py-3 pr-4">
                     <div className="flex flex-wrap gap-1">
-                      {c.domainIds.slice(0, 3).map((id) => (
-                        <Chip key={id} tone="brand" title={getDomain(id)?.name}>
+                      {(c.productIds ?? []).slice(0, 3).map((id) => (
+                        <Chip key={id} tone="brand" title={getProduct(id)?.name}>
                           {id}
                         </Chip>
                       ))}
-                      {c.domainIds.length > 3 && (
-                        <span className="text-2xs text-mute">+{c.domainIds.length - 3}</span>
+                      {(c.productIds ?? []).length > 3 && (
+                        <span className="text-2xs text-mute">
+                          +{(c.productIds ?? []).length - 3}
+                        </span>
                       )}
                     </div>
                   </td>

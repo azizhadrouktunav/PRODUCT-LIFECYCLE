@@ -15,13 +15,12 @@ import type {
   CapabilityGroup,
   CapabilityStatus,
   DecompositionMode,
-  Domain,
-  DomainCategory,
   Epic,
   Equipment,
   EquipmentType,
   Feature,
   Lifecycle,
+  Product,
   RecordCounts,
   StageDef,
   TrackId,
@@ -49,7 +48,7 @@ export interface NewCapabilityInput {
   name: string;
   description: string;
   groupId: string;
-  domainIds: string[];
+  productIds: string[];
   jiraEpic: string;
   equipmentIds: string[];
 }
@@ -76,9 +75,8 @@ export type StoryInput = Pick<
 
 export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type'>;
 export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
-export type CategoryInput = Pick<DomainCategory, 'id' | 'name' | 'shortName' | 'prefix' | 'description'>;
-export type DomainInput = Pick<Domain, 'id' | 'name' | 'description' | 'categoryId'>;
-export type ActorInput = Pick<Actor, 'name' | 'description' | 'categoryIds'>;
+export type ProductInput = Pick<Product, 'name' | 'description'>;
+export type ActorInput = Pick<Actor, 'name' | 'description' | 'productIds'>;
 
 interface RegistryValue {
   loading: boolean;
@@ -86,9 +84,8 @@ interface RegistryValue {
   reload: () => Promise<void>;
   capabilities: Capability[];
   groups: CapabilityGroup[];
-  domains: Domain[];
+  products: Product[];
   actors: Actor[];
-  categories: DomainCategory[];
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
   lifecycles: Lifecycle[];
@@ -111,18 +108,9 @@ interface RegistryValue {
   getLifecycle: (id: string) => Lifecycle;
   lifecycleOf: (capability: Capability) => Lifecycle;
   lifecycleOfGroup: (groupId: string) => Lifecycle;
-  addCategory: (input: CategoryInput) => DomainCategory;
-  updateCategory: (
-    id: string,
-    patch: Partial<Pick<DomainCategory, 'name' | 'shortName' | 'prefix' | 'description'>>
-  ) => void;
-  removeCategory: (id: string) => boolean;
-  addDomain: (input: DomainInput) => Domain;
-  updateDomain: (
-    id: string,
-    patch: Partial<Pick<Domain, 'name' | 'description' | 'categoryId'>>
-  ) => void;
-  removeDomain: (id: string) => void;
+  addProduct: (input: ProductInput) => Product;
+  updateProduct: (id: string, patch: Partial<ProductInput>) => void;
+  removeProduct: (id: string) => void;
   addActor: (input: ActorInput) => Actor;
   updateActor: (id: string, patch: Partial<ActorInput>) => void;
   removeActor: (id: string) => void;
@@ -146,8 +134,7 @@ interface RegistryValue {
   updateWave: (id: string, patch: Partial<WaveInput>) => void;
   removeWave: (id: string) => void;
   getGroup: (groupId: string) => CapabilityGroup | undefined;
-  getDomain: (domainId: string) => Domain | undefined;
-  getCategoryOfDomain: (domainId: string) => DomainCategory | undefined;
+  getProduct: (productId: string) => Product | undefined;
   getCapability: (id: string) => Capability | undefined;
   getEpic: (id: string) => Epic | undefined;
   getFeature: (id: string) => Feature | undefined;
@@ -197,7 +184,6 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [groups, setGroups] = useState<CapabilityGroup[]>([]);
-  const [categories, setCategories] = useState<DomainCategory[]>([]);
   const [epics, setEpics] = useState<Epic[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
   const [stories, setStories] = useState<UserStory[]>([]);
@@ -205,7 +191,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
-  const [domains, setDomains] = useState<Domain[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [actors, setActors] = useState<Actor[]>([]);
 
   const reload = useCallback(async () => {
@@ -213,8 +199,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const snap = await api.fetchRegistry();
-      setCategories(snap.categories);
-      setDomains(snap.domains);
+      setProducts(snap.products);
       setActors(snap.actors);
       setGroups(snap.groups);
       setEquipment(snap.equipment);
@@ -345,135 +330,61 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [equipment, equipmentTypes]
   );
 
-  const addCategory = useCallback(
-    (input: CategoryInput) => {
-      const created: DomainCategory = {
-        id: input.id.trim(),
-        name: input.name.trim(),
-        shortName: input.shortName.trim(),
-        prefix: input.prefix.trim(),
-        description: input.description.trim(),
-      };
-      setCategories((prev) => {
-        if (prev.some((c) => c.id === created.id)) {
-          return prev.map((c) => (c.id === created.id ? created : c));
-        }
-        return [...prev, created];
-      });
-      void api.upsertCategory(created).catch((err) => persistError('addCategory', err));
-      return created;
-    },
-    []
-  );
-
-  const updateCategory = useCallback(
-    (
-      id: string,
-      patch: Partial<Pick<DomainCategory, 'name' | 'shortName' | 'prefix' | 'description'>>
-    ) => {
-      setCategories((prev) =>
-        prev.map((c) => {
-          if (c.id !== id) return c;
-          const updated = {
-            ...c,
-            ...patch,
-            name: patch.name !== undefined ? patch.name.trim() : c.name,
-            shortName: patch.shortName !== undefined ? patch.shortName.trim() : c.shortName,
-            prefix: patch.prefix !== undefined ? patch.prefix.trim() : c.prefix,
-            description: patch.description !== undefined ? patch.description.trim() : c.description,
-          };
-          void api.upsertCategory(updated).catch((err) => persistError('updateCategory', err));
-          return updated;
-        })
-      );
-    },
-    []
-  );
-
-  const removeCategory = useCallback(
-    (id: string) => {
-      const members = domains.filter((d) => d.categoryId === id);
-      if (members.length > 0) {
-        window.alert(
-          `Cannot delete this category: ${members.length} domain${members.length === 1 ? '' : 's'} still belong to it. Move or delete them first.`
-        );
-        return false;
-      }
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      setActors((prev) => {
-        const next = prev.map((actor) => {
-          if (!actor.categoryIds.includes(id)) return actor;
-          const updated = {
-            ...actor,
-            categoryIds: actor.categoryIds.filter((c) => c !== id),
-          };
-          void api.upsertActor(updated).catch((err) =>
-            persistError('removeCategory actor', err)
-          );
-          return updated;
-        });
-        return next;
-      });
-      void api.deleteCategory(id).catch((err) => persistError('removeCategory', err));
-      return true;
-    },
-    [domains]
-  );
-
-  const addDomain = useCallback(
-    (input: DomainInput) => {
-      const created: Domain = {
-        id: input.id.trim(),
+  const addProduct = useCallback(
+    (input: ProductInput) => {
+      const created: Product = {
+        id: nextId('PRD', products),
         name: input.name.trim(),
         description: input.description.trim(),
-        categoryId: input.categoryId.trim(),
       };
-      setDomains((prev) => {
-        if (prev.some((d) => d.id === created.id)) {
-          return prev.map((d) => (d.id === created.id ? created : d));
-        }
-        return [...prev, created];
-      });
-      void api.upsertDomain(created).catch((err) => persistError('addDomain', err));
+      setProducts((prev) => [...prev, created]);
+      void api.upsertProduct(created).catch((err) => persistError('addProduct', err));
       return created;
     },
-    []
+    [products]
   );
 
-  const updateDomain = useCallback(
-    (id: string, patch: Partial<Pick<Domain, 'name' | 'description' | 'categoryId'>>) => {
-      setDomains((prev) =>
-        prev.map((d) => {
-          if (d.id !== id) return d;
-          const updated = {
-            ...d,
-            ...patch,
-            name: patch.name !== undefined ? patch.name.trim() : d.name,
-            description: patch.description !== undefined ? patch.description.trim() : d.description,
-            categoryId: patch.categoryId !== undefined ? patch.categoryId.trim() : d.categoryId,
-          };
-          void api.upsertDomain(updated).catch((err) => persistError('updateDomain', err));
-          return updated;
-        })
-      );
-    },
-    []
-  );
+  const updateProduct = useCallback((id: string, patch: Partial<ProductInput>) => {
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const updated = {
+          ...p,
+          name: patch.name !== undefined ? patch.name.trim() : p.name,
+          description: patch.description !== undefined ? patch.description.trim() : p.description,
+        };
+        void api.upsertProduct(updated).catch((err) => persistError('updateProduct', err));
+        return updated;
+      })
+    );
+  }, []);
 
-  const removeDomain = useCallback((id: string) => {
-    setDomains((prev) => prev.filter((d) => d.id !== id));
+  const removeProduct = useCallback((id: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
     setCapabilities((prev) => {
       const next = prev.map((cap) => {
-        if (!cap.domainIds.includes(id)) return cap;
-        const updated = { ...cap, domainIds: cap.domainIds.filter((d) => d !== id) };
+        if (!cap.productIds.includes(id)) return cap;
+        const updated = { ...cap, productIds: cap.productIds.filter((p) => p !== id) };
         void api.upsertCapability(updated).catch((err) =>
-          persistError('removeDomain capability', err)
+          persistError('removeProduct capability', err)
         );
         return updated;
       });
       return next;
     });
-    void api.deleteDomain(id).catch((err) => persistError('removeDomain', err));
+    setActors((prev) => {
+      const next = prev.map((actor) => {
+        if (!actor.productIds.includes(id)) return actor;
+        const updated = {
+          ...actor,
+          productIds: actor.productIds.filter((p) => p !== id),
+        };
+        void api.upsertActor(updated).catch((err) => persistError('removeProduct actor', err));
+        return updated;
+      });
+      return next;
+    });
+    void api.deleteProduct(id).catch((err) => persistError('removeProduct', err));
   }, []);
 
   const addActor = useCallback(
@@ -482,7 +393,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         id: nextId('ACT', actors),
         name: input.name.trim(),
         description: input.description.trim(),
-        categoryIds: input.categoryIds,
+        productIds: input.productIds,
       };
       setActors((prev) => [...prev, created]);
       void api.upsertActor(created).catch((err) => persistError('addActor', err));
@@ -500,7 +411,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           ...patch,
           name: patch.name !== undefined ? patch.name.trim() : a.name,
           description: patch.description !== undefined ? patch.description.trim() : a.description,
-          categoryIds: patch.categoryIds !== undefined ? patch.categoryIds : a.categoryIds,
+          productIds: patch.productIds !== undefined ? patch.productIds : a.productIds,
         };
         void api.upsertActor(updated).catch((err) => persistError('updateActor', err));
         return updated;
@@ -553,7 +464,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         name: input.name.trim(),
         description: input.description.trim(),
         groupId: input.groupId,
-        domainIds: input.domainIds,
+        productIds: input.productIds,
         jiraEpic: input.jiraEpic.trim(),
         equipmentIds: isEquipmentGroup(input.groupId) ? input.equipmentIds : [],
         progress: resolveLifecycle(trackOfGroup(input.groupId)).stages[0]?.name ?? 'Identified',
@@ -918,10 +829,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<RegistryValue>(() => {
-    const domainMap = new Map(domains.map((d) => [d.id, d]));
+    const productMap = new Map(products.map((p) => [p.id, p]));
     const actorMap = new Map(actors.map((a) => [a.id, a]));
     const groupMap = new Map(groups.map((g) => [g.id, g]));
-    const categoryMap = new Map(categories.map((c) => [c.id, c]));
     const capabilityMap = new Map(capabilities.map((c) => [c.id, c]));
     const epicMap = new Map(epics.map((e) => [e.id, e]));
     const featureMap = new Map(features.map((f) => [f.id, f]));
@@ -964,7 +874,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           Name: c.name,
           Description: c.description,
           'Group ID': c.groupId,
-          'Domain IDs': c.domainIds.join('; '),
+          'Product IDs': c.productIds.join('; '),
           'Epic Key': c.jiraEpic,
           'Equipment IDs': c.equipmentIds.join('; '),
           Progress: c.progress,
@@ -1025,12 +935,11 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           Type: e.type,
         }));
       }
-      if (dataset === 'domains') {
-        return domains.map((d) => ({
-          'Domain ID': d.id,
-          Name: d.name,
-          Description: d.description,
-          'Category ID': d.categoryId,
+      if (dataset === 'products') {
+        return products.map((p) => ({
+          'Product ID': p.id,
+          Name: p.name,
+          Description: p.description,
         }));
       }
       if (dataset === 'actors') {
@@ -1038,7 +947,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           'Actor ID': a.id,
           Name: a.name,
           Description: a.description,
-          'Category IDs': a.categoryIds.join('; '),
+          'Product IDs': a.productIds.join('; '),
         }));
       }
       return groups.map((g) => ({
@@ -1089,7 +998,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             name,
             description: (r['Description'] ?? '').trim(),
             groupId,
-            domainIds: list(r['Domain IDs'] ?? '').filter((d) => domainMap.has(d)),
+            productIds: list(r['Product IDs'] ?? '').filter((p) => productMap.has(p)),
             jiraEpic: (r['Epic Key'] ?? '').trim(),
             equipmentIds: usesEquipment(lifecycle)
               ? list(r['Equipment IDs'] ?? '').filter((e) => equipment.some((eq) => eq.id === e))
@@ -1291,27 +1200,24 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return result;
       }
 
-      if (dataset === 'domains') {
-        const next = [...domains];
+      if (dataset === 'products') {
+        const next = [...products];
         rows.forEach((r, i) => {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
-          const categoryId = (r['Category ID'] ?? '').trim();
-          if (!categoryMap.has(categoryId)) return note(i, `unknown category "${categoryId}"`);
-          const id = (r['Domain ID'] ?? '').trim();
-          if (!id) return note(i, 'a domain ID is required');
-          const patch = { name, description: (r['Description'] ?? '').trim(), categoryId };
-          const at = next.findIndex((d) => d.id === id);
+          const id = (r['Product ID'] ?? '').trim();
+          const patch = { name, description: (r['Description'] ?? '').trim() };
+          const at = id ? next.findIndex((p) => p.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
             result.updated += 1;
           } else {
-            next.push({ id, ...patch });
+            next.push({ id: id || nextId('PRD', next), ...patch });
             result.created += 1;
           }
         });
-        setDomains(next);
-        void api.upsertDomains(next).catch((err) => persistError('import domains', err));
+        setProducts(next);
+        void api.upsertProducts(next).catch((err) => persistError('import products', err));
         return result;
       }
 
@@ -1321,12 +1227,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
           const id = (r['Actor ID'] ?? '').trim();
-          const categoryIds = list(r['Category IDs'] ?? '').filter((c) => categoryMap.has(c));
-          if (categoryIds.length === 0) return note(i, 'at least one known category ID is required');
+          const productIds = list(r['Product IDs'] ?? '').filter((p) => productMap.has(p));
+          if (productIds.length === 0) return note(i, 'at least one known product ID is required');
           const patch = {
             name,
             description: (r['Description'] ?? '').trim(),
-            categoryIds,
+            productIds,
           };
           const at = id ? next.findIndex((a) => a.id === id) : -1;
           if (at >= 0) {
@@ -1430,9 +1336,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       reload,
       capabilities,
       groups,
-      domains,
+      products,
       actors,
-      categories,
       equipment,
       equipmentTypes,
       lifecycles,
@@ -1453,12 +1358,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       lifecycleOf: (capability) =>
         resolveLifecycle(groupMap.get(capability.groupId)?.track),
       lifecycleOfGroup: (groupId) => resolveLifecycle(groupMap.get(groupId)?.track),
-      addCategory,
-      updateCategory,
-      removeCategory,
-      addDomain,
-      updateDomain,
-      removeDomain,
+      addProduct,
+      updateProduct,
+      removeProduct,
       addActor,
       updateActor,
       removeActor,
@@ -1482,11 +1384,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       updateWave,
       removeWave,
       getGroup: (id) => groupMap.get(id),
-      getDomain: (id) => domainMap.get(id),
-      getCategoryOfDomain: (id) => {
-        const d = domainMap.get(id);
-        return d ? categoryMap.get(d.categoryId) : undefined;
-      },
+      getProduct: (id) => productMap.get(id),
       getCapability: (id) => capabilityMap.get(id),
       getEpic: (id) => epicMap.get(id),
       getFeature: (id) => featureMap.get(id),
@@ -1514,9 +1412,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     reload,
     capabilities,
     groups,
-    domains,
+    products,
     actors,
-    categories,
     epics,
     features,
     stories,
@@ -1534,12 +1431,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addLifecycle,
     updateLifecycle,
     removeLifecycle,
-    addCategory,
-    updateCategory,
-    removeCategory,
-    addDomain,
-    updateDomain,
-    removeDomain,
+    addProduct,
+    updateProduct,
+    removeProduct,
     addActor,
     updateActor,
     removeActor,
