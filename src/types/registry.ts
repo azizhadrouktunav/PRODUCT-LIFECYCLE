@@ -308,6 +308,13 @@ export interface Domain {
   categoryId: string;
 }
 
+export interface Actor {
+  id: string;
+  name: string;
+  description: string;
+  domainIds: string[];
+}
+
 export interface CapabilityGroup {
   id: string;
   name: string;
@@ -352,7 +359,10 @@ export interface UserStory {
   id: string;
   featureId: string;
   title: string;
+  /** Display string derived from selected actor names (Excel “As a”). */
   role: string;
+  /** Selected actors from the Actors catalog. */
+  actorIds: string[];
   want: string;
   benefit: string;
   criteria: string[];

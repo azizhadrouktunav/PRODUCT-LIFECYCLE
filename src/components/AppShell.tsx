@@ -10,17 +10,20 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   SunIcon,
-  WavesIcon } from
-'lucide-react';
+  UsersIcon,
+  WavesIcon,
+} from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 const NAV = [
-{ to: '/', label: 'Capabilities', icon: ListTreeIcon, end: true },
-{ to: '/lifecycles', label: 'Lifecycles', icon: GitBranchIcon, end: false },
-{ to: '/groups', label: 'Capability Groups', icon: LayersIcon, end: false },
-{ to: '/domains', label: 'Domains', icon: NetworkIcon, end: false },
-{ to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },
-{ to: '/waves', label: 'Waves', icon: WavesIcon, end: false }];
+  { to: '/', label: 'Capabilities', icon: ListTreeIcon, end: true },
+  { to: '/lifecycles', label: 'Lifecycles', icon: GitBranchIcon, end: false },
+  { to: '/groups', label: 'Capability Groups', icon: LayersIcon, end: false },
+  { to: '/domains', label: 'Domains', icon: NetworkIcon, end: false },
+  { to: '/actors', label: 'Actors', icon: UsersIcon, end: false },
+  { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },
+  { to: '/waves', label: 'Waves', icon: WavesIcon, end: false },
+];
 
 
 const LOGO_URL = "/ChatGPT_Image_Sep_4,_2026,_10_17_13_AM.png";

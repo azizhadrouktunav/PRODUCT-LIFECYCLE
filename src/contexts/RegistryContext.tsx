@@ -10,6 +10,7 @@ import type { DatasetId, ImportResult } from '../utils/datasets';
 import { DATASETS, DELIVERY_PACK } from '../utils/datasets';
 import type { SheetRow } from '../utils/excel';
 import type {
+  Actor,
   Capability,
   CapabilityGroup,
   CapabilityStatus,
@@ -59,6 +60,7 @@ export type StoryInput = Pick<
   UserStory,
   | 'title'
   | 'role'
+  | 'actorIds'
   | 'want'
   | 'benefit'
   | 'criteria'
@@ -76,6 +78,7 @@ export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type
 export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
 export type CategoryInput = Pick<DomainCategory, 'id' | 'name' | 'shortName' | 'prefix' | 'description'>;
 export type DomainInput = Pick<Domain, 'id' | 'name' | 'description' | 'categoryId'>;
+export type ActorInput = Pick<Actor, 'name' | 'description' | 'domainIds'>;
 
 interface RegistryValue {
   loading: boolean;
@@ -84,6 +87,7 @@ interface RegistryValue {
   capabilities: Capability[];
   groups: CapabilityGroup[];
   domains: Domain[];
+  actors: Actor[];
   categories: DomainCategory[];
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
@@ -119,6 +123,10 @@ interface RegistryValue {
     patch: Partial<Pick<Domain, 'name' | 'description' | 'categoryId'>>
   ) => void;
   removeDomain: (id: string) => void;
+  addActor: (input: ActorInput) => Actor;
+  updateActor: (id: string, patch: Partial<ActorInput>) => void;
+  removeActor: (id: string) => void;
+  getActor: (id: string) => Actor | undefined;
   setEquipmentCapabilities: (equipmentId: string, capabilityIds: string[]) => void;
   addEpic: (capabilityId: string, input: EpicInput) => void;
   updateEpic: (id: string, patch: Partial<EpicInput>) => void;
@@ -173,6 +181,13 @@ function nextId(prefix: string, existing: { id: string }[], pad = 3): string {
   return `${prefix}-${String(max + 1).padStart(pad, '0')}`;
 }
 
+function roleFromActorIds(actorIds: string[], actors: Actor[]): string {
+  return actorIds
+    .map((id) => actors.find((a) => a.id === id)?.name)
+    .filter((name): name is string => !!name && name.trim() !== '')
+    .join('; ');
+}
+
 function persistError(action: string, err: unknown): void {
   console.error(`[registry] ${action}`, err);
 }
@@ -191,6 +206,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [actors, setActors] = useState<Actor[]>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -199,6 +215,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const snap = await api.fetchRegistry();
       setCategories(snap.categories);
       setDomains(snap.domains);
+      setActors(snap.actors);
       setGroups(snap.groups);
       setEquipment(snap.equipment);
       setEquipmentTypes(snap.equipmentTypes);
@@ -442,7 +459,86 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       });
       return next;
     });
+    setActors((prev) => {
+      const next = prev.map((actor) => {
+        if (!actor.domainIds.includes(id)) return actor;
+        const updated = { ...actor, domainIds: actor.domainIds.filter((d) => d !== id) };
+        void api.upsertActor(updated).catch((err) => persistError('removeDomain actor', err));
+        return updated;
+      });
+      return next;
+    });
     void api.deleteDomain(id).catch((err) => persistError('removeDomain', err));
+  }, []);
+
+  const addActor = useCallback(
+    (input: ActorInput) => {
+      const created: Actor = {
+        id: nextId('ACT', actors),
+        name: input.name.trim(),
+        description: input.description.trim(),
+        domainIds: input.domainIds,
+      };
+      setActors((prev) => [...prev, created]);
+      void api.upsertActor(created).catch((err) => persistError('addActor', err));
+      return created;
+    },
+    [actors]
+  );
+
+  const updateActor = useCallback((id: string, patch: Partial<ActorInput>) => {
+    setActors((prev) => {
+      const next = prev.map((a) => {
+        if (a.id !== id) return a;
+        const updated: Actor = {
+          ...a,
+          ...patch,
+          name: patch.name !== undefined ? patch.name.trim() : a.name,
+          description: patch.description !== undefined ? patch.description.trim() : a.description,
+          domainIds: patch.domainIds !== undefined ? patch.domainIds : a.domainIds,
+        };
+        void api.upsertActor(updated).catch((err) => persistError('updateActor', err));
+        return updated;
+      });
+      // Refresh derived role on stories that reference this actor
+      const updatedActor = next.find((a) => a.id === id);
+      if (updatedActor && patch.name !== undefined) {
+        setStories((storiesPrev) =>
+          storiesPrev.map((s) => {
+            if (!(s.actorIds ?? []).includes(id)) return s;
+            const role = roleFromActorIds(s.actorIds ?? [], next);
+            if (role === s.role) return s;
+            const storyUpdated = { ...s, role };
+            void api.upsertStory(storyUpdated).catch((err) =>
+              persistError('updateActor story role', err)
+            );
+            return storyUpdated;
+          })
+        );
+      }
+      return next;
+    });
+  }, []);
+
+  const removeActor = useCallback((id: string) => {
+    setActors((prev) => {
+      const remaining = prev.filter((a) => a.id !== id);
+      setStories((storiesPrev) =>
+        storiesPrev.map((s) => {
+          if (!(s.actorIds ?? []).includes(id)) return s;
+          const nextIds = (s.actorIds ?? []).filter((aid) => aid !== id);
+          const updated = {
+            ...s,
+            actorIds: nextIds,
+            role: roleFromActorIds(nextIds, remaining),
+          };
+          void api.upsertStory(updated).catch((err) => persistError('removeActor story', err));
+          return updated;
+        })
+      );
+      return remaining;
+    });
+    void api.deleteActor(id).catch((err) => persistError('removeActor', err));
   }, []);
 
   const addCapability = useCallback(
@@ -744,11 +840,13 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addStory = useCallback((featureId: string, input: StoryInput) => {
     setStories((prev) => {
+      const actorIds = input.actorIds ?? [];
       const created: UserStory = {
         id: nextId('US', prev),
         featureId,
         title: input.title.trim(),
-        role: input.role.trim(),
+        role: input.role.trim() || roleFromActorIds(actorIds, actors),
+        actorIds,
         want: input.want.trim(),
         benefit: input.benefit.trim(),
         criteria: input.criteria.filter((c) => c.trim() !== ''),
@@ -764,18 +862,24 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       void api.upsertStory(created).catch((err) => persistError('addStory', err));
       return [...prev, created];
     });
-  }, []);
+  }, [actors]);
 
   const updateStory = useCallback((id: string, patch: Partial<StoryInput>) => {
     setStories((prev) =>
       prev.map((s) => {
         if (s.id !== id) return s;
         const updated = { ...s, ...patch };
+        if (patch.actorIds) {
+          updated.role =
+            patch.role !== undefined
+              ? patch.role
+              : roleFromActorIds(patch.actorIds, actors);
+        }
         void api.upsertStory(updated).catch((err) => persistError('updateStory', err));
         return updated;
       })
     );
-  }, []);
+  }, [actors]);
 
   const removeStory = useCallback((id: string) => {
     setStories((prev) => prev.filter((s) => s.id !== id));
@@ -810,6 +914,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<RegistryValue>(() => {
     const domainMap = new Map(domains.map((d) => [d.id, d]));
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
     const groupMap = new Map(groups.map((g) => [g.id, g]));
     const categoryMap = new Map(categories.map((c) => [c.id, c]));
     const capabilityMap = new Map(capabilities.map((c) => [c.id, c]));
@@ -891,6 +996,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             'Story ID': s.id,
             'Feature ID': s.featureId,
             Title: s.title,
+            'Actor IDs': (s.actorIds ?? []).join('; '),
             'As a': s.role,
             'I want to': s.want,
             'So that': s.benefit,
@@ -920,6 +1026,14 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           Name: d.name,
           Description: d.description,
           'Category ID': d.categoryId,
+        }));
+      }
+      if (dataset === 'actors') {
+        return actors.map((a) => ({
+          'Actor ID': a.id,
+          Name: a.name,
+          Description: a.description,
+          'Domain IDs': a.domainIds.join('; '),
         }));
       }
       return groups.map((g) => ({
@@ -1085,10 +1199,14 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const id = (r['Story ID'] ?? '').trim();
           const storyStages = lifecycleByFeature(featureId).storyStages;
           const stages = storyStages.length > 0 ? storyStages : DEFAULT_STORY_STAGES;
+          const actorIds = list(r['Actor IDs'] ?? '').filter((aid) => actorMap.has(aid));
+          const roleFromActors = roleFromActorIds(actorIds, actors);
+          const roleRaw = (r['As a'] ?? '').trim();
           const patch = {
             featureId,
             title,
-            role: (r['As a'] ?? '').trim(),
+            actorIds,
+            role: roleFromActors || roleRaw,
             want: (r['I want to'] ?? '').trim(),
             benefit: (r['So that'] ?? '').trim(),
             criteria: list(r['Acceptance Criteria'] ?? ''),
@@ -1192,6 +1310,33 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return result;
       }
 
+      if (dataset === 'actors') {
+        const next = [...actors];
+        rows.forEach((r, i) => {
+          const name = (r['Name'] ?? '').trim();
+          if (!name) return note(i, 'no name');
+          const id = (r['Actor ID'] ?? '').trim();
+          const domainIds = list(r['Domain IDs'] ?? '').filter((d) => domainMap.has(d));
+          if (domainIds.length === 0) return note(i, 'at least one known domain ID is required');
+          const patch = {
+            name,
+            description: (r['Description'] ?? '').trim(),
+            domainIds,
+          };
+          const at = id ? next.findIndex((a) => a.id === id) : -1;
+          if (at >= 0) {
+            next[at] = { ...next[at], ...patch };
+            result.updated += 1;
+          } else {
+            next.push({ id: id || nextId('ACT', next), ...patch });
+            result.created += 1;
+          }
+        });
+        setActors(next);
+        void api.upsertActors(next).catch((err) => persistError('import actors', err));
+        return result;
+      }
+
       const next = [...groups];
       const lifecycleIds = new Set(lifecycles.map((l) => l.id));
       rows.forEach((r, i) => {
@@ -1281,6 +1426,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       capabilities,
       groups,
       domains,
+      actors,
       categories,
       equipment,
       equipmentTypes,
@@ -1308,6 +1454,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addDomain,
       updateDomain,
       removeDomain,
+      addActor,
+      updateActor,
+      removeActor,
+      getActor: (id) => actorMap.get(id),
       setEquipmentCapabilities,
       addEpic,
       updateEpic,
@@ -1360,6 +1510,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     capabilities,
     groups,
     domains,
+    actors,
     categories,
     epics,
     features,
@@ -1384,6 +1535,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addDomain,
     updateDomain,
     removeDomain,
+    addActor,
+    updateActor,
+    removeActor,
     setEquipmentCapabilities,
     addEpic,
     updateEpic,

@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabase';
 import type {
+  Actor,
   Capability,
   CapabilityGroup,
   CapabilityStatus,
@@ -23,6 +24,7 @@ import { FALLBACK_LIFECYCLE, LIFECYCLE_TEMPLATES, TRACKS } from '../types/regist
 export interface RegistrySnapshot {
   categories: DomainCategory[];
   domains: Domain[];
+  actors: Actor[];
   groups: CapabilityGroup[];
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
@@ -136,6 +138,15 @@ function mapDomain(row: Record<string, unknown>): Domain {
   };
 }
 
+function mapActor(row: Record<string, unknown>): Actor {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    domainIds: (row.domain_ids as string[] | null) ?? [],
+  };
+}
+
 function mapGroup(row: Record<string, unknown>): CapabilityGroup {
   return {
     id: String(row.id),
@@ -204,6 +215,7 @@ function mapStory(row: Record<string, unknown>): UserStory {
     featureId: String(row.feature_id),
     title: String(row.title),
     role: String(row.role ?? ''),
+    actorIds: (row.actor_ids as string[] | null) ?? [],
     want: String(row.want ?? ''),
     benefit: String(row.benefit ?? ''),
     criteria: (row.criteria as string[] | null) ?? [],
@@ -237,6 +249,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   const [
     categoriesRes,
     domainsRes,
+    actorsRes,
     groupsRes,
     equipmentRes,
     equipmentTypesRes,
@@ -249,6 +262,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   ] = await Promise.all([
     supabase.from('domain_categories').select('*'),
     supabase.from('domains').select('*'),
+    supabase.from('actors').select('*'),
     supabase.from('capability_groups').select('*'),
     supabase.from('equipment').select('*'),
     supabase.from('equipment_types').select('*'),
@@ -262,6 +276,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
 
   throwIfError(categoriesRes.error, 'Load domain_categories');
   throwIfError(domainsRes.error, 'Load domains');
+  throwIfError(actorsRes.error, 'Load actors');
   throwIfError(groupsRes.error, 'Load capability_groups');
   throwIfError(equipmentRes.error, 'Load equipment');
   throwIfError(equipmentTypesRes.error, 'Load equipment_types');
@@ -317,6 +332,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   return {
     categories: (categoriesRes.data ?? []).map((r) => mapCategory(r as Record<string, unknown>)),
     domains: (domainsRes.data ?? []).map((r) => mapDomain(r as Record<string, unknown>)),
+    actors: (actorsRes.data ?? []).map((r) => mapActor(r as Record<string, unknown>)),
     groups: (groupsRes.data ?? []).map((r) => mapGroup(r as Record<string, unknown>)),
     equipment,
     equipmentTypes,
@@ -363,6 +379,21 @@ export async function upsertDomain(domain: Domain): Promise<void> {
     category_id: domain.categoryId,
   });
   throwIfError(error, 'Upsert domain');
+}
+
+export async function upsertActor(actor: Actor): Promise<void> {
+  const { error } = await supabase.from('actors').upsert({
+    id: actor.id,
+    name: actor.name,
+    description: actor.description,
+    domain_ids: actor.domainIds,
+  });
+  throwIfError(error, 'Upsert actor');
+}
+
+export async function deleteActor(id: string): Promise<void> {
+  const { error } = await supabase.from('actors').delete().eq('id', id);
+  throwIfError(error, 'Delete actor');
 }
 
 export async function upsertGroup(group: CapabilityGroup): Promise<void> {
@@ -444,6 +475,7 @@ export async function upsertStory(story: UserStory): Promise<void> {
     feature_id: story.featureId,
     title: story.title,
     role: story.role,
+    actor_ids: story.actorIds ?? [],
     want: story.want,
     benefit: story.benefit,
     criteria: story.criteria,
@@ -566,6 +598,7 @@ export async function upsertStories(items: UserStory[]): Promise<void> {
       feature_id: story.featureId,
       title: story.title,
       role: story.role,
+      actor_ids: story.actorIds ?? [],
       want: story.want,
       benefit: story.benefit,
       criteria: story.criteria,
@@ -607,6 +640,19 @@ export async function upsertDomains(items: Domain[]): Promise<void> {
     }))
   );
   throwIfError(error, 'Upsert domains');
+}
+
+export async function upsertActors(items: Actor[]): Promise<void> {
+  if (items.length === 0) return;
+  const { error } = await supabase.from('actors').upsert(
+    items.map((actor) => ({
+      id: actor.id,
+      name: actor.name,
+      description: actor.description,
+      domain_ids: actor.domainIds,
+    }))
+  );
+  throwIfError(error, 'Upsert actors');
 }
 
 export async function upsertGroups(items: CapabilityGroup[]): Promise<void> {

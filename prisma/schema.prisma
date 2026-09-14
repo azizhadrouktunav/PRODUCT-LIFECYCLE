@@ -28,6 +28,15 @@ model Domain {
   @@map("domains")
 }
 
+model Actor {
+  id          String   @id
+  name        String
+  description String   @default("")
+  domainIds   String[] @default([]) @map("domain_ids")
+
+  @@map("actors")
+}
+
 model Lifecycle {
   id             String            @id
   label          String
@@ -120,6 +129,7 @@ model UserStory {
   feature         Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
   title           String
   role            String   @default("")
+  actorIds        String[] @default([]) @map("actor_ids")
   want            String   @default("")
   benefit         String   @default("")
   criteria        String[] @default([])

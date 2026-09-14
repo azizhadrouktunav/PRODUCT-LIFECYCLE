@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell';
 import { CapabilityEditorProvider } from './contexts/CapabilityEditorContext';
 import { RegistryProvider } from './contexts/RegistryContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ActorsPage } from './pages/Actors';
 import { CapabilitiesPage } from './pages/Capabilities';
 import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
 import { DomainsPage } from './pages/Domains';
@@ -41,6 +42,7 @@ export function App({ theme = 'light' }: AppProps) {
                 <Route path="/lifecycles" element={<LifecyclesPage />} />
                 <Route path="/groups" element={<GroupsPage />} />
                 <Route path="/domains" element={<DomainsPage />} />
+                <Route path="/actors" element={<ActorsPage />} />
                 <Route path="/equipment" element={<EquipmentPage />} />
                 <Route path="/waves" element={<WavesPage />} />
                 <Route path="*" element={<CapabilitiesPage />} />

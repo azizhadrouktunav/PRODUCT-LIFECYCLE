@@ -7,7 +7,8 @@ export type DatasetId =
 'stories' |
 'equipment' |
 'domains' |
-'groups';
+'groups' |
+'actors';
 
 export interface DatasetDef {
   id: DatasetId;
@@ -90,7 +91,8 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     { label: 'Story ID', example: '' },
     { label: 'Feature ID', example: 'FEAT-001' },
     { label: 'Title', example: 'See my weekly driver score' },
-    { label: 'As a', example: 'fleet manager' },
+    { label: 'Actor IDs', example: 'ACT-001; ACT-002' },
+    { label: 'As a', example: 'fleet manager; dispatcher' },
     { label: 'I want to', example: 'see a weekly score per driver' },
     { label: 'So that', example: 'I can coach the riskiest drivers first' },
     { label: 'Acceptance Criteria', example: 'Score is 0-100; Trend versus last week is shown' },
@@ -131,6 +133,20 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     { label: 'Name', example: 'Driver Management' },
     { label: 'Description', example: 'Driver identity, assignment, behaviour and coaching.' },
     { label: 'Category ID', example: 'CAT-FIQ' }]
+
+  },
+  actors: {
+    id: 'actors',
+    label: 'Actors',
+    sheet: 'Actors',
+    fileName: 'actors',
+    idColumn: 'Actor ID',
+    requiredColumn: 'Name',
+    columns: [
+    { label: 'Actor ID', example: 'ACT-001' },
+    { label: 'Name', example: 'Fleet manager' },
+    { label: 'Description', example: 'Owns day-to-day fleet operations and coaching.' },
+    { label: 'Domain IDs', example: 'FIQ-D03; FIQ-D05' }]
 
   },
   groups: {
