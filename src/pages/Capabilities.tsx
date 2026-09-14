@@ -19,7 +19,7 @@ import { CAPABILITY_STATUSES, isStageAhead, stageIndex, usesEquipment } from '..
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
-type SortKey = 'id' | 'name' | 'group' | 'products' | 'epic' | 'breakdown' | 'progress' | 'status';
+type SortKey = 'id' | 'name' | 'group' | 'products' | 'breakdown' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
@@ -27,7 +27,6 @@ const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
   { key: 'name', label: 'Capability', className: '' },
   { key: 'group', label: 'Group', className: 'w-36' },
   { key: 'products', label: 'Products', className: 'w-52' },
-  { key: 'epic', label: 'Epic', className: 'w-24' },
   { key: 'breakdown', label: 'Breakdown', className: 'w-44' },
   { key: 'progress', label: 'Progress', className: 'w-44' },
   { key: 'status', label: 'Status', className: 'w-28' },
@@ -90,8 +89,6 @@ export function CapabilitiesPage() {
           .map((id) => getProduct(id)?.name ?? id)
           .join('; ')
           .toLowerCase();
-      case 'epic':
-        return c.jiraEpic;
       case 'breakdown':
         if (usesEquipment(lifecycle)) return counts.equipment;
         return counts.epics * 1_000_000 + counts.features * 1_000 + counts.stories;
@@ -247,7 +244,7 @@ export function CapabilitiesPage() {
       </div>
 
       <div className="scroll-thin overflow-x-auto border-t border-line">
-        <table className="w-full min-w-[1180px] border-collapse text-left">
+        <table className="w-full min-w-[1080px] border-collapse text-left">
           <thead>
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
               {SORTABLE_COLUMNS.map((col) => {
@@ -312,8 +309,8 @@ export function CapabilitiesPage() {
                   <td className="py-3 pr-4">
                     <div className="flex flex-wrap gap-1">
                       {(c.productIds ?? []).slice(0, 3).map((id) => (
-                        <Chip key={id} tone="brand" title={getProduct(id)?.name}>
-                          {id}
+                        <Chip key={id} tone="brand" title={id}>
+                          {getProduct(id)?.name ?? id}
                         </Chip>
                       ))}
                       {(c.productIds ?? []).length > 3 && (
@@ -322,9 +319,6 @@ export function CapabilitiesPage() {
                         </span>
                       )}
                     </div>
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-2xs text-brand-bright">
-                    {c.jiraEpic || '—'}
                   </td>
                   <td className="py-3 pr-4">
                     {equipmentBound ? (
