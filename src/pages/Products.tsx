@@ -1,17 +1,63 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PackageIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  PackageIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import { DataTransfer } from '../components/DataTransfer';
 import { ProductModal } from '../components/ProductModal';
 import { Button, PageHeader, StatusTag } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Product } from '../types/registry';
+import type { Capability, Product } from '../types/registry';
+import { stageIndex } from '../types/registry';
+
+const selectClass =
+  'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
+
+type SortKey = 'id' | 'name' | 'group' | 'status' | 'progress';
+type SortDir = 'asc' | 'desc';
+
+const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
+  { key: 'id', label: 'ID', className: 'w-28' },
+  { key: 'name', label: 'Name', className: '' },
+  { key: 'group', label: 'Group', className: 'w-40' },
+  { key: 'status', label: 'Status', className: 'w-32' },
+  { key: 'progress', label: 'Progress', className: 'w-40' },
+];
+
+function emptyLast(a: string | number, b: string | number): number | null {
+  const aEmpty = a === '' || a === -1;
+  const bEmpty = b === '' || b === -1;
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+  return null;
+}
+
+function compareValues(a: string | number, b: string | number, dir: SortDir): number {
+  const empty = emptyLast(a, b);
+  if (empty !== null) return empty;
+  let cmp = 0;
+  if (typeof a === 'number' && typeof b === 'number') {
+    cmp = a - b;
+  } else {
+    cmp = String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true });
+  }
+  return dir === 'asc' ? cmp : -cmp;
+}
 
 export function ProductsPage() {
-  const { products, capabilities, removeProduct } = useRegistry();
+  const { products, capabilities, groups, getGroup, lifecycleOf, removeProduct } = useRegistry();
   const [activeId, setActiveId] = useState(products[0]?.id ?? '');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('id');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const sorted = useMemo(
     () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
@@ -28,6 +74,10 @@ export function ProductsPage() {
     }
   }, [sorted, activeId]);
 
+  useEffect(() => {
+    setGroupFilter('all');
+  }, [activeId]);
+
   const active = sorted.find((p) => p.id === activeId) ?? sorted[0];
   const assigned = useMemo(
     () =>
@@ -36,6 +86,55 @@ export function ProductsPage() {
         : [],
     [capabilities, active]
   );
+
+  const availableGroups = useMemo(() => {
+    const ids = new Set(assigned.map((c) => c.groupId));
+    return groups
+      .filter((g) => ids.has(g.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [assigned, groups]);
+
+  useEffect(() => {
+    if (groupFilter !== 'all' && !availableGroups.some((g) => g.id === groupFilter)) {
+      setGroupFilter('all');
+    }
+  }, [availableGroups, groupFilter]);
+
+  function sortValue(c: Capability, key: SortKey): string | number {
+    switch (key) {
+      case 'id':
+        return c.id;
+      case 'name':
+        return c.name;
+      case 'group':
+        return getGroup(c.groupId)?.name ?? '';
+      case 'status':
+        return c.status ?? '';
+      case 'progress': {
+        const idx = stageIndex(lifecycleOf(c), c.progress);
+        return idx < 0 ? -1 : idx;
+      }
+      default:
+        return '';
+    }
+  }
+
+  const rows = useMemo(() => {
+    const filtered =
+      groupFilter === 'all' ? assigned : assigned.filter((c) => c.groupId === groupFilter);
+    return [...filtered].sort((a, b) =>
+      compareValues(sortValue(a, sortKey), sortValue(b, sortKey), sortDir)
+    );
+  }, [assigned, groupFilter, getGroup, lifecycleOf, sortKey, sortDir]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  }
 
   return (
     <div>
@@ -134,26 +233,77 @@ export function ProductsPage() {
               </div>
 
               <div className="mt-6">
-                <h3 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-                  Capabilities · {assigned.length}
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+                    Capabilities · {rows.length}
+                    {groupFilter !== 'all' ? ` of ${assigned.length}` : ''}
+                  </h3>
+                  {assigned.length > 0 && availableGroups.length > 0 && (
+                    <select
+                      className={selectClass}
+                      value={groupFilter}
+                      onChange={(e) => setGroupFilter(e.target.value)}
+                      aria-label="Filter by capability group"
+                    >
+                      <option value="all">All groups</option>
+                      {availableGroups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
                 {assigned.length === 0 ? (
                   <p className="mt-3 text-sm text-mute">
                     No capabilities assigned to this product yet.
                   </p>
                 ) : (
                   <div className="scroll-thin mt-2 overflow-x-auto">
-                    <table className="w-full min-w-[560px] border-collapse text-left">
+                    <table className="w-full min-w-[640px] border-collapse text-left">
                       <thead>
                         <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-                          <th className="w-28 py-2 pr-4 font-medium">ID</th>
-                          <th className="py-2 pr-4 font-medium">Name</th>
-                          <th className="w-32 py-2 pr-4 font-medium">Status</th>
-                          <th className="w-40 py-2 font-medium">Progress</th>
+                          {SORTABLE_COLUMNS.map((col) => {
+                            const isActive = sortKey === col.key;
+                            const ariaSort = isActive
+                              ? sortDir === 'asc'
+                                ? 'ascending'
+                                : 'descending'
+                              : 'none';
+                            return (
+                              <th
+                                key={col.key}
+                                className={`${col.className} py-2 pr-4 font-medium`}
+                                aria-sort={ariaSort}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSort(col.key)}
+                                  className={`inline-flex items-center gap-1 transition-colors duration-150 ease-out hover:text-strong ${
+                                    isActive ? 'text-strong' : ''
+                                  }`}
+                                >
+                                  {col.label}
+                                  {isActive &&
+                                    (sortDir === 'asc' ? (
+                                      <ChevronUpIcon
+                                        className="h-3 w-3 shrink-0"
+                                        aria-hidden="true"
+                                      />
+                                    ) : (
+                                      <ChevronDownIcon
+                                        className="h-3 w-3 shrink-0"
+                                        aria-hidden="true"
+                                      />
+                                    ))}
+                                </button>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
-                        {assigned.map((c) => (
+                        {rows.map((c) => (
                           <tr key={c.id} className="border-t border-line-soft">
                             <td className="py-2.5 pr-4 font-mono text-2xs text-mute">
                               <Link
@@ -170,6 +320,9 @@ export function ProductsPage() {
                               >
                                 {c.name}
                               </Link>
+                            </td>
+                            <td className="py-2.5 pr-4 text-xs text-mute">
+                              {getGroup(c.groupId)?.name ?? c.groupId}
                             </td>
                             <td className="py-2.5 pr-4">
                               <StatusTag status={c.status} />
