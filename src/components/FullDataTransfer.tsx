@@ -4,7 +4,6 @@ import {
   CheckCircle2Icon,
   DownloadIcon,
   FileSpreadsheetIcon,
-  UploadIcon,
 } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button } from './Primitives';
@@ -99,27 +98,21 @@ export function FullDataTransfer() {
 
   return (
     <>
-      <div className="flex items-center gap-1.5">
-        <Button onClick={doExport}>
-          <DownloadIcon className="h-3.5 w-3.5" />
-          Export all
-        </Button>
-        <Button
-          onClick={() => {
-            reset();
-            setOpen(true);
-          }}
-        >
-          <UploadIcon className="h-3.5 w-3.5" />
-          Import all
-        </Button>
-      </div>
+      <Button
+        onClick={() => {
+          reset();
+          setOpen(true);
+        }}
+      >
+        <FileSpreadsheetIcon className="h-3.5 w-3.5" />
+        Import and export
+      </Button>
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
         width="max-w-lg"
-        title="Import delivery pack"
+        title="Import and export"
         subtitle="One workbook with Capabilities, Epics, Features and User Stories feuilles. Existing IDs are updated; blank IDs are created."
         footer={
           <>
@@ -133,6 +126,23 @@ export function FullDataTransfer() {
         }
       >
         <div className="space-y-4">
+          <section className="rounded-md border border-line-strong p-3">
+            <div className="flex items-start gap-3">
+              <DownloadIcon className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-medium text-strong">Export</h3>
+                <p className="mt-1 text-2xs leading-relaxed text-mute">
+                  Download the current Capabilities, Epics, Features and User Stories pack as one
+                  .xlsx workbook.
+                </p>
+              </div>
+              <Button onClick={doExport}>
+                <DownloadIcon className="h-3.5 w-3.5" />
+                Export all
+              </Button>
+            </div>
+          </section>
+
           <section className="rounded-md border border-line-strong p-3">
             <div className="flex items-start gap-3">
               <FileSpreadsheetIcon className="mt-0.5 h-4 w-4 shrink-0 text-mute" aria-hidden="true" />
