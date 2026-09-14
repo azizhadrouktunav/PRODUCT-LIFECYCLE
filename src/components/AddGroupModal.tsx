@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
-import { useRegistry } from '../contexts/RegistryContext';
+import { baseGroupCode, uniqueGroupCode, useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup, TrackId } from '../types/registry';
 import { DECOMPOSITION_LABEL } from '../types/registry';
 
@@ -14,11 +14,14 @@ export function AddGroupModal({
   onClose: () => void;
   group?: CapabilityGroup | null;
 }) {
-  const { addGroup, updateGroup, lifecycles } = useRegistry();
+  const { addGroup, updateGroup, lifecycles, groups } = useRegistry();
   const isEdit = !!group;
-  const defaultTrack = lifecycles.find((l) => l.decomposition === 'delivery')?.id ?? lifecycles[0]?.id ?? '';
+  const defaultTrack =
+    lifecycles.find((l) => l.decomposition === 'delivery')?.id ?? lifecycles[0]?.id ?? '';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [code, setCode] = useState('');
+  const [codeTouched, setCodeTouched] = useState(false);
   const [track, setTrack] = useState<TrackId>(defaultTrack);
   const [process, setProcess] = useState('');
 
@@ -27,24 +30,42 @@ export function AddGroupModal({
     if (group) {
       setName(group.name);
       setDescription(group.description);
+      setCode(group.code);
+      setCodeTouched(true);
       setTrack(group.track);
       setProcess(group.process);
     } else {
       setName('');
       setDescription('');
+      setCode('');
+      setCodeTouched(false);
       setTrack(defaultTrack);
       setProcess('');
     }
   }, [open, group, defaultTrack]);
 
-  const valid = name.trim().length > 1 && track !== '';
+  useEffect(() => {
+    if (!open || isEdit || codeTouched) return;
+    setCode(baseGroupCode(name));
+  }, [open, isEdit, codeTouched, name]);
+
+  const normalizedCode = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+  const codeClash = groups.some(
+    (g) => g.id !== group?.id && g.code === normalizedCode && normalizedCode !== ''
+  );
+  const valid = name.trim().length > 1 && track !== '' && normalizedCode.length > 0 && !codeClash;
+
+  const previewId = useMemo(() => {
+    const c = normalizedCode || uniqueGroupCode(name || 'G', groups, group?.id);
+    return `CAP-${c}-0001`;
+  }, [normalizedCode, name, groups, group?.id]);
 
   function submit() {
     if (!valid) return;
     if (group) {
-      updateGroup(group.id, { name, description, track, process });
+      updateGroup(group.id, { name, description, track, process, code: normalizedCode });
     } else {
-      addGroup(name, description, track, process);
+      addGroup(name, description, track, process, normalizedCode);
     }
     onClose();
   }
@@ -57,7 +78,7 @@ export function AddGroupModal({
       title={isEdit ? 'Edit capability group' : 'Add a capability group'}
       subtitle={
         isEdit
-          ? `${group?.id} · changes apply across the register immediately`
+          ? `${group?.id} · code ${group?.code} · changes apply across the register immediately`
           : 'Groups classify capabilities by the layer that delivers them, and decide which lifecycle they follow.'
       }
       footer={
@@ -79,6 +100,25 @@ export function AddGroupModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Integration Capability"
           />
+        </Field>
+        <Field
+          label="Code"
+          required
+          hint={`Used in capability IDs · next like ${previewId}`}
+        >
+          <input
+            className={`${inputClass} font-mono uppercase`}
+            value={code}
+            onChange={(e) => {
+              setCodeTouched(true);
+              setCode(e.target.value.toUpperCase());
+            }}
+            placeholder="e.g. S"
+            maxLength={6}
+          />
+          {codeClash && (
+            <p className="mt-1 text-2xs text-danger">Another group already uses this code.</p>
+          )}
         </Field>
         <Field label="Description">
           <textarea

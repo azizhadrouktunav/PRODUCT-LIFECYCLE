@@ -39,6 +39,8 @@ model CapabilityGroup {
   id           String       @id
   name         String
   description  String       @default("")
+  /** Short unique token used in capability IDs (e.g. S → CAP-S-0001). */
+  code         String       @unique
   track        String
   lifecycle    Lifecycle    @relation(fields: [track], references: [id], onDelete: Restrict)
   process      String       @default("")

@@ -1,11 +1,11 @@
 export const manifest = {
   screens: {
     scr_jvzjbg: { name: "Capability Register", route: "/", position: { "x": 160, "y": 220 } },
-    scr_mo6c6o: { name: "Capability Dashboard", route: "/capabilities/CAP-0015", position: { "x": 1560, "y": 4180 } },
-    scr_zm1ixt: { name: "Hardware Capability", route: "/capabilities/CAP-0001", position: { "x": 160, "y": 4180 } },
-    scr_kxouk3: { name: "Manage Epics", route: "/capabilities/CAP-0015/epics", position: { "x": 160, "y": 6160 } },
-    scr_bdunh4: { name: "Manage Features", route: "/capabilities/CAP-0015/epics/EPIC-001/features", position: { "x": 1560, "y": 6160 } },
-    scr_3vjyjc: { name: "Manage User Stories", route: "/capabilities/CAP-0015/epics/EPIC-001/features/FEAT-001/stories", position: { "x": 2960, "y": 6160 } },
+    scr_mo6c6o: { name: "Capability Dashboard", route: "/capabilities/CAP-S-0013", position: { "x": 1560, "y": 4180 } },
+    scr_zm1ixt: { name: "Hardware Capability", route: "/capabilities/CAP-S-0001", position: { "x": 160, "y": 4180 } },
+    scr_kxouk3: { name: "Manage Epics", route: "/capabilities/CAP-S-0013/epics", position: { "x": 160, "y": 6160 } },
+    scr_bdunh4: { name: "Manage Features", route: "/capabilities/CAP-S-0013/epics/EPIC-001/features", position: { "x": 1560, "y": 6160 } },
+    scr_3vjyjc: { name: "Manage User Stories", route: "/capabilities/CAP-S-0013/epics/EPIC-001/features/FEAT-001/stories", position: { "x": 2960, "y": 6160 } },
     scr_li958e: { name: "Capability Groups", route: "/groups", position: { "x": 160, "y": 2200 } },
     scr_tsofxm: { name: "Products", route: "/products", position: { "x": 1560, "y": 2200 } },
     scr_1jfzus: { name: "Equipment", route: "/equipment", position: { "x": 2960, "y": 2200 } },

@@ -135,10 +135,22 @@ function mapActor(row: Record<string, unknown>): Actor {
 }
 
 function mapGroup(row: Record<string, unknown>): CapabilityGroup {
+  const name = String(row.name);
+  const rawCode = String(row.code ?? '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase();
+  const fallback =
+    name
+      .trim()
+      .split(/\s+/)[0]
+      ?.replace(/[^a-zA-Z0-9]/g, '')
+      .charAt(0)
+      .toUpperCase() || 'G';
   return {
     id: String(row.id),
-    name: String(row.name),
+    name,
     description: String(row.description ?? ''),
+    code: rawCode || fallback,
     track: String(row.track ?? FALLBACK_LIFECYCLE.id),
     process: String(row.process ?? ''),
   };
@@ -372,6 +384,7 @@ export async function upsertGroup(group: CapabilityGroup): Promise<void> {
     id: group.id,
     name: group.name,
     description: group.description,
+    code: group.code,
     track: group.track,
     process: group.process,
   });
@@ -627,6 +640,7 @@ export async function upsertGroups(items: CapabilityGroup[]): Promise<void> {
       id: group.id,
       name: group.name,
       description: group.description,
+      code: group.code,
       track: group.track,
       process: group.process,
     }))

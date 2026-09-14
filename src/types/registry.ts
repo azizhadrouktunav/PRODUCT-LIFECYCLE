@@ -310,6 +310,8 @@ export interface CapabilityGroup {
   id: string;
   name: string;
   description: string;
+  /** Short unique token used in capability IDs (e.g. S → CAP-S-0001). */
+  code: string;
   /** Lifecycle id. */
   track: TrackId;
   /** How this group is worked, shown behind the info icon on the Groups page. */

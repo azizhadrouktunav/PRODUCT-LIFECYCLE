@@ -35,7 +35,7 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     idColumn: 'Capability ID',
     requiredColumn: 'Name',
     columns: [
-      { label: 'Capability ID', example: 'CAP-0026' },
+      { label: 'Capability ID', example: 'CAP-S-0001' },
       { label: 'Name', example: 'Driver Behaviour Scoring' },
       {
         label: 'Description',
@@ -59,7 +59,7 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     parentLabel: 'capability',
     columns: [
       { label: 'Epic ID', example: '' },
-      { label: 'Capability ID', example: 'CAP-0015' },
+      { label: 'Capability ID', example: 'CAP-S-0001' },
       { label: 'Key', example: 'FIQ-2220' },
       { label: 'Name', example: 'Driver scoring pipeline' },
       {
@@ -174,6 +174,7 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
         label: 'Description',
         example: 'Capabilities exposing TUNAV ONE to third-party systems.',
       },
+      { label: 'Code', example: 'I' },
       { label: 'Track', example: 'delivery' },
       { label: 'Process', example: 'How this group is worked, stage by stage.' },
     ],

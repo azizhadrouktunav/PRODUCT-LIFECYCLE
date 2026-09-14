@@ -96,10 +96,10 @@ interface RegistryValue {
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
   removeCapability: (id: string) => void;
-  addGroup: (name: string, description: string, track: TrackId, process: string) => void;
+  addGroup: (name: string, description: string, track: TrackId, process: string, code?: string) => void;
   updateGroup: (
     id: string,
-    patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process'>>
+    patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process' | 'code'>>
   ) => void;
   removeGroup: (id: string) => boolean;
   addLifecycle: (input: LifecycleInput) => Lifecycle;
@@ -162,10 +162,46 @@ const RegistryContext = createContext<RegistryValue | null>(null);
 
 function nextId(prefix: string, existing: { id: string }[], pad = 3): string {
   const max = existing.reduce((acc, item) => {
-    const n = Number(item.id.replace(`${prefix}-`, ''));
+    if (!item.id.startsWith(`${prefix}-`)) return acc;
+    const n = Number(item.id.slice(prefix.length + 1));
     return Number.isFinite(n) && n > acc ? n : acc;
   }, 0);
   return `${prefix}-${String(max + 1).padStart(pad, '0')}`;
+}
+
+/** First letter of the first word — Software → S, Hardware → H. */
+export function baseGroupCode(name: string): string {
+  const first = name
+    .trim()
+    .split(/\s+/)[0]
+    ?.replace(/[^a-zA-Z0-9]/g, '')
+    .charAt(0)
+    .toUpperCase();
+  if (first) return first;
+  const fallback = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().charAt(0);
+  return fallback || 'G';
+}
+
+export function uniqueGroupCode(
+  name: string,
+  existing: { id: string; code: string }[],
+  excludeId?: string
+): string {
+  const base = baseGroupCode(name);
+  const taken = new Set(
+    existing
+      .filter((g) => g.id !== excludeId)
+      .map((g) => g.code.trim().toUpperCase())
+      .filter(Boolean)
+  );
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}${n}`)) n += 1;
+  return `${base}${n}`;
+}
+
+function normalizeGroupCode(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
 }
 
 function roleFromActorIds(actorIds: string[], actors: Actor[]): string {
@@ -459,8 +495,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addCapability = useCallback(
     (input: NewCapabilityInput) => {
+      const group = groups.find((g) => g.id === input.groupId);
+      const code = group?.code?.trim().toUpperCase() || baseGroupCode(group?.name ?? 'G');
       const created: Capability = {
-        id: nextId('CAP', capabilities, 4),
+        id: nextId(`CAP-${code}`, capabilities, 4),
         name: input.name.trim(),
         description: input.description.trim(),
         groupId: input.groupId,
@@ -474,7 +512,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       void api.upsertCapability(created).catch((err) => persistError('addCapability', err));
       return created;
     },
-    [capabilities, isEquipmentGroup, resolveLifecycle, trackOfGroup]
+    [capabilities, groups, isEquipmentGroup, resolveLifecycle, trackOfGroup]
   );
 
   const updateCapability = useCallback(
@@ -526,34 +564,54 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [epics, features, stories]
   );
 
-  const addGroup = useCallback((name: string, description: string, track: TrackId, process: string) => {
-    setGroups((prev) => {
-      const created: CapabilityGroup = {
-        id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
-          .replace(/[^a-zA-Z]/g, '')
-          .slice(0, 3)
-          .toUpperCase()}`,
-        name: name.trim(),
-        description: description.trim(),
-        track,
-        process: process.trim(),
-      };
-      void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
-      return [...prev, created];
-    });
-  }, []);
+  const addGroup = useCallback(
+    (name: string, description: string, track: TrackId, process: string, code?: string) => {
+      setGroups((prev) => {
+        const normalized = normalizeGroupCode(code ?? '') || uniqueGroupCode(name, prev);
+        const unique = prev.some((g) => g.code === normalized)
+          ? uniqueGroupCode(name, prev)
+          : normalized;
+        const created: CapabilityGroup = {
+          id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
+            .replace(/[^a-zA-Z]/g, '')
+            .slice(0, 3)
+            .toUpperCase()}`,
+          name: name.trim(),
+          description: description.trim(),
+          code: unique,
+          track,
+          process: process.trim(),
+        };
+        void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
+        return [...prev, created];
+      });
+    },
+    []
+  );
 
   const updateGroup = useCallback(
-    (id: string, patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process'>>) => {
+    (
+      id: string,
+      patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process' | 'code'>>
+    ) => {
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id !== id) return g;
+          let nextCode = g.code;
+          if (patch.code !== undefined) {
+            const normalized = normalizeGroupCode(patch.code);
+            if (normalized) {
+              const clash = prev.some((other) => other.id !== id && other.code === normalized);
+              nextCode = clash ? uniqueGroupCode(patch.name ?? g.name, prev, id) : normalized;
+            }
+          }
           const updated = {
             ...g,
             ...patch,
             name: patch.name !== undefined ? patch.name.trim() : g.name,
             description: patch.description !== undefined ? patch.description.trim() : g.description,
             process: patch.process !== undefined ? patch.process.trim() : g.process,
+            code: nextCode,
           };
           void api.upsertGroup(updated).catch((err) => persistError('updateGroup', err));
           return updated;
@@ -954,6 +1012,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         'Group ID': g.id,
         Name: g.name,
         Description: g.description,
+        Code: g.code,
         Track: g.track,
         Process: g.process,
       }));
@@ -1012,7 +1071,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             touch(next[at].id);
             result.updated += 1;
           } else {
-            const createdId = id || nextId('CAP', next, 4);
+            const groupCode =
+              groups.find((g) => g.id === groupId)?.code?.trim().toUpperCase() ||
+              baseGroupCode(groups.find((g) => g.id === groupId)?.name ?? 'G');
+            const createdId = id || nextId(`CAP-${groupCode}`, next, 4);
             next.unshift({ id: createdId, ...patch });
             touch(createdId);
             result.created += 1;
@@ -1260,6 +1322,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             : [...lifecycleIds].find((id) => id.toLowerCase() === trackRaw.toLowerCase()) ??
               resolveLifecycle(undefined).id;
         const id = (r['Group ID'] ?? '').trim();
+        const codeRaw = (r['Code'] ?? '').trim();
         const patch = {
           name,
           description: (r['Description'] ?? '').trim(),
@@ -1268,9 +1331,23 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         };
         const at = id ? next.findIndex((g) => g.id === id) : -1;
         if (at >= 0) {
-          next[at] = { ...next[at], ...patch };
+          const code =
+            normalizeGroupCode(codeRaw) ||
+            next[at].code ||
+            uniqueGroupCode(name, next, next[at].id);
+          const clash = next.some((g, idx) => idx !== at && g.code === code);
+          next[at] = {
+            ...next[at],
+            ...patch,
+            code: clash ? uniqueGroupCode(name, next, next[at].id) : code,
+          };
           result.updated += 1;
         } else {
+          const code =
+            normalizeGroupCode(codeRaw) || uniqueGroupCode(name, next);
+          const unique = next.some((g) => g.code === code)
+            ? uniqueGroupCode(name, next)
+            : code;
           next.push({
             id:
               id ||
@@ -1279,6 +1356,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
                 .slice(0, 3)
                 .toUpperCase()}`,
             ...patch,
+            code: unique,
           });
           result.created += 1;
         }
