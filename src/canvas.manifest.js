@@ -7,7 +7,7 @@ export const manifest = {
     scr_bdunh4: { name: "Manage Features", route: "/capabilities/CAP-0015/epics/EPIC-001/features", position: { "x": 1560, "y": 6160 } },
     scr_3vjyjc: { name: "Manage User Stories", route: "/capabilities/CAP-0015/epics/EPIC-001/features/FEAT-001/stories", position: { "x": 2960, "y": 6160 } },
     scr_li958e: { name: "Capability Groups", route: "/groups", position: { "x": 160, "y": 2200 } },
-    scr_tsofxm: { name: "Domains", route: "/domains", position: { "x": 1560, "y": 2200 } },
+    scr_tsofxm: { name: "Products", route: "/products", position: { "x": 1560, "y": 2200 } },
     scr_1jfzus: { name: "Equipment", route: "/equipment", position: { "x": 2960, "y": 2200 } },
     scr_u182jc: { name: "Waves", route: "/waves", position: { "x": 4360, "y": 2200 } }
   },

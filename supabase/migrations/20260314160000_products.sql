@@ -1,4 +1,4 @@
--- Replace domains / domain_categories with products
+-- Replace domains / domain_categories with products (idempotent)
 
 create table if not exists public.products (
   id text primary key,
@@ -12,27 +12,41 @@ alter table public.capabilities
 alter table public.actors
   add column if not exists product_ids text[] not null default '{}';
 
--- Seed products from existing domains (keep domain ids so capability links stay valid)
-insert into public.products (id, name, description)
-select d.id, d.name, coalesce(d.description, '')
-from public.domains d
-on conflict (id) do nothing;
+-- Seed / backfill only while legacy tables/columns still exist
+do $$
+begin
+  if to_regclass('public.domains') is not null then
+    insert into public.products (id, name, description)
+    select d.id, d.name, coalesce(d.description, '')
+    from public.domains d
+    on conflict (id) do nothing;
+  end if;
 
--- Capabilities: copy domain_ids → product_ids
-update public.capabilities
-set product_ids = coalesce(domain_ids, '{}')
-where coalesce(cardinality(product_ids), 0) = 0
-  and coalesce(cardinality(domain_ids), 0) > 0;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'capabilities' and column_name = 'domain_ids'
+  ) then
+    update public.capabilities
+    set product_ids = coalesce(domain_ids, '{}')
+    where coalesce(cardinality(product_ids), 0) = 0
+      and coalesce(cardinality(domain_ids), 0) > 0;
+  end if;
 
--- Actors: expand category_ids → all domain/product ids under those categories
-update public.actors a
-set product_ids = (
-  select coalesce(array_agg(distinct d.id), '{}')
-  from unnest(a.category_ids) as cid
-  join public.domains d on d.category_id = cid
-)
-where coalesce(cardinality(a.product_ids), 0) = 0
-  and coalesce(cardinality(a.category_ids), 0) > 0;
+  if to_regclass('public.domains') is not null
+     and exists (
+       select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'actors' and column_name = 'category_ids'
+     ) then
+    update public.actors a
+    set product_ids = (
+      select coalesce(array_agg(distinct d.id), '{}')
+      from unnest(a.category_ids) as cid
+      join public.domains d on d.category_id = cid
+    )
+    where coalesce(cardinality(a.product_ids), 0) = 0
+      and coalesce(cardinality(a.category_ids), 0) > 0;
+  end if;
+end $$;
 
 alter table public.capabilities drop column if exists domain_ids;
 alter table public.actors drop column if exists category_ids;
