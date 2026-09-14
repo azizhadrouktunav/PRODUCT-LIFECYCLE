@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { InfoIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { AddGroupModal } from '../components/AddGroupModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Modal } from '../components/Modal';
-import { Button, PageHeader, StagePill, TONE_DOT } from '../components/Primitives';
+import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
 import { REQUIREMENT_LABEL, usesEquipment } from '../types/registry';
@@ -149,27 +148,6 @@ export function GroupsPage() {
                 </span>
               </div>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">{g.description}</p>
-
-              {members.length > 0 ? (
-                <ul className="mt-4 border-t border-line">
-                  {members.map((c) => (
-                    <li key={c.id} className="border-b border-line-soft">
-                      <Link
-                        to={`/capabilities/${c.id}`}
-                        className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 transition-colors duration-150 ease-out hover:text-strong"
-                      >
-                        <span className="w-20 font-mono text-2xs text-ink-500">{c.id}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm text-soft">{c.name}</span>
-                        <StagePill track={g.track} stage={c.progress} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-4 border-t border-line pt-4 text-xs text-ink-500">
-                  No capabilities registered in this group yet.
-                </p>
-              )}
             </section>
           );
         })}
