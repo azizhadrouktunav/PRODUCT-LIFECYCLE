@@ -143,7 +143,7 @@ function mapActor(row: Record<string, unknown>): Actor {
     id: String(row.id),
     name: String(row.name),
     description: String(row.description ?? ''),
-    domainIds: (row.domain_ids as string[] | null) ?? [],
+    categoryIds: (row.category_ids as string[] | null) ?? [],
   };
 }
 
@@ -386,7 +386,7 @@ export async function upsertActor(actor: Actor): Promise<void> {
     id: actor.id,
     name: actor.name,
     description: actor.description,
-    domain_ids: actor.domainIds,
+    category_ids: actor.categoryIds,
   });
   throwIfError(error, 'Upsert actor');
 }
@@ -649,7 +649,7 @@ export async function upsertActors(items: Actor[]): Promise<void> {
       id: actor.id,
       name: actor.name,
       description: actor.description,
-      domain_ids: actor.domainIds,
+      category_ids: actor.categoryIds,
     }))
   );
   throwIfError(error, 'Upsert actors');

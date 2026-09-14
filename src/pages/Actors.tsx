@@ -7,7 +7,7 @@ import { useRegistry } from '../contexts/RegistryContext';
 import type { Actor } from '../types/registry';
 
 export function ActorsPage() {
-  const { actors, domains, getDomain, removeActor } = useRegistry();
+  const { actors, categories, removeActor } = useRegistry();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Actor | null>(null);
 
@@ -18,7 +18,7 @@ export function ActorsPage() {
       <PageHeader
         title="Actors"
         count={`${actors.length} actors`}
-        description="Personas used in user stories. Each actor is assigned to one or more domains; stories only offer actors that match the capability’s domains."
+        description="Personas used in user stories. Each actor is assigned to one or more domain categories; stories only offer actors that match the categories of the capability’s domains."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             <DataTransfer dataset="actors" />
@@ -41,7 +41,8 @@ export function ActorsPage() {
           <UsersIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No actors yet.</p>
           <p className="mt-1 text-xs text-mute">
-            Add an actor with a name, description and domains, then select them in user stories.
+            Add an actor with a name, description and domain categories, then select them in user
+            stories.
           </p>
         </div>
       ) : (
@@ -52,7 +53,7 @@ export function ActorsPage() {
                 <th className="w-28 py-2.5 pr-4 font-medium">ID</th>
                 <th className="w-48 py-2.5 pr-4 font-medium">Name</th>
                 <th className="py-2.5 pr-4 font-medium">Description</th>
-                <th className="w-64 py-2.5 pr-4 font-medium">Domains</th>
+                <th className="w-64 py-2.5 pr-4 font-medium">Categories</th>
                 <th className="w-24 py-2.5 text-right font-medium">Actions</th>
               </tr>
             </thead>
@@ -68,15 +69,15 @@ export function ActorsPage() {
                   </td>
                   <td className="py-3 pr-4">
                     <div className="flex flex-wrap gap-1">
-                      {actor.domainIds.length === 0 ? (
+                      {actor.categoryIds.length === 0 ? (
                         <span className="text-2xs text-mute">—</span>
                       ) : (
-                        actor.domainIds.map((id) => {
-                          const d = getDomain(id) ?? domains.find((x) => x.id === id);
+                        actor.categoryIds.map((id) => {
+                          const c = categories.find((x) => x.id === id);
                           return (
                             <Chip key={id}>
                               <span className="font-mono">{id}</span>
-                              {d ? ` · ${d.name}` : ''}
+                              {c ? ` · ${c.name}` : ''}
                             </Chip>
                           );
                         })

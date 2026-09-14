@@ -312,7 +312,7 @@ export interface Actor {
   id: string;
   name: string;
   description: string;
-  domainIds: string[];
+  categoryIds: string[];
 }
 
 export interface CapabilityGroup {

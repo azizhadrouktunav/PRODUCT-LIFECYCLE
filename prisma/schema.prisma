@@ -32,7 +32,7 @@ model Actor {
   id          String   @id
   name        String
   description String   @default("")
-  domainIds   String[] @default([]) @map("domain_ids")
+  categoryIds String[] @default([]) @map("category_ids")
 
   @@map("actors")
 }

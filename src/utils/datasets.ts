@@ -146,7 +146,7 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
     { label: 'Actor ID', example: 'ACT-001' },
     { label: 'Name', example: 'Fleet manager' },
     { label: 'Description', example: 'Owns day-to-day fleet operations and coaching.' },
-    { label: 'Domain IDs', example: 'FIQ-D03; FIQ-D05' }]
+    { label: 'Category IDs', example: 'CAT-FIQ; CAT-CORE' }]
 
   },
   groups: {

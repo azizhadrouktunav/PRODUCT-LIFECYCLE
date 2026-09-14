@@ -212,7 +212,7 @@ export function StoryModal({
   featureName: string;
   story?: UserStory | null;
 }) {
-  const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf, actors } =
+  const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf, actors, domains } =
     useRegistry();
   const feature = getFeature(featureId);
   const epic = feature ? getEpic(feature.epicId) : undefined;
@@ -226,10 +226,16 @@ export function StoryModal({
   const availableActors = useMemo(() => {
     const domainIds = capability?.domainIds ?? [];
     if (domainIds.length === 0) return [];
+    const categoryIds = new Set(
+      domainIds
+        .map((id) => domains.find((d) => d.id === id)?.categoryId)
+        .filter((id): id is string => !!id)
+    );
+    if (categoryIds.size === 0) return [];
     return actors
-      .filter((a) => a.domainIds.some((d) => domainIds.includes(d)))
+      .filter((a) => a.categoryIds.some((c) => categoryIds.has(c)))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [actors, capability]);
+  }, [actors, capability, domains]);
 
   const [title, setTitle] = useState('');
   const [actorIds, setActorIds] = useState<string[]>([]);
@@ -334,8 +340,8 @@ export function StoryModal({
                 </p>
               ) : availableActors.length === 0 ? (
                 <p className="rounded-md border border-line-strong bg-ink-800 p-2.5 text-2xs text-mute">
-                  No actors match this capability’s domains. Add actors under Actors and assign them
-                  to those domains.
+                  No actors match this capability’s domain categories. Add actors under Actors and
+                  assign them to those categories.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">

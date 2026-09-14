@@ -78,7 +78,7 @@ export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type
 export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
 export type CategoryInput = Pick<DomainCategory, 'id' | 'name' | 'shortName' | 'prefix' | 'description'>;
 export type DomainInput = Pick<Domain, 'id' | 'name' | 'description' | 'categoryId'>;
-export type ActorInput = Pick<Actor, 'name' | 'description' | 'domainIds'>;
+export type ActorInput = Pick<Actor, 'name' | 'description' | 'categoryIds'>;
 
 interface RegistryValue {
   loading: boolean;
@@ -400,6 +400,20 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
       setCategories((prev) => prev.filter((c) => c.id !== id));
+      setActors((prev) => {
+        const next = prev.map((actor) => {
+          if (!actor.categoryIds.includes(id)) return actor;
+          const updated = {
+            ...actor,
+            categoryIds: actor.categoryIds.filter((c) => c !== id),
+          };
+          void api.upsertActor(updated).catch((err) =>
+            persistError('removeCategory actor', err)
+          );
+          return updated;
+        });
+        return next;
+      });
       void api.deleteCategory(id).catch((err) => persistError('removeCategory', err));
       return true;
     },
@@ -459,15 +473,6 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       });
       return next;
     });
-    setActors((prev) => {
-      const next = prev.map((actor) => {
-        if (!actor.domainIds.includes(id)) return actor;
-        const updated = { ...actor, domainIds: actor.domainIds.filter((d) => d !== id) };
-        void api.upsertActor(updated).catch((err) => persistError('removeDomain actor', err));
-        return updated;
-      });
-      return next;
-    });
     void api.deleteDomain(id).catch((err) => persistError('removeDomain', err));
   }, []);
 
@@ -477,7 +482,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         id: nextId('ACT', actors),
         name: input.name.trim(),
         description: input.description.trim(),
-        domainIds: input.domainIds,
+        categoryIds: input.categoryIds,
       };
       setActors((prev) => [...prev, created]);
       void api.upsertActor(created).catch((err) => persistError('addActor', err));
@@ -495,7 +500,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           ...patch,
           name: patch.name !== undefined ? patch.name.trim() : a.name,
           description: patch.description !== undefined ? patch.description.trim() : a.description,
-          domainIds: patch.domainIds !== undefined ? patch.domainIds : a.domainIds,
+          categoryIds: patch.categoryIds !== undefined ? patch.categoryIds : a.categoryIds,
         };
         void api.upsertActor(updated).catch((err) => persistError('updateActor', err));
         return updated;
@@ -1033,7 +1038,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           'Actor ID': a.id,
           Name: a.name,
           Description: a.description,
-          'Domain IDs': a.domainIds.join('; '),
+          'Category IDs': a.categoryIds.join('; '),
         }));
       }
       return groups.map((g) => ({
@@ -1316,12 +1321,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const name = (r['Name'] ?? '').trim();
           if (!name) return note(i, 'no name');
           const id = (r['Actor ID'] ?? '').trim();
-          const domainIds = list(r['Domain IDs'] ?? '').filter((d) => domainMap.has(d));
-          if (domainIds.length === 0) return note(i, 'at least one known domain ID is required');
+          const categoryIds = list(r['Category IDs'] ?? '').filter((c) => categoryMap.has(c));
+          if (categoryIds.length === 0) return note(i, 'at least one known category ID is required');
           const patch = {
             name,
             description: (r['Description'] ?? '').trim(),
-            domainIds,
+            categoryIds,
           };
           const at = id ? next.findIndex((a) => a.id === id) : -1;
           if (at >= 0) {
