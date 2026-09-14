@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeftIcon,
+  CheckIcon,
   EyeIcon,
+  FileTextIcon,
   HashIcon,
   PencilIcon,
   PlusIcon,
@@ -84,6 +86,136 @@ function StoryPointsModal({
   );
 }
 
+function StoryAdrModal({
+  open,
+  story,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  story: UserStory | null;
+  onClose: () => void;
+  onSave: (payload: {
+    adrContext: string;
+    adrDecision: string;
+    adrTechnical: string;
+    adrConsequences: string;
+    adrApproved: boolean;
+  }) => void;
+}) {
+  const [adrContext, setAdrContext] = useState('');
+  const [adrDecision, setAdrDecision] = useState('');
+  const [adrTechnical, setAdrTechnical] = useState('');
+  const [adrConsequences, setAdrConsequences] = useState('');
+  const [adrApproved, setAdrApproved] = useState(false);
+  const isUpdate = !!story?.adrDecision?.trim();
+
+  useEffect(() => {
+    if (!open) return;
+    setAdrContext(story?.adrContext ?? '');
+    setAdrDecision(story?.adrDecision ?? '');
+    setAdrTechnical(story?.adrTechnical ?? '');
+    setAdrConsequences(story?.adrConsequences ?? '');
+    setAdrApproved(story?.adrApproved ?? false);
+  }, [open, story]);
+
+  function submit() {
+    onSave({
+      adrContext,
+      adrDecision,
+      adrTechnical,
+      adrConsequences,
+      adrApproved,
+    });
+    onClose();
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      width="max-w-xl"
+      title={
+        isUpdate
+          ? 'Update architecture decision record'
+          : 'Set architecture decision record'
+      }
+      subtitle={story ? `${story.id} · ${story.title}` : undefined}
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+            Architecture decision record
+          </p>
+          <button
+            type="button"
+            onClick={() => setAdrApproved(!adrApproved)}
+            aria-pressed={adrApproved}
+            className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-2xs transition-colors duration-150 ease-out ${
+              adrApproved
+                ? 'border-ok/40 text-ok'
+                : 'border-line-strong text-mute hover:text-strong'
+            }`}
+          >
+            <span
+              className={`flex h-3 w-3 items-center justify-center rounded-sm border ${
+                adrApproved ? 'border-ok bg-ok' : 'border-line-strong'
+              }`}
+              aria-hidden="true"
+            >
+              {adrApproved && <CheckIcon className="h-2 w-2 text-white" />}
+            </span>
+            Technically approved
+          </button>
+        </div>
+
+        <Field label="Context" hint="why a decision is needed">
+          <textarea
+            className={`${inputClass} min-h-[60px] resize-y`}
+            value={adrContext}
+            onChange={(e) => setAdrContext(e.target.value)}
+          />
+        </Field>
+        <Field label="Decision">
+          <textarea
+            className={`${inputClass} min-h-[60px] resize-y`}
+            value={adrDecision}
+            onChange={(e) => setAdrDecision(e.target.value)}
+          />
+        </Field>
+        <Field label="Technical information" hint="how it will be built">
+          <textarea
+            className={`${inputClass} min-h-[60px] resize-y`}
+            value={adrTechnical}
+            onChange={(e) => setAdrTechnical(e.target.value)}
+          />
+        </Field>
+        <Field label="Consequences">
+          <textarea
+            className={`${inputClass} min-h-[60px] resize-y`}
+            value={adrConsequences}
+            onChange={(e) => setAdrConsequences(e.target.value)}
+          />
+        </Field>
+
+        <p className="text-2xs leading-relaxed text-mute">
+          A story cannot pass In Architecture until the ADR is technically approved.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 export function ManageStoriesPage() {
   const { capabilityId = '', epicId = '', featureId = '' } = useParams();
   const navigate = useNavigate();
@@ -96,6 +228,7 @@ export function ManageStoriesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [details, setDetails] = useState<UserStory | null>(null);
   const [pointsStory, setPointsStory] = useState<UserStory | null>(null);
+  const [adrStory, setAdrStory] = useState<UserStory | null>(null);
 
   if (!capability || !epic || !feature) {
     return (
@@ -221,6 +354,13 @@ export function ManageStoriesPage() {
                         onSelect: () => setPointsStory(story),
                       },
                       {
+                        label: story.adrDecision?.trim()
+                          ? 'Update architecture decision record'
+                          : 'Set architecture decision record',
+                        icon: FileTextIcon,
+                        onSelect: () => setAdrStory(story),
+                      },
+                      {
                         label: 'Delete User Story',
                         icon: Trash2Icon,
                         danger: true,
@@ -279,6 +419,15 @@ export function ManageStoriesPage() {
         onClose={() => setPointsStory(null)}
         onSave={(points) => {
           if (pointsStory) updateStory(pointsStory.id, { points });
+        }}
+      />
+
+      <StoryAdrModal
+        open={!!adrStory}
+        story={adrStory}
+        onClose={() => setAdrStory(null)}
+        onSave={(payload) => {
+          if (adrStory) updateStory(adrStory.id, payload);
         }}
       />
 

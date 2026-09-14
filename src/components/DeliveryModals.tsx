@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { CheckIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
@@ -8,27 +7,27 @@ import { CAPABILITY_STATUSES, DEFAULT_STORY_STAGES } from '../types/registry';
 
 function StatusField({
   value,
-  onChange
-
-
-
-}: {value: CapabilityStatus | '';onChange: (v: CapabilityStatus | '') => void;}) {
+  onChange,
+}: {
+  value: CapabilityStatus | '';
+  onChange: (v: CapabilityStatus | '') => void;
+}) {
   return (
     <Field label="Status">
       <select
         className={inputClass}
         value={value}
-        onChange={(e) => onChange(e.target.value as CapabilityStatus | '')}>
-        
+        onChange={(e) => onChange(e.target.value as CapabilityStatus | '')}
+      >
         <option value="">No status</option>
-        {CAPABILITY_STATUSES.map((s) =>
-        <option key={s} value={s}>
+        {CAPABILITY_STATUSES.map((s) => (
+          <option key={s} value={s}>
             {s}
           </option>
-        )}
+        ))}
       </select>
-    </Field>);
-
+    </Field>
+  );
 }
 
 export function EpicModal({
@@ -36,14 +35,14 @@ export function EpicModal({
   onClose,
   capabilityId,
   epic,
-  suggestedKey = ''
-
-
-
-
-
-
-}: {open: boolean;onClose: () => void;capabilityId: string;epic?: Epic | null;suggestedKey?: string;}) {
+  suggestedKey = '',
+}: {
+  open: boolean;
+  onClose: () => void;
+  capabilityId: string;
+  epic?: Epic | null;
+  suggestedKey?: string;
+}) {
   const { addEpic, updateEpic } = useRegistry();
   const [key, setKey] = useState('');
   const [name, setName] = useState('');
@@ -63,8 +62,8 @@ export function EpicModal({
   function submit() {
     if (!valid) return;
     const payload = { key, name, description, status: status === '' ? null : status };
-    if (epic) updateEpic(epic.id, payload);else
-    addEpic(capabilityId, payload);
+    if (epic) updateEpic(epic.id, payload);
+    else addEpic(capabilityId, payload);
     onClose();
   }
 
@@ -75,12 +74,12 @@ export function EpicModal({
       width="max-w-xl"
       title={epic ? 'Edit epic' : 'Add epic'}
       subtitle={
-      epic ?
-      `${epic.id} · part of ${capabilityId}` :
-      `Epics are the delivery slices of ${capabilityId}. Features go inside them.`
+        epic
+          ? `${epic.id} · part of ${capabilityId}`
+          : `Epics are the delivery slices of ${capabilityId}. Features go inside them.`
       }
       footer={
-      <>
+        <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
@@ -88,8 +87,8 @@ export function EpicModal({
             {epic ? 'Save epic' : 'Add epic'}
           </Button>
         </>
-      }>
-      
+      }
+    >
       <div className="space-y-5">
         <div className="grid gap-5 sm:grid-cols-[160px_minmax(0,1fr)]">
           <Field label="Jira key" hint="optional">
@@ -97,16 +96,16 @@ export function EpicModal({
               className={inputClass}
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              placeholder="FIQ-2210" />
-            
+              placeholder="FIQ-2210"
+            />
           </Field>
           <Field label="Epic name" required>
             <input
               className={inputClass}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Drain detection engine" />
-            
+              placeholder="e.g. Drain detection engine"
+            />
           </Field>
         </div>
         <Field label="Description">
@@ -114,13 +113,13 @@ export function EpicModal({
             className={`${inputClass} min-h-[84px] resize-y`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What this epic delivers, and where it stops." />
-          
+            placeholder="What this epic delivers, and where it stops."
+          />
         </Field>
         <StatusField value={status} onChange={setStatus} />
       </div>
-    </Modal>);
-
+    </Modal>
+  );
 }
 
 export function FeatureModal({
@@ -128,14 +127,14 @@ export function FeatureModal({
   onClose,
   epicId,
   epicName,
-  feature
-
-
-
-
-
-
-}: {open: boolean;onClose: () => void;epicId: string;epicName: string;feature?: Feature | null;}) {
+  feature,
+}: {
+  open: boolean;
+  onClose: () => void;
+  epicId: string;
+  epicName: string;
+  feature?: Feature | null;
+}) {
   const { addFeature, updateFeature } = useRegistry();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -153,8 +152,8 @@ export function FeatureModal({
   function submit() {
     if (!valid) return;
     const payload = { name, description, status: status === '' ? null : status };
-    if (feature) updateFeature(feature.id, payload);else
-    addFeature(epicId, payload);
+    if (feature) updateFeature(feature.id, payload);
+    else addFeature(epicId, payload);
     onClose();
   }
 
@@ -166,7 +165,7 @@ export function FeatureModal({
       title={feature ? 'Edit feature' : 'Add feature'}
       subtitle={`Inside epic · ${epicName}`}
       footer={
-      <>
+        <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
@@ -174,29 +173,29 @@ export function FeatureModal({
             {feature ? 'Save feature' : 'Add feature'}
           </Button>
         </>
-      }>
-      
+      }
+    >
       <div className="space-y-5">
         <Field label="Feature name" required>
           <input
             className={inputClass}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Refuel exclusion logic" />
-          
+            placeholder="e.g. Refuel exclusion logic"
+          />
         </Field>
         <Field label="Description">
           <textarea
             className={`${inputClass} min-h-[84px] resize-y`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="The behaviour this feature adds." />
-          
+            placeholder="The behaviour this feature adds."
+          />
         </Field>
         <StatusField value={status} onChange={setStatus} />
       </div>
-    </Modal>);
-
+    </Modal>
+  );
 }
 
 export function StoryModal({
@@ -204,14 +203,14 @@ export function StoryModal({
   onClose,
   featureId,
   featureName,
-  story
-
-
-
-
-
-
-}: {open: boolean;onClose: () => void;featureId: string;featureName: string;story?: UserStory | null;}) {
+  story,
+}: {
+  open: boolean;
+  onClose: () => void;
+  featureId: string;
+  featureName: string;
+  story?: UserStory | null;
+}) {
   const { addStory, updateStory, getFeature, getEpic, capabilityOfEpic, lifecycleOf } = useRegistry();
   const feature = getFeature(featureId);
   const epic = feature ? getEpic(feature.epicId) : undefined;
@@ -229,11 +228,6 @@ export function StoryModal({
   const [criteria, setCriteria] = useState('');
   const [stage, setStage] = useState<string>(storyStages[0]?.name ?? '');
   const [status, setStatus] = useState<CapabilityStatus | ''>('');
-  const [adrContext, setAdrContext] = useState('');
-  const [adrDecision, setAdrDecision] = useState('');
-  const [adrTechnical, setAdrTechnical] = useState('');
-  const [adrConsequences, setAdrConsequences] = useState('');
-  const [adrApproved, setAdrApproved] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -244,16 +238,11 @@ export function StoryModal({
     setCriteria(story?.criteria.join('\n') ?? '');
     setStage(story?.stage ?? storyStages[0]?.name ?? '');
     setStatus(story?.status ?? '');
-    setAdrContext(story?.adrContext ?? '');
-    setAdrDecision(story?.adrDecision ?? '');
-    setAdrTechnical(story?.adrTechnical ?? '');
-    setAdrConsequences(story?.adrConsequences ?? '');
-    setAdrApproved(story?.adrApproved ?? false);
   }, [open, story, lifecycle?.id]);
 
   const stageIdx = storyStages.findIndex((s) => s.name === stage);
   const archIdx = storyStages.findIndex((s) => s.name === architectureStage);
-  const adrBlocked = archIdx >= 0 && stageIdx > archIdx && !adrApproved;
+  const adrBlocked = archIdx >= 0 && stageIdx > archIdx && !(story?.adrApproved ?? false);
   const valid = title.trim().length > 1 && !adrBlocked;
 
   function submit() {
@@ -267,14 +256,14 @@ export function StoryModal({
       points: story?.points ?? null,
       stage,
       status: status === '' ? null : status,
-      adrContext,
-      adrDecision,
-      adrTechnical,
-      adrConsequences,
-      adrApproved
+      adrContext: story?.adrContext ?? '',
+      adrDecision: story?.adrDecision ?? '',
+      adrTechnical: story?.adrTechnical ?? '',
+      adrConsequences: story?.adrConsequences ?? '',
+      adrApproved: story?.adrApproved ?? false,
     };
-    if (story) updateStory(story.id, payload);else
-    addStory(featureId, payload);
+    if (story) updateStory(story.id, payload);
+    else addStory(featureId, payload);
     onClose();
   }
 
@@ -286,7 +275,7 @@ export function StoryModal({
       title={story ? 'Edit user story' : 'Add user story'}
       subtitle={`Inside feature · ${featureName}`}
       footer={
-      <>
+        <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
@@ -294,16 +283,16 @@ export function StoryModal({
             {story ? 'Save story' : 'Add story'}
           </Button>
         </>
-      }>
-      
+      }
+    >
       <div className="space-y-5">
         <Field label="Story title" required>
           <input
             className={inputClass}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Flag a sudden drop while parked" />
-          
+            placeholder="e.g. Flag a sudden drop while parked"
+          />
         </Field>
 
         <div className="rounded-md border border-line-strong bg-ink-900 p-3">
@@ -314,24 +303,24 @@ export function StoryModal({
                 className={inputClass}
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                placeholder="operations manager" />
-              
+                placeholder="operations manager"
+              />
             </Field>
             <Field label="I want to">
               <input
                 className={inputClass}
                 value={want}
                 onChange={(e) => setWant(e.target.value)}
-                placeholder="be alerted when the level drops with the engine off" />
-              
+                placeholder="be alerted when the level drops with the engine off"
+              />
             </Field>
             <Field label="So that">
               <input
                 className={inputClass}
                 value={benefit}
                 onChange={(e) => setBenefit(e.target.value)}
-                placeholder="I can act on a theft the same day" />
-              
+                placeholder="I can act on a theft the same day"
+              />
             </Field>
           </div>
         </div>
@@ -341,88 +330,30 @@ export function StoryModal({
             className={`${inputClass} min-h-[96px] resize-y`}
             value={criteria}
             onChange={(e) => setCriteria(e.target.value)}
-            placeholder={'Threshold is configurable per tank size\nAlert carries location and time'} />
-          
+            placeholder={'Threshold is configurable per tank size\nAlert carries location and time'}
+          />
         </Field>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <StatusField value={status} onChange={setStatus} />
           <Field label="Progress stage">
             <select className={inputClass} value={stage} onChange={(e) => setStage(e.target.value)}>
-              {storyStages.map((s, i) =>
-              <option key={s.name} value={s.name}>
+              {storyStages.map((s, i) => (
+                <option key={s.name} value={s.name}>
                   {i + 1}. {s.name}
                 </option>
-              )}
+              ))}
             </select>
           </Field>
         </div>
 
-        <div
-          className={`rounded-md border p-3 ${
-          stage === architectureStage ? 'border-orange/40 bg-orange/5' : 'border-line-strong bg-ink-900'}`
-          }>
-          
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-              Architecture decision record
-            </p>
-            <button
-              type="button"
-              onClick={() => setAdrApproved(!adrApproved)}
-              aria-pressed={adrApproved}
-              className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-2xs transition-colors duration-150 ease-out ${
-              adrApproved ? 'border-ok/40 text-ok' : 'border-line-strong text-mute hover:text-strong'}`
-              }>
-              
-              <span
-                className={`flex h-3 w-3 items-center justify-center rounded-sm border ${
-                adrApproved ? 'border-ok bg-ok' : 'border-line-strong'}`
-                }
-                aria-hidden="true">
-                
-                {adrApproved && <CheckIcon className="h-2 w-2 text-white" />}
-              </span>
-              Technically approved
-            </button>
-          </div>
-          <div className="space-y-3">
-            <Field label="Context" hint="why a decision is needed">
-              <textarea
-                className={`${inputClass} min-h-[60px] resize-y`}
-                value={adrContext}
-                onChange={(e) => setAdrContext(e.target.value)} />
-              
-            </Field>
-            <Field label="Decision">
-              <textarea
-                className={`${inputClass} min-h-[60px] resize-y`}
-                value={adrDecision}
-                onChange={(e) => setAdrDecision(e.target.value)} />
-              
-            </Field>
-            <Field label="Technical information" hint="how it will be built">
-              <textarea
-                className={`${inputClass} min-h-[60px] resize-y`}
-                value={adrTechnical}
-                onChange={(e) => setAdrTechnical(e.target.value)} />
-              
-            </Field>
-            <Field label="Consequences">
-              <textarea
-                className={`${inputClass} min-h-[60px] resize-y`}
-                value={adrConsequences}
-                onChange={(e) => setAdrConsequences(e.target.value)} />
-              
-            </Field>
-          </div>
-          <p className={`mt-2 text-2xs leading-relaxed ${adrBlocked ? 'text-orange' : 'text-mute'}`}>
-            {adrBlocked ?
-            `“${stage}” is blocked until the ADR is technically approved.` :
-            'A story cannot pass In Architecture until the ADR is technically approved.'}
+        {adrBlocked && (
+          <p className="text-2xs leading-relaxed text-orange">
+            “{stage}” is blocked until the ADR is technically approved. Set the architecture decision
+            record from the story actions menu.
           </p>
-        </div>
+        )}
       </div>
-    </Modal>);
-
+    </Modal>
+  );
 }
