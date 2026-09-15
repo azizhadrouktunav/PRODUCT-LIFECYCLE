@@ -6,9 +6,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRegistry } from '../../contexts/RegistryContext';
 import {
   deleteUserAccount,
+  fetchAuthStatuses,
   fetchProfiles,
   inviteUser,
+  resendInvite,
   upsertProfile,
+  type AuthUserStatus,
 } from '../../lib/profileApi';
 import type { AppProfile, AppRoleRecord } from '../../lib/rbac';
 import { roleDisplayLabel } from '../../lib/rbac';
@@ -33,6 +36,8 @@ export function UsersSettingsPage() {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState('product_owner');
   const [inviteProducts, setInviteProducts] = useState<string[]>([]);
+  const [authStatuses, setAuthStatuses] = useState<Record<string, AuthUserStatus>>({});
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const sortedProducts = useMemo(
     () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
@@ -52,9 +57,14 @@ export function UsersSettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [list, roleList] = await Promise.all([fetchProfiles(), fetchRoles()]);
+      const [list, roleList, statuses] = await Promise.all([
+        fetchProfiles(),
+        fetchRoles(),
+        fetchAuthStatuses().catch(() => ({} as Record<string, AuthUserStatus>)),
+      ]);
       setProfiles(list);
       setRoles(roleList);
+      setAuthStatuses(statuses);
       setDrafts(Object.fromEntries(list.map((p) => [p.userId, { ...p }])));
       if (roleList.length && !roleList.some((r) => r.slug === inviteRole)) {
         setInviteRole(roleList[0].slug);
@@ -147,6 +157,19 @@ export function UsersSettingsPage() {
     }
   }
 
+  async function onResend(profile: AppProfile) {
+    setResendingId(profile.userId);
+    setError(null);
+    try {
+      await resendInvite(profile.userId);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   async function submitInvite() {
     const email = inviteEmail.trim().toLowerCase();
     if (!email || !inviteRole) return;
@@ -211,6 +234,7 @@ export function UsersSettingsPage() {
           {profiles.map((p) => {
             const draft = drafts[p.userId] ?? p;
             const draftSeesAll = roleSeesAllProducts(draft.role);
+            const isPending = authStatuses[p.userId] === 'pending';
             return (
               <section key={p.userId} className="border-t border-line pt-4">
                 <div className="flex flex-wrap items-baseline gap-3">
@@ -221,6 +245,11 @@ export function UsersSettingsPage() {
                   <span className="text-2xs text-mute">
                     {roleDisplayLabel(draft.role, roles)}
                   </span>
+                  {isPending && (
+                    <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-mute">
+                      Pending
+                    </span>
+                  )}
                 </div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -299,6 +328,15 @@ export function UsersSettingsPage() {
                   >
                     {savingId === p.userId ? 'Saving…' : 'Save'}
                   </Button>
+                  {isPending && (
+                    <Button
+                      variant="quiet"
+                      disabled={resendingId === p.userId}
+                      onClick={() => void onResend(p)}
+                    >
+                      {resendingId === p.userId ? 'Resending…' : 'Resend invite'}
+                    </Button>
+                  )}
                   <Button
                     variant="quiet"
                     disabled={deletingId === p.userId || user?.id === p.userId}

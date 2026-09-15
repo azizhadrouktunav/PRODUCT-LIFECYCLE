@@ -12,13 +12,18 @@
 Deploy after applying `20260316100000_app_roles.sql`:
 
 ```bash
-supabase functions deploy invite-user --project-ref pxlbuncwdswxisjnszas
-supabase functions deploy delete-user --project-ref pxlbuncwdswxisjnszas
+npx supabase login
+npx supabase functions deploy invite-user --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy delete-user --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy resend-invite --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy list-auth-status --project-ref pxlbuncwdswxisjnszas
 ```
 
-`verify_jwt = false` is set in `supabase/config.toml` for both functions so browser **OPTIONS** preflight succeeds (the API gateway would otherwise return 401 without CORS headers). Each function still validates the caller JWT and requires `manage_users` or `edit_all` via `requireManageUsers`.
+`verify_jwt = false` is set in `supabase/config.toml` for these functions so browser **OPTIONS** preflight succeeds (the API gateway would otherwise return 401 without CORS headers). Each function still validates the caller JWT and requires `manage_users` or `edit_all` via `requireManageUsers`.
 
 They use `SUPABASE_SERVICE_ROLE_KEY` (provided automatically in the Edge runtime) for Auth Admin APIs.
 
 - **invite-user** — body: `{ email, displayName, role, productIds }`
 - **delete-user** — body: `{ userId }` (refuses self-delete and last administrator)
+- **resend-invite** — body: `{ userId }` (pending users only; may recreate Auth user + profile)
+- **list-auth-status** — returns `{ statuses: { [userId]: 'pending' | 'active' } }`

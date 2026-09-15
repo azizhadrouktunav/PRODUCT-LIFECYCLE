@@ -155,3 +155,27 @@ export async function deleteUserAccount(userId: string): Promise<void> {
     throw new Error(String((data as { error: string }).error));
   }
 }
+
+export type AuthUserStatus = 'pending' | 'active';
+
+export async function fetchAuthStatuses(): Promise<Record<string, AuthUserStatus>> {
+  const { data, error } = await supabase.functions.invoke('list-auth-status', {
+    body: {},
+  });
+  if (error) throw new Error(error.message || 'Load auth status failed');
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String((data as { error: string }).error));
+  }
+  const statuses = (data as { statuses?: Record<string, AuthUserStatus> } | null)?.statuses;
+  return statuses ?? {};
+}
+
+export async function resendInvite(userId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('resend-invite', {
+    body: { userId },
+  });
+  if (error) throw new Error(error.message || 'Resend invite failed');
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String((data as { error: string }).error));
+  }
+}
