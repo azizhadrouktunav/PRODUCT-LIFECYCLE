@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CapabilityEditorProvider } from './contexts/CapabilityEditorContext';
@@ -16,7 +16,9 @@ import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
 import { ProductsPage } from './pages/Products';
-import { UsersPage } from './pages/Users';
+import { SettingsIndexRedirect, SettingsLayout } from './pages/settings/SettingsLayout';
+import { RolesSettingsPage } from './pages/settings/Roles';
+import { UsersSettingsPage } from './pages/settings/Users';
 import { WavesPage } from './pages/Waves';
 
 interface AppProps {
@@ -47,7 +49,12 @@ function AuthenticatedApp() {
               <Route path="/actors" element={<ActorsPage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
               <Route path="/waves" element={<WavesPage />} />
-              <Route path="/users" element={<UsersPage />} />
+              <Route path="/settings" element={<SettingsLayout />}>
+                <Route index element={<SettingsIndexRedirect />} />
+                <Route path="users" element={<UsersSettingsPage />} />
+                <Route path="roles" element={<RolesSettingsPage />} />
+              </Route>
+              <Route path="/users" element={<Navigate to="/settings/users" replace />} />
               <Route path="*" element={<CapabilitiesPage />} />
             </Routes>
           </AppShell>

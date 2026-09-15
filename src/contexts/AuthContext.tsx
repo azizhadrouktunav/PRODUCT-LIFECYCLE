@@ -11,13 +11,14 @@ import { supabase } from '../utils/supabase';
 import { fetchProfile, upsertProfile } from '../lib/profileApi';
 import type { AppProfile, AppRole, RbacAction } from '../lib/rbac';
 import {
-  can as rbacCan,
-  canSetCapabilityProgress,
-  canSetStoryStage,
+  canSetCapabilityProgressWithPermissions,
+  canSetStoryStageWithPermissions,
+  canWithPermissions,
   capabilityVisibleToUser,
-  isReadOnlyRole,
+  isReadOnlyFromPermissions,
   productVisibleToUser,
-  seesAllProducts,
+  roleDisplayLabel,
+  seesAllProductsFromFlag,
 } from '../lib/rbac';
 import type { Capability } from '../types/registry';
 
@@ -38,6 +39,8 @@ interface AuthValue {
   isReadOnly: boolean;
   assignedProductIds: string[];
   role: AppRole | null;
+  roleLabel: string;
+  permissions: RbacAction[];
   capabilityVisible: (c: Pick<Capability, 'productIds'>) => boolean;
   productVisible: (productId: string) => boolean;
 }
@@ -116,7 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadProfile, session?.user]);
 
   const role = profile?.role ?? null;
+  const permissions = profile?.permissions ?? [];
   const assignedProductIds = profile?.productIds ?? [];
+  const seesAll = seesAllProductsFromFlag(profile?.seesAllProducts);
 
   const value = useMemo<AuthValue>(
     () => ({
@@ -129,15 +134,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signOut,
       refreshProfile,
-      can: (action) => rbacCan(role, action),
-      canSetCapabilityProgress: (stage) => canSetCapabilityProgress(role, stage),
-      canSetStoryStage: (stage) => canSetStoryStage(role, stage),
-      seesAllProducts: seesAllProducts(role),
-      isReadOnly: isReadOnlyRole(role),
+      can: (action) => canWithPermissions(permissions, action),
+      canSetCapabilityProgress: (stage) =>
+        canSetCapabilityProgressWithPermissions(permissions, stage),
+      canSetStoryStage: (stage) => canSetStoryStageWithPermissions(permissions, stage),
+      seesAllProducts: seesAll,
+      isReadOnly: isReadOnlyFromPermissions(permissions),
       assignedProductIds,
       role,
-      capabilityVisible: (c) => capabilityVisibleToUser(c, role, assignedProductIds),
-      productVisible: (id) => productVisibleToUser(id, role, assignedProductIds),
+      roleLabel: roleDisplayLabel(role, profile?.roleLabel ? [{ slug: role!, label: profile.roleLabel }] : null),
+      permissions,
+      capabilityVisible: (c) => capabilityVisibleToUser(c, seesAll, assignedProductIds),
+      productVisible: (id) => productVisibleToUser(id, seesAll, assignedProductIds),
     }),
     [
       loading,
@@ -149,7 +157,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut,
       refreshProfile,
       role,
+      permissions,
       assignedProductIds,
+      seesAll,
     ]
   );
 

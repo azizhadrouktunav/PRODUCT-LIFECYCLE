@@ -145,11 +145,33 @@ model Wave {
   @@map("waves")
 }
 
+model AppRole {
+  slug             String              @id
+  label            String
+  description      String              @default("")
+  seesAllProducts  Boolean             @default(false) @map("sees_all_products")
+  isSystem         Boolean             @default(false) @map("is_system")
+  permissions      AppRolePermission[]
+  profiles         AppProfile[]
+
+  @@map("app_roles")
+}
+
+model AppRolePermission {
+  roleSlug String  @map("role_slug")
+  action   String
+  role     AppRole @relation(fields: [roleSlug], references: [slug], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([roleSlug, action])
+  @@map("app_role_permissions")
+}
+
 model AppProfile {
   userId      String   @id @map("user_id") @db.Uuid
   email       String   @default("")
   displayName String   @default("") @map("display_name")
   role        String
+  appRole     AppRole  @relation(fields: [role], references: [slug], onDelete: Restrict, onUpdate: Cascade)
   productIds  String[] @default([]) @map("product_ids")
 
   @@map("app_profiles")

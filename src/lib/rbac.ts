@@ -1,22 +1,11 @@
 import type { Capability, CapabilityStatus, Lifecycle } from '../types/registry';
 import { stageIndex } from '../types/registry';
 
-export type AppRole =
-  | 'administrator'
-  | 'technical_manager'
-  | 'project_manager'
-  | 'product_owner'
-  | 'ceo';
+/** Role slug (DB-backed; seeded system roles + custom). */
+export type AppRole = string;
 
-export const APP_ROLES: AppRole[] = [
-  'administrator',
-  'technical_manager',
-  'project_manager',
-  'product_owner',
-  'ceo',
-];
-
-export const ROLE_LABEL: Record<AppRole, string> = {
+/** Fallback labels for seeded roles before/without a roles fetch. */
+export const SYSTEM_ROLE_LABEL: Record<string, string> = {
   administrator: 'Administrator',
   technical_manager: 'Technical Manager',
   project_manager: 'Project Manager',
@@ -40,66 +29,108 @@ export type RbacAction =
   | 'manage_products'
   | 'import_export';
 
+export const RBAC_ACTIONS: RbacAction[] = [
+  'edit_all',
+  'manage_users',
+  'manage_equipment',
+  'add_capability',
+  'edit_capability',
+  'delete_capability',
+  'edit_capability_progress',
+  'edit_story_stage',
+  'manage_groups',
+  'manage_lifecycles',
+  'manage_actors',
+  'manage_waves',
+  'manage_products',
+  'import_export',
+];
+
+export const ACTION_LABEL: Record<RbacAction, string> = {
+  edit_all: 'Edit all (full access shortcut)',
+  manage_users: 'Manage users & roles',
+  manage_equipment: 'Manage equipment',
+  add_capability: 'Add capability',
+  edit_capability: 'Edit capability',
+  delete_capability: 'Delete capability',
+  edit_capability_progress: 'Edit capability progress',
+  edit_story_stage: 'Edit story stage',
+  manage_groups: 'Manage capability groups',
+  manage_lifecycles: 'Manage lifecycles',
+  manage_actors: 'Manage actors',
+  manage_waves: 'Manage waves',
+  manage_products: 'Manage products',
+  import_export: 'Import / export',
+};
+
+export function isRbacAction(value: string): value is RbacAction {
+  return (RBAC_ACTIONS as string[]).includes(value);
+}
+
 export interface AppProfile {
   userId: string;
   email: string;
   displayName: string;
   role: AppRole;
   productIds: string[];
+  /** Present when loaded with role join. */
+  roleLabel?: string;
+  seesAllProducts?: boolean;
+  permissions?: RbacAction[];
 }
 
-export function isAppRole(value: string): value is AppRole {
-  return (APP_ROLES as string[]).includes(value);
+export interface AppRoleRecord {
+  slug: string;
+  label: string;
+  description: string;
+  seesAllProducts: boolean;
+  isSystem: boolean;
+  permissions: RbacAction[];
 }
 
-export function seesAllProducts(role: AppRole | null | undefined): boolean {
-  return role === 'administrator' || role === 'ceo';
+export function roleDisplayLabel(
+  slug: string | null | undefined,
+  roles?: Pick<AppRoleRecord, 'slug' | 'label'>[] | null
+): string {
+  if (!slug) return '—';
+  const fromList = roles?.find((r) => r.slug === slug)?.label;
+  if (fromList) return fromList;
+  return SYSTEM_ROLE_LABEL[slug] ?? slug;
 }
 
-export function isReadOnlyRole(role: AppRole | null | undefined): boolean {
-  return role === 'ceo';
+export function canWithPermissions(
+  permissions: Iterable<RbacAction> | null | undefined,
+  action: RbacAction
+): boolean {
+  if (!permissions) return false;
+  const set = permissions instanceof Set ? permissions : new Set(permissions);
+  if (set.size === 0) return false;
+  if (set.has('edit_all')) return true;
+  return set.has(action);
 }
 
-export function can(role: AppRole | null | undefined, action: RbacAction): boolean {
-  if (!role) return false;
-  if (role === 'administrator') return true;
-  if (role === 'ceo') return false;
-
-  switch (action) {
-    case 'edit_all':
-    case 'manage_users':
-    case 'manage_groups':
-    case 'manage_lifecycles':
-    case 'manage_actors':
-    case 'manage_waves':
-    case 'manage_products':
-    case 'import_export':
-    case 'delete_capability':
-      return false;
-    case 'manage_equipment':
-      return role === 'technical_manager';
-    case 'add_capability':
-    case 'edit_capability_progress':
-      return role === 'product_owner';
-    case 'edit_capability':
-      return role === 'product_owner';
-    case 'edit_story_stage':
-      return role === 'project_manager';
-    default:
-      return false;
-  }
+export function seesAllProductsFromFlag(flag: boolean | null | undefined): boolean {
+  return !!flag;
 }
 
-/** Delivery capability progress stages Product Owner may set. */
-const PO_CAPABILITY_STAGES = new Set([
+export function isReadOnlyFromPermissions(
+  permissions: Iterable<RbacAction> | null | undefined
+): boolean {
+  if (!permissions) return true;
+  const set = permissions instanceof Set ? permissions : new Set(permissions);
+  return set.size === 0;
+}
+
+/** Delivery capability progress stages Product Owner–style permission may set. */
+const CAPABILITY_PROGRESS_STAGES = new Set([
   'Identified',
   'Epic Definition',
   'Feature Definition',
   'User Story Definition',
 ]);
 
-/** Story stages Project Manager may set (from In Architecture through Released). */
-const PM_STORY_STAGES = new Set([
+/** Story stages Project Manager–style permission may set. */
+const STORY_STAGES = new Set([
   'In Architecture',
   'In Development',
   'In Testing',
@@ -107,27 +138,33 @@ const PM_STORY_STAGES = new Set([
   'Released',
 ]);
 
-export function canSetCapabilityProgress(
-  role: AppRole | null | undefined,
+export function canSetCapabilityProgressWithPermissions(
+  permissions: Iterable<RbacAction> | null | undefined,
   stage: string
 ): boolean {
-  if (role === 'administrator') return true;
-  if (role === 'product_owner') return PO_CAPABILITY_STAGES.has(stage);
-  return false;
+  if (!canWithPermissions(permissions, 'edit_capability_progress')) return false;
+  if (canWithPermissions(permissions, 'edit_all')) return true;
+  // Full catalog if they also have edit_story_stage (admin-like custom roles)
+  if (canWithPermissions(permissions, 'edit_story_stage')) return true;
+  return CAPABILITY_PROGRESS_STAGES.has(stage);
 }
 
-export function canSetStoryStage(role: AppRole | null | undefined, stage: string): boolean {
-  if (role === 'administrator') return true;
-  if (role === 'project_manager') return PM_STORY_STAGES.has(stage);
-  return false;
+export function canSetStoryStageWithPermissions(
+  permissions: Iterable<RbacAction> | null | undefined,
+  stage: string
+): boolean {
+  if (!canWithPermissions(permissions, 'edit_story_stage')) return false;
+  if (canWithPermissions(permissions, 'edit_all')) return true;
+  if (canWithPermissions(permissions, 'edit_capability_progress')) return true;
+  return STORY_STAGES.has(stage);
 }
 
 export function capabilityVisibleToUser(
   capability: Pick<Capability, 'productIds'>,
-  role: AppRole | null | undefined,
+  seesAll: boolean,
   assignedProductIds: string[]
 ): boolean {
-  if (seesAllProducts(role)) return true;
+  if (seesAll) return true;
   if (assignedProductIds.length === 0) return false;
   const set = new Set(assignedProductIds);
   return (capability.productIds ?? []).some((id) => set.has(id));
@@ -135,10 +172,10 @@ export function capabilityVisibleToUser(
 
 export function productVisibleToUser(
   productId: string,
-  role: AppRole | null | undefined,
+  seesAll: boolean,
   assignedProductIds: string[]
 ): boolean {
-  if (seesAllProducts(role)) return true;
+  if (seesAll) return true;
   return assignedProductIds.includes(productId);
 }
 
@@ -165,24 +202,21 @@ export function statusFromProgress(
   return 'In Progress';
 }
 
+/** Main product nav: any signed-in profile may see registry pages. */
 export function navVisible(
   path: string,
   role: AppRole | null | undefined
 ): boolean {
   if (!role) return false;
-  if (path === '/users') return role === 'administrator';
-  if (role === 'administrator' || role === 'ceo') return true;
-  // Non-admin roles: core product surfaces + equipment (TM edits; others read)
-  if (
+  if (path.startsWith('/settings')) return false;
+  return (
     path === '/' ||
     path === '/products' ||
     path === '/equipment' ||
-    path.startsWith('/capabilities')
-  ) {
-    return true;
-  }
-  if (path === '/lifecycles' || path === '/groups' || path === '/actors' || path === '/waves') {
-    return true; // view allowed; writes gated elsewhere
-  }
-  return false;
+    path.startsWith('/capabilities') ||
+    path === '/lifecycles' ||
+    path === '/groups' ||
+    path === '/actors' ||
+    path === '/waves'
+  );
 }

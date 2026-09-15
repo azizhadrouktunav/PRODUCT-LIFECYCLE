@@ -10,14 +10,14 @@ import {
   PackageIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  ShieldIcon,
+  SettingsIcon,
   SunIcon,
   UsersIcon,
   WavesIcon,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ROLE_LABEL, navVisible } from '../lib/rbac';
+import { navVisible } from '../lib/rbac';
 
 const NAV = [
   { to: '/', label: 'Capabilities', icon: ListTreeIcon, end: true },
@@ -27,7 +27,6 @@ const NAV = [
   { to: '/actors', label: 'Actors', icon: UsersIcon, end: false },
   { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },
   { to: '/waves', label: 'Waves', icon: WavesIcon, end: false },
-  { to: '/users', label: 'Users', icon: ShieldIcon, end: false },
 ];
 
 const LOGO_URL = '/ChatGPT_Image_Sep_4,_2026,_10_17_13_AM.png';
@@ -68,10 +67,29 @@ function ThemeToggle({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function SettingsLink({ compact = false }: { compact?: boolean }) {
+  return (
+    <NavLink
+      to="/settings"
+      title="Settings"
+      aria-label="Settings"
+      className={({ isActive }) =>
+        `inline-flex items-center gap-2 rounded-md border border-line-strong transition-colors duration-150 ease-out hover:border-brand hover:text-strong ${
+          compact ? 'justify-center p-1.5' : 'w-full px-2.5 py-1.5 text-xs'
+        } ${isActive ? 'border-brand text-strong' : 'text-mute'}`
+      }
+    >
+      <SettingsIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      {!compact && 'Settings'}
+    </NavLink>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-  const { profile, role, signOut } = useAuth();
+  const { profile, role, roleLabel, signOut, can } = useAuth();
   const links = useMemo(() => NAV.filter((item) => navVisible(item.to, role)), [role]);
+  const showSettings = can('manage_users');
 
   return (
     <div className="flex min-h-full w-full bg-ink-900">
@@ -109,11 +127,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="truncate text-xs font-medium text-strong">
                 {profile.displayName || profile.email}
               </p>
-              <p className="truncate text-2xs text-mute">
-                {role ? ROLE_LABEL[role] : '—'}
-              </p>
+              <p className="truncate text-2xs text-mute">{roleLabel}</p>
             </div>
           )}
+          {showSettings && <SettingsLink compact={collapsed} />}
           <ThemeToggle compact={collapsed} />
           <button
             type="button"
@@ -152,6 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between border-b border-line bg-ink-950 px-4 py-3 lg:hidden">
           <Logo />
           <div className="flex items-center gap-2">
+            {showSettings && <SettingsLink compact />}
             <ThemeToggle compact />
             <button
               type="button"
