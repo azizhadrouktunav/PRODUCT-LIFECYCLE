@@ -1,5 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { PlusIcon, ShieldIcon, Trash2Icon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  KeyRoundIcon,
+  MailIcon,
+  PencilIcon,
+  PlusIcon,
+  ShieldIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { Button, Field, inputClass } from '../../components/Primitives';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,6 +17,7 @@ import {
   fetchProfiles,
   inviteUser,
   resendInvite,
+  resetPassword,
   upsertProfile,
   type AuthUserStatus,
 } from '../../lib/profileApi';
@@ -20,6 +28,10 @@ import { fetchRoles } from '../../lib/rolesApi';
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
+function statusLabel(status: AuthUserStatus | undefined): 'Active' | 'Inactive' {
+  return status === 'active' ? 'Active' : 'Inactive';
+}
+
 export function UsersSettingsPage() {
   const { can, refreshProfile, user } = useAuth();
   const { products } = useRegistry();
@@ -27,21 +39,35 @@ export function UsersSettingsPage() {
   const [roles, setRoles] = useState<AppRoleRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, AppProfile>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [authStatuses, setAuthStatuses] = useState<Record<string, AuthUserStatus>>({});
+
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState('product_owner');
   const [inviteProducts, setInviteProducts] = useState<string[]>([]);
-  const [authStatuses, setAuthStatuses] = useState<Record<string, AuthUserStatus>>({});
-  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<AppProfile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editProducts, setEditProducts] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const sortedProducts = useMemo(
     () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
     [products]
+  );
+
+  const sortedProfiles = useMemo(
+    () =>
+      [...profiles].sort((a, b) =>
+        (a.displayName || a.email).localeCompare(b.displayName || b.email)
+      ),
+    [profiles]
   );
 
   const adminCount = useMemo(
@@ -65,7 +91,6 @@ export function UsersSettingsPage() {
       setProfiles(list);
       setRoles(roleList);
       setAuthStatuses(statuses);
-      setDrafts(Object.fromEntries(list.map((p) => [p.userId, { ...p }])));
       if (roleList.length && !roleList.some((r) => r.slug === inviteRole)) {
         setInviteRole(roleList[0].slug);
       }
@@ -84,19 +109,22 @@ export function UsersSettingsPage() {
     return null;
   }
 
-  function patchDraft(userId: string, patch: Partial<AppProfile>) {
-    setDrafts((prev) => ({
-      ...prev,
-      [userId]: { ...prev[userId], ...patch },
-    }));
+  function openEdit(profile: AppProfile) {
+    setEditing(profile);
+    setEditName(profile.displayName);
+    setEditRole(profile.role);
+    setEditProducts([...profile.productIds]);
+    setEditOpen(true);
+    setError(null);
+    setMessage(null);
   }
 
-  function toggleProduct(userId: string, productId: string) {
-    const current = drafts[userId]?.productIds ?? [];
-    const next = current.includes(productId)
-      ? current.filter((id) => id !== productId)
-      : [...current, productId];
-    patchDraft(userId, { productIds: next });
+  function toggleEditProduct(productId: string) {
+    setEditProducts((current) =>
+      current.includes(productId)
+        ? current.filter((id) => id !== productId)
+        : [...current, productId]
+    );
   }
 
   function toggleInviteProduct(productId: string) {
@@ -107,25 +135,28 @@ export function UsersSettingsPage() {
     );
   }
 
-  async function save(userId: string) {
-    const draft = drafts[userId];
-    if (!draft) return;
-    setSavingId(userId);
+  async function saveEdit() {
+    if (!editing) return;
+    setSaving(true);
     setError(null);
+    setMessage(null);
     try {
-      const seesAll = roleSeesAllProducts(draft.role);
+      const seesAll = roleSeesAllProducts(editRole);
       await upsertProfile({
-        ...draft,
-        role: draft.role,
-        displayName: draft.displayName.trim(),
-        productIds: seesAll ? [] : draft.productIds,
+        ...editing,
+        displayName: editName.trim(),
+        role: editRole,
+        productIds: seesAll ? [] : editProducts,
       });
-      if (user?.id === userId) await refreshProfile();
+      if (user?.id === editing.userId) await refreshProfile();
+      setEditOpen(false);
+      setEditing(null);
+      setMessage('User updated.');
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   }
 
@@ -145,28 +176,53 @@ export function UsersSettingsPage() {
     ) {
       return;
     }
-    setDeletingId(profile.userId);
+    setBusyId(profile.userId);
     setError(null);
+    setMessage(null);
     try {
       await deleteUserAccount(profile.userId);
+      setMessage('User deleted.');
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setDeletingId(null);
+      setBusyId(null);
     }
   }
 
   async function onResend(profile: AppProfile) {
-    setResendingId(profile.userId);
+    setBusyId(profile.userId);
     setError(null);
+    setMessage(null);
     try {
       await resendInvite(profile.userId);
+      setMessage(`Invite resent to ${profile.email}.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setResendingId(null);
+      setBusyId(null);
+    }
+  }
+
+  async function onResetPassword(profile: AppProfile) {
+    if (
+      !window.confirm(
+        `Send a password reset email to ${profile.email}?`
+      )
+    ) {
+      return;
+    }
+    setBusyId(profile.userId);
+    setError(null);
+    setMessage(null);
+    try {
+      await resetPassword(profile.userId);
+      setMessage(`Password reset email sent to ${profile.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -175,6 +231,7 @@ export function UsersSettingsPage() {
     if (!email || !inviteRole) return;
     setInviting(true);
     setError(null);
+    setMessage(null);
     try {
       const seesAll = roleSeesAllProducts(inviteRole);
       await inviteUser({
@@ -187,6 +244,7 @@ export function UsersSettingsPage() {
       setInviteEmail('');
       setInviteName('');
       setInviteProducts([]);
+      setMessage(`Invite sent to ${email}.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -197,6 +255,8 @@ export function UsersSettingsPage() {
 
   const inviteValid = inviteEmail.trim().includes('@') && !!inviteRole;
   const inviteSeesAll = roleSeesAllProducts(inviteRole);
+  const editSeesAll = roleSeesAllProducts(editRole);
+  const editValid = editName.trim().length > 0 && !!editRole;
 
   return (
     <div>
@@ -204,7 +264,7 @@ export function UsersSettingsPage() {
         <div>
           <h2 className="text-base font-semibold text-strong">Users</h2>
           <p className="mt-0.5 text-xs text-mute">
-            Invite users by email, assign roles and products, or remove accounts.
+            Invite users, manage roles, and reset access.
           </p>
         </div>
         <Button
@@ -212,6 +272,7 @@ export function UsersSettingsPage() {
           onClick={() => {
             setInviteOpen(true);
             setError(null);
+            setMessage(null);
           }}
         >
           <PlusIcon className="h-3.5 w-3.5" />
@@ -220,137 +281,197 @@ export function UsersSettingsPage() {
       </div>
 
       {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+      {message && <p className="mt-3 text-xs text-soft">{message}</p>}
 
       {loading ? (
         <p className="mt-8 text-sm text-mute">Loading profiles…</p>
-      ) : profiles.length === 0 ? (
+      ) : sortedProfiles.length === 0 ? (
         <div className="mt-8 border-t border-line pt-12 text-center">
           <ShieldIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No profiles yet.</p>
-          <p className="mt-1 text-xs text-mute">Invite a user to create their Auth account and profile.</p>
+          <p className="mt-1 text-xs text-mute">
+            Invite a user to create their Auth account and profile.
+          </p>
         </div>
       ) : (
-        <div className="mt-4 space-y-6">
-          {profiles.map((p) => {
-            const draft = drafts[p.userId] ?? p;
-            const draftSeesAll = roleSeesAllProducts(draft.role);
-            const isPending = authStatuses[p.userId] === 'pending';
-            return (
-              <section key={p.userId} className="border-t border-line pt-4">
-                <div className="flex flex-wrap items-baseline gap-3">
-                  <h3 className="text-base font-semibold text-strong">
-                    {draft.displayName || draft.email || p.userId}
-                  </h3>
-                  <span className="font-mono text-2xs text-ink-500">{draft.email}</span>
-                  <span className="text-2xs text-mute">
-                    {roleDisplayLabel(draft.role, roles)}
-                  </span>
-                  {isPending && (
-                    <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-mute">
-                      Pending
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Display name">
-                    <input
-                      className={inputClass}
-                      value={draft.displayName}
-                      onChange={(e) => patchDraft(p.userId, { displayName: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Role">
-                    <select
-                      className={selectClass}
-                      value={draft.role}
-                      onChange={(e) => {
-                        const nextRole = e.target.value;
-                        const seesAll = roleSeesAllProducts(nextRole);
-                        patchDraft(p.userId, {
-                          role: nextRole,
-                          ...(seesAll ? { productIds: [] } : {}),
-                        });
-                      }}
-                    >
-                      {roles.map((r) => (
-                        <option key={r.slug} value={r.slug}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-
-                <div className="mt-4">
-                  {draftSeesAll ? (
-                    <p className="text-xs text-mute">
-                      This role can access all products — no assignment needed.
-                    </p>
-                  ) : (
-                    <>
-                      <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
-                      <p className="mb-2 text-2xs text-mute">
-                        Required for this role to see product-scoped data.
-                      </p>
-                      {sortedProducts.length === 0 ? (
-                        <p className="text-xs text-mute">No products yet.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {sortedProducts.map((prod) => {
-                            const active = draft.productIds.includes(prod.id);
-                            return (
-                              <button
-                                key={prod.id}
-                                type="button"
-                                onClick={() => toggleProduct(p.userId, prod.id)}
-                                className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
-                                  active
-                                    ? 'border-brand bg-brand/10 text-strong'
-                                    : 'border-line-strong text-mute hover:border-brand'
-                                }`}
-                              >
-                                {prod.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    variant="primary"
-                    disabled={savingId === p.userId}
-                    onClick={() => void save(p.userId)}
-                  >
-                    {savingId === p.userId ? 'Saving…' : 'Save'}
-                  </Button>
-                  {isPending && (
-                    <Button
-                      variant="quiet"
-                      disabled={resendingId === p.userId}
-                      onClick={() => void onResend(p)}
-                    >
-                      {resendingId === p.userId ? 'Resending…' : 'Resend invite'}
-                    </Button>
-                  )}
-                  <Button
-                    variant="quiet"
-                    disabled={deletingId === p.userId || user?.id === p.userId}
-                    onClick={() => void onDelete(p)}
-                  >
-                    <Trash2Icon className="h-3.5 w-3.5" />
-                    {deletingId === p.userId ? 'Deleting…' : 'Delete'}
-                  </Button>
-                </div>
-              </section>
-            );
-          })}
+        <div className="scroll-thin mt-4 max-h-[min(70vh,720px)] overflow-auto border-t border-line">
+          <table className="w-full min-w-[880px] border-collapse text-left">
+            <thead className="sticky top-0 z-10 bg-ink-900">
+              <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+                <th className="py-2.5 pr-4 font-medium">Name</th>
+                <th className="py-2.5 pr-4 font-medium">Email</th>
+                <th className="py-2.5 pr-4 font-medium">Role</th>
+                <th className="w-28 py-2.5 pr-4 font-medium">Status</th>
+                <th className="w-40 py-2.5 text-right font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedProfiles.map((p) => {
+                const status = authStatuses[p.userId];
+                const label = statusLabel(status);
+                const isInactive = label === 'Inactive';
+                const isBusy = busyId === p.userId;
+                return (
+                  <tr key={p.userId} className="border-t border-line-soft align-middle">
+                    <td className="py-3 pr-4 text-sm font-medium text-strong">
+                      {p.displayName || '—'}
+                    </td>
+                    <td className="py-3 pr-4 font-mono text-2xs text-mute">{p.email || '—'}</td>
+                    <td className="py-3 pr-4 text-xs text-soft">
+                      {roleDisplayLabel(p.role, roles)}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span
+                        className={`inline-block rounded border px-1.5 py-0.5 text-2xs ${
+                          label === 'Active'
+                            ? 'border-brand/40 text-strong'
+                            : 'border-line-strong text-mute'
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="inline-flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${p.displayName || p.email}`}
+                          title="Edit"
+                          disabled={isBusy}
+                          onClick={() => openEdit(p)}
+                          className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
+                        >
+                          <PencilIcon className="h-3.5 w-3.5" />
+                        </button>
+                        {isInactive ? (
+                          <button
+                            type="button"
+                            aria-label={`Resend invite to ${p.email}`}
+                            title="Resend invite"
+                            disabled={isBusy}
+                            onClick={() => void onResend(p)}
+                            className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
+                          >
+                            <MailIcon className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={`Reset password for ${p.email}`}
+                            title="Reset password"
+                            disabled={isBusy}
+                            onClick={() => void onResetPassword(p)}
+                            className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
+                          >
+                            <KeyRoundIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Delete ${p.displayName || p.email}`}
+                          title="Delete"
+                          disabled={isBusy || user?.id === p.userId}
+                          onClick={() => void onDelete(p)}
+                          className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-danger disabled:opacity-40"
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
+
+      <Modal
+        open={editOpen}
+        onClose={() => {
+          setEditOpen(false);
+          setEditing(null);
+        }}
+        width="max-w-lg"
+        title="Edit user"
+        subtitle={editing?.email || undefined}
+        footer={
+          <>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                setEditOpen(false);
+                setEditing(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!editValid || saving}
+              onClick={() => void saveEdit()}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <Field label="Display name" required>
+            <input
+              className={inputClass}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field label="Role" required>
+            <select
+              className={selectClass}
+              value={editRole}
+              onChange={(e) => {
+                const nextRole = e.target.value;
+                setEditRole(nextRole);
+                if (roleSeesAllProducts(nextRole)) setEditProducts([]);
+              }}
+            >
+              {roles.map((r) => (
+                <option key={r.slug} value={r.slug}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {editSeesAll ? (
+            <p className="text-xs text-mute">
+              This role can access all products — no assignment needed.
+            </p>
+          ) : (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
+              <div className="flex flex-wrap gap-1.5">
+                {sortedProducts.map((prod) => {
+                  const active = editProducts.includes(prod.id);
+                  return (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => toggleEditProduct(prod.id)}
+                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
+                        active
+                          ? 'border-brand bg-brand/10 text-strong'
+                          : 'border-line-strong text-mute hover:border-brand'
+                      }`}
+                    >
+                      {prod.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <Modal
         open={inviteOpen}

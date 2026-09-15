@@ -179,3 +179,13 @@ export async function resendInvite(userId: string): Promise<void> {
     throw new Error(String((data as { error: string }).error));
   }
 }
+
+export async function resetPassword(userId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('reset-password', {
+    body: { userId },
+  });
+  if (error) throw new Error(error.message || 'Reset password failed');
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String((data as { error: string }).error));
+  }
+}

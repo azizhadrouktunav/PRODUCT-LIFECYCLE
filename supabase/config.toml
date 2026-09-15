@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.list-auth-status]
 verify_jwt = false
+
+[functions.reset-password]
+verify_jwt = false
