@@ -12,3 +12,11 @@ max_rows = 1000
 [db]
 port = 54322
 major_version = 15
+
+# Auth is enforced inside the functions (requireManageUsers). Gateway JWT
+# verify blocks browser OPTIONS preflight (no Authorization) → CORS errors.
+[functions.invite-user]
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false

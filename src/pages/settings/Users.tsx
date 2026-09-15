@@ -44,6 +44,10 @@ export function UsersSettingsPage() {
     [profiles]
   );
 
+  function roleSeesAllProducts(slug: string): boolean {
+    return !!roles.find((r) => r.slug === slug)?.seesAllProducts;
+  }
+
   async function reload() {
     setLoading(true);
     setError(null);
@@ -99,11 +103,12 @@ export function UsersSettingsPage() {
     setSavingId(userId);
     setError(null);
     try {
+      const seesAll = roleSeesAllProducts(draft.role);
       await upsertProfile({
         ...draft,
         role: draft.role,
         displayName: draft.displayName.trim(),
-        productIds: draft.productIds,
+        productIds: seesAll ? [] : draft.productIds,
       });
       if (user?.id === userId) await refreshProfile();
       await reload();
@@ -148,11 +153,12 @@ export function UsersSettingsPage() {
     setInviting(true);
     setError(null);
     try {
+      const seesAll = roleSeesAllProducts(inviteRole);
       await inviteUser({
         email,
         displayName: inviteName.trim(),
         role: inviteRole,
-        productIds: inviteProducts,
+        productIds: seesAll ? [] : inviteProducts,
       });
       setInviteOpen(false);
       setInviteEmail('');
@@ -167,6 +173,7 @@ export function UsersSettingsPage() {
   }
 
   const inviteValid = inviteEmail.trim().includes('@') && !!inviteRole;
+  const inviteSeesAll = roleSeesAllProducts(inviteRole);
 
   return (
     <div>
@@ -203,6 +210,7 @@ export function UsersSettingsPage() {
         <div className="mt-4 space-y-6">
           {profiles.map((p) => {
             const draft = drafts[p.userId] ?? p;
+            const draftSeesAll = roleSeesAllProducts(draft.role);
             return (
               <section key={p.userId} className="border-t border-line pt-4">
                 <div className="flex flex-wrap items-baseline gap-3">
@@ -227,7 +235,14 @@ export function UsersSettingsPage() {
                     <select
                       className={selectClass}
                       value={draft.role}
-                      onChange={(e) => patchDraft(p.userId, { role: e.target.value })}
+                      onChange={(e) => {
+                        const nextRole = e.target.value;
+                        const seesAll = roleSeesAllProducts(nextRole);
+                        patchDraft(p.userId, {
+                          role: nextRole,
+                          ...(seesAll ? { productIds: [] } : {}),
+                        });
+                      }}
                     >
                       {roles.map((r) => (
                         <option key={r.slug} value={r.slug}>
@@ -239,33 +254,40 @@ export function UsersSettingsPage() {
                 </div>
 
                 <div className="mt-4">
-                  <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
-                  <p className="mb-2 text-2xs text-mute">
-                    Leave empty when the role sees all products. Otherwise required to see product
-                    data.
-                  </p>
-                  {sortedProducts.length === 0 ? (
-                    <p className="text-xs text-mute">No products yet.</p>
+                  {draftSeesAll ? (
+                    <p className="text-xs text-mute">
+                      This role can access all products — no assignment needed.
+                    </p>
                   ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {sortedProducts.map((prod) => {
-                        const active = draft.productIds.includes(prod.id);
-                        return (
-                          <button
-                            key={prod.id}
-                            type="button"
-                            onClick={() => toggleProduct(p.userId, prod.id)}
-                            className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
-                              active
-                                ? 'border-brand bg-brand/10 text-strong'
-                                : 'border-line-strong text-mute hover:border-brand'
-                            }`}
-                          >
-                            {prod.name}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <>
+                      <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
+                      <p className="mb-2 text-2xs text-mute">
+                        Required for this role to see product-scoped data.
+                      </p>
+                      {sortedProducts.length === 0 ? (
+                        <p className="text-xs text-mute">No products yet.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {sortedProducts.map((prod) => {
+                            const active = draft.productIds.includes(prod.id);
+                            return (
+                              <button
+                                key={prod.id}
+                                type="button"
+                                onClick={() => toggleProduct(p.userId, prod.id)}
+                                className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
+                                  active
+                                    ? 'border-brand bg-brand/10 text-strong'
+                                    : 'border-line-strong text-mute hover:border-brand'
+                                }`}
+                              >
+                                {prod.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -336,7 +358,11 @@ export function UsersSettingsPage() {
             <select
               className={selectClass}
               value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
+              onChange={(e) => {
+                const nextRole = e.target.value;
+                setInviteRole(nextRole);
+                if (roleSeesAllProducts(nextRole)) setInviteProducts([]);
+              }}
             >
               {roles.map((r) => (
                 <option key={r.slug} value={r.slug}>
@@ -345,28 +371,34 @@ export function UsersSettingsPage() {
               ))}
             </select>
           </Field>
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
-            <div className="flex flex-wrap gap-1.5">
-              {sortedProducts.map((prod) => {
-                const active = inviteProducts.includes(prod.id);
-                return (
-                  <button
-                    key={prod.id}
-                    type="button"
-                    onClick={() => toggleInviteProduct(prod.id)}
-                    className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
-                      active
-                        ? 'border-brand bg-brand/10 text-strong'
-                        : 'border-line-strong text-mute hover:border-brand'
-                    }`}
-                  >
-                    {prod.name}
-                  </button>
-                );
-              })}
+          {inviteSeesAll ? (
+            <p className="text-xs text-mute">
+              This role can access all products — no assignment needed.
+            </p>
+          ) : (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
+              <div className="flex flex-wrap gap-1.5">
+                {sortedProducts.map((prod) => {
+                  const active = inviteProducts.includes(prod.id);
+                  return (
+                    <button
+                      key={prod.id}
+                      type="button"
+                      onClick={() => toggleInviteProduct(prod.id)}
+                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
+                        active
+                          ? 'border-brand bg-brand/10 text-strong'
+                          : 'border-line-strong text-mute hover:border-brand'
+                      }`}
+                    >
+                      {prod.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </Modal>
     </div>
