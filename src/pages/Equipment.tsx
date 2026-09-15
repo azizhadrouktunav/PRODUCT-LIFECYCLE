@@ -5,6 +5,7 @@ import { DataTransfer } from '../components/DataTransfer';
 import { EquipmentModal } from '../components/EquipmentModal';
 import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Equipment } from '../types/registry';
 
@@ -17,6 +18,8 @@ export function EquipmentPage() {
     removeEquipment,
     removeEquipmentType,
   } = useRegistry();
+  const { can } = useAuth();
+  const canEdit = can('manage_equipment');
   const [activeId, setActiveId] = useState(equipment[0]?.id ?? '');
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
@@ -73,15 +76,19 @@ export function EquipmentPage() {
         description="What each device model can actually do. Hardware capabilities are assigned here, and the assignment is the same record the register reads from."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
-            <DataTransfer dataset="equipment" />
-            <Button variant="quiet" onClick={() => setAddingType(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add type
-            </Button>
-            <Button variant="primary" onClick={() => setAddingEquipment(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add equipment
-            </Button>
+            {canEdit && <DataTransfer dataset="equipment" />}
+            {canEdit && (
+              <Button variant="quiet" onClick={() => setAddingType(true)}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add type
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="primary" onClick={() => setAddingEquipment(true)}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add equipment
+              </Button>
+            )}
           </div>
         }
       />
@@ -108,15 +115,17 @@ export function EquipmentPage() {
                 >
                   <span className="text-xs text-strong">{t.name}</span>
                   <span className="font-mono text-2xs text-ink-500">{count}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeEquipmentType(t.id)}
-                    aria-label={`Delete type ${t.name}`}
-                    title="Delete type"
-                    className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
-                  >
-                    <Trash2Icon className="h-3.5 w-3.5" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => removeEquipmentType(t.id)}
+                      aria-label={`Delete type ${t.name}`}
+                      title="Delete type"
+                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </li>
               );
             })}
@@ -171,18 +180,22 @@ export function EquipmentPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Button variant="quiet" onClick={() => setEditing(active)}>
-                  <PencilIcon className="h-3.5 w-3.5" />
-                  Edit
-                </Button>
-                <Button variant="quiet" onClick={handleDelete}>
-                  <Trash2Icon className="h-3.5 w-3.5" />
-                  Delete
-                </Button>
-                <Button variant="primary" onClick={openAssign}>
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Assign capabilities
-                </Button>
+                {canEdit && (
+                  <>
+                    <Button variant="quiet" onClick={() => setEditing(active)}>
+                      <PencilIcon className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                    <Button variant="quiet" onClick={handleDelete}>
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                    <Button variant="primary" onClick={openAssign}>
+                      <PlusIcon className="h-3.5 w-3.5" />
+                      Assign capabilities
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import { AddGroupModal } from '../components/AddGroupModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Modal } from '../components/Modal';
 import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
 import { REQUIREMENT_LABEL, usesEquipment } from '../types/registry';
@@ -78,6 +79,8 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
 
 export function GroupsPage() {
   const { groups, capabilities, removeGroup, getLifecycle } = useRegistry();
+  const { can } = useAuth();
+  const canManage = can('manage_groups');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CapabilityGroup | null>(null);
   const [process, setProcess] = useState<CapabilityGroup | null>(null);
@@ -90,11 +93,13 @@ export function GroupsPage() {
         description="Every capability belongs to exactly one group. The group decides which layer owns delivery, which lifecycle the capability follows, and whether equipment compatibility applies."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
-            <DataTransfer dataset="groups" />
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add group
-            </Button>
+            {canManage && <DataTransfer dataset="groups" />}
+            {canManage && (
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add group
+              </Button>
+            )}
           </div>
         }
       />
@@ -116,24 +121,28 @@ export function GroupsPage() {
                 >
                   <InfoIcon className="h-3.5 w-3.5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(g)}
-                  aria-label={`Edit ${g.name}`}
-                  title="Edit group"
-                  className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-                >
-                  <PencilIcon className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeGroup(g.id)}
-                  aria-label={`Delete ${g.name}`}
-                  title="Delete group"
-                  className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
-                >
-                  <Trash2Icon className="h-3.5 w-3.5" />
-                </button>
+                {canManage && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(g)}
+                      aria-label={`Edit ${g.name}`}
+                      title="Edit group"
+                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeGroup(g.id)}
+                      aria-label={`Delete ${g.name}`}
+                      title="Delete group"
+                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
                 <span className="font-mono text-2xs text-ink-500">{g.id}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
                   {lifecycle.label} · {lifecycle.stages.length} stages

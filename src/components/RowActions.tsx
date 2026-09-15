@@ -13,6 +13,7 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { TONE_DOT } from './Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
 import {
@@ -22,6 +23,7 @@ import {
   usesEquipment,
   usesDecomposition,
 } from '../types/registry';
+import { statusFromProgress } from '../lib/rbac';
 
 type Panel = 'root' | 'progress' | 'status';
 
@@ -47,9 +49,15 @@ function placeMenu(btn: DOMRect, menuHeight = MENU_ESTIMATE): MenuCoords {
 
 export function RowActions({ capability, onEdit }: Props) {
   const { updateCapability, removeCapability, countsOf, lifecycleOf } = useRegistry();
+  const {
+    can,
+    canSetCapabilityProgress,
+    isReadOnly,
+  } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>('root');
+  const [alsoUpdateStatus, setAlsoUpdateStatus] = useState(false);
   const [coords, setCoords] = useState<MenuCoords | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -58,6 +66,10 @@ export function RowActions({ capability, onEdit }: Props) {
   const lifecycle = lifecycleOf(capability);
   const isHardware = usesEquipment(lifecycle);
   const canDecompose = usesDecomposition(lifecycle);
+  const canEdit = can('edit_capability') && !isReadOnly;
+  const canDelete = can('delete_capability') && !isReadOnly;
+  const canProgress = can('edit_capability_progress') && !isReadOnly;
+  const canStatus = can('edit_all') && !isReadOnly;
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -98,15 +110,22 @@ export function RowActions({ capability, onEdit }: Props) {
   function toggleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     setPanel('root');
+    setAlsoUpdateStatus(false);
     setOpen((v) => !v);
   }
 
   function setProgress(stage: string) {
-    updateCapability(capability.id, { progress: stage });
+    if (!canSetCapabilityProgress(stage)) return;
+    const patch: Partial<Omit<Capability, 'id'>> = { progress: stage };
+    if (alsoUpdateStatus) {
+      patch.status = statusFromProgress(stage, lifecycle);
+    }
+    updateCapability(capability.id, patch);
     setOpen(false);
   }
 
   function setStatus(status: CapabilityStatus | null) {
+    if (!canStatus) return;
     updateCapability(capability.id, { status });
     setOpen(false);
   }
@@ -187,44 +206,52 @@ export function RowActions({ capability, onEdit }: Props) {
                       </span>
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className={itemClass}
-                    onClick={() => {
-                      setOpen(false);
-                      onEdit(capability.id);
-                    }}
-                  >
-                    <PencilIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
-                    Edit capability
-                  </button>
-                  <button
-                    type="button"
-                    className={`${itemClass} text-danger hover:bg-danger/10 hover:text-danger`}
-                    onClick={() => {
-                      setOpen(false);
-                      removeCapability(capability.id);
-                    }}
-                  >
-                    <Trash2Icon className="h-3.5 w-3.5 shrink-0" />
-                    Delete capability
-                  </button>
-                  <button type="button" className={itemClass} onClick={() => setPanel('progress')}>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-                    Change progress
-                    <span className="ml-auto flex items-center gap-1 truncate text-2xs font-normal text-mute">
-                      {capability.progress}
-                      <ChevronRightIcon className="h-3 w-3 shrink-0" />
-                    </span>
-                  </button>
-                  <button type="button" className={itemClass} onClick={() => setPanel('status')}>
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-aqua" aria-hidden="true" />
-                    Change status
-                    <span className="ml-auto flex items-center gap-1 text-2xs font-normal text-mute">
-                      {capability.status ?? 'None'}
-                      <ChevronRightIcon className="h-3 w-3" />
-                    </span>
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className={itemClass}
+                      onClick={() => {
+                        setOpen(false);
+                        onEdit(capability.id);
+                      }}
+                    >
+                      <PencilIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
+                      Edit capability
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className={`${itemClass} text-danger hover:bg-danger/10 hover:text-danger`}
+                      onClick={() => {
+                        setOpen(false);
+                        removeCapability(capability.id);
+                      }}
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5 shrink-0" />
+                      Delete capability
+                    </button>
+                  )}
+                  {canProgress && (
+                    <button type="button" className={itemClass} onClick={() => setPanel('progress')}>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+                      Change progress
+                      <span className="ml-auto flex items-center gap-1 truncate text-2xs font-normal text-mute">
+                        {capability.progress}
+                        <ChevronRightIcon className="h-3 w-3 shrink-0" />
+                      </span>
+                    </button>
+                  )}
+                  {canStatus && (
+                    <button type="button" className={itemClass} onClick={() => setPanel('status')}>
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-aqua" aria-hidden="true" />
+                      Change status
+                      <span className="ml-auto flex items-center gap-1 text-2xs font-normal text-mute">
+                        {capability.status ?? 'None'}
+                        <ChevronRightIcon className="h-3 w-3" />
+                      </span>
+                    </button>
+                  )}
                 </>
               )}
 
@@ -239,46 +266,66 @@ export function RowActions({ capability, onEdit }: Props) {
                     {panel === 'progress' ? lifecycle.label : 'Status'}
                   </button>
 
-                  {panel === 'progress' &&
-                    lifecycle.stages.map((s, i) => {
-                      const met = meetsRequirement(s.requirement, counts);
-                      const current = capability.progress === s.name;
-                      return met ? (
-                        <button
-                          key={s.name}
-                          type="button"
-                          className={itemClass}
-                          title={s.description}
-                          onClick={() => setProgress(s.name)}
-                        >
-                          <span className="w-4 shrink-0 font-mono text-2xs font-normal text-mute">
-                            {i + 1}
-                          </span>
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT[s.tone]}`}
-                            aria-hidden="true"
-                          />
-                          <span className="truncate">{s.name}</span>
-                          {current && (
-                            <CheckIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-brand-bright" />
-                          )}
-                        </button>
-                      ) : (
-                        <span
-                          key={s.name}
-                          className={lockedClass}
-                          title={`Locked — ${REQUIREMENT_LABEL[s.requirement]}`}
-                        >
-                          <span className="w-4 shrink-0 font-mono text-2xs">{i + 1}</span>
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-600"
-                            aria-hidden="true"
-                          />
-                          <span className="truncate">{s.name}</span>
-                          {current && <span className="ml-auto text-2xs text-warn">current</span>}
-                        </span>
-                      );
-                    })}
+                  {panel === 'progress' && (
+                    <>
+                      <label className="mb-1 flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs text-soft">
+                        <input
+                          type="checkbox"
+                          checked={alsoUpdateStatus}
+                          onChange={(e) => setAlsoUpdateStatus(e.target.checked)}
+                          className="rounded border-line-strong"
+                        />
+                        Also update Status
+                      </label>
+                      {lifecycle.stages.map((s, i) => {
+                        const met = meetsRequirement(s.requirement, counts);
+                        const current = capability.progress === s.name;
+                        const allowed = canSetCapabilityProgress(s.name);
+                        if (!met || !allowed) {
+                          return (
+                            <span
+                              key={s.name}
+                              className={lockedClass}
+                              title={
+                                !allowed
+                                  ? 'Not allowed for your role'
+                                  : `Locked — ${REQUIREMENT_LABEL[s.requirement]}`
+                              }
+                            >
+                              <span className="w-4 shrink-0 font-mono text-2xs">{i + 1}</span>
+                              <span
+                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-600"
+                                aria-hidden="true"
+                              />
+                              <span className="truncate">{s.name}</span>
+                              {current && <span className="ml-auto text-2xs text-warn">current</span>}
+                            </span>
+                          );
+                        }
+                        return (
+                          <button
+                            key={s.name}
+                            type="button"
+                            className={itemClass}
+                            title={s.description}
+                            onClick={() => setProgress(s.name)}
+                          >
+                            <span className="w-4 shrink-0 font-mono text-2xs font-normal text-mute">
+                              {i + 1}
+                            </span>
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT[s.tone]}`}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">{s.name}</span>
+                            {current && (
+                              <CheckIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-brand-bright" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
 
                   {panel === 'status' && (
                     <>

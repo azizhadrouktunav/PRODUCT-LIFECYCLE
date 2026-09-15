@@ -11,6 +11,7 @@ import {
 import { FullDataTransfer } from '../components/FullDataTransfer';
 import { RowActions } from '../components/RowActions';
 import { Button, Chip, PageHeader, StagePill, StatusTag, inputClass } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability } from '../types/registry';
@@ -64,6 +65,7 @@ export function CapabilitiesPage() {
     countsOf,
     lifecycleOf,
   } = useRegistry();
+  const { can, capabilityVisible, productVisible } = useAuth();
   const getEquipment = (id: string) => equipment.find((e) => e.id === id);
   const { openCreate, openEdit } = useCapabilityEditor();
   const navigate = useNavigate();
@@ -73,6 +75,16 @@ export function CapabilitiesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  const visibleProducts = useMemo(
+    () => products.filter((p) => productVisible(p.id)),
+    [products, productVisible]
+  );
+
+  const scopedCapabilities = useMemo(
+    () => capabilities.filter((c) => capabilityVisible(c)),
+    [capabilities, capabilityVisible]
+  );
 
   function sortValue(c: Capability, key: SortKey): string | number {
     const lifecycle = lifecycleOf(c);
@@ -105,7 +117,7 @@ export function CapabilitiesPage() {
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = capabilities.filter((c) => {
+    const filtered = scopedCapabilities.filter((c) => {
       if (groupFilter !== 'all' && c.groupId !== groupFilter) return false;
       if (statusFilter !== 'all' && (c.status ?? 'none') !== statusFilter) return false;
       if (productFilter !== 'all' && !(c.productIds ?? []).includes(productFilter)) return false;
@@ -123,7 +135,7 @@ export function CapabilitiesPage() {
       compareValues(sortValue(a, sortKey), sortValue(b, sortKey), sortDir)
     );
   }, [
-    capabilities,
+    scopedCapabilities,
     query,
     groupFilter,
     productFilter,
@@ -162,15 +174,17 @@ export function CapabilitiesPage() {
     <div>
       <PageHeader
         title="Capability Register"
-        count={`${capabilities.length} entries`}
+        count={`${scopedCapabilities.length} entries`}
         description="Every capability across TUNAV ONE Core, FleetIQ and CoreIQ."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
-            <FullDataTransfer />
-            <Button variant="primary" onClick={openCreate}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add capability
-            </Button>
+            {can('import_export') && <FullDataTransfer />}
+            {can('add_capability') && (
+              <Button variant="primary" onClick={openCreate}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add capability
+              </Button>
+            )}
           </div>
         }
       />
@@ -206,7 +220,7 @@ export function CapabilitiesPage() {
           aria-label="Filter by product"
         >
           <option value="all">All products</option>
-          {[...products]
+          {[...visibleProducts]
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((p) => (
               <option key={p.id} value={p.id}>
@@ -239,7 +253,7 @@ export function CapabilitiesPage() {
           </button>
         )}
         <span className="ml-auto font-mono text-2xs text-ink-500">
-          {rows.length} of {capabilities.length}
+          {rows.length} of {scopedCapabilities.length}
         </span>
       </div>
 

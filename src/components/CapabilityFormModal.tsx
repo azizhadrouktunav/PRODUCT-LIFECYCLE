@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
 import { CAPABILITY_STATUSES, stageIndex, usesEquipment } from '../types/registry';
@@ -18,6 +19,7 @@ interface Props {
 export function CapabilityFormModal({ open, onClose, capability = null, onCreated }: Props) {
   const { groups, products, equipment, addCapability, updateCapability, getLifecycle } =
     useRegistry();
+  const { productVisible } = useAuth();
   const isEdit = !!capability;
 
   const [name, setName] = useState('');
@@ -94,7 +96,9 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
-  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedProducts = [...products]
+    .filter((p) => productVisible(p.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Modal

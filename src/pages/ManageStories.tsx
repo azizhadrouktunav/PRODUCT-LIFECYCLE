@@ -18,6 +18,7 @@ import { DetailsModal } from '../components/DetailsModal';
 import { StoryModal } from '../components/DeliveryModals';
 import { Modal } from '../components/Modal';
 import { Button, Field, PageHeader, StatusTag, StoryStagePill, inputClass } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, UserStory } from '../types/registry';
 import { CAPABILITY_STATUSES, STORY_STAGE_NAMES } from '../types/registry';
@@ -220,6 +221,7 @@ export function ManageStoriesPage() {
   const { capabilityId = '', epicId = '', featureId = '' } = useParams();
   const navigate = useNavigate();
   const { getCapability, getEpic, getFeature, storiesOf, updateStory, removeStory } = useRegistry();
+  const { can, canSetStoryStage, capabilityVisible, isReadOnly } = useAuth();
   const capability = getCapability(capabilityId);
   const epic = getEpic(epicId);
   const feature = getFeature(featureId);
@@ -230,7 +232,7 @@ export function ManageStoriesPage() {
   const [pointsStory, setPointsStory] = useState<UserStory | null>(null);
   const [adrStory, setAdrStory] = useState<UserStory | null>(null);
 
-  if (!capability || !epic || !feature) {
+  if (!capability || !epic || !feature || !capabilityVisible(capability)) {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That feature is not in the register.</p>
@@ -242,6 +244,9 @@ export function ManageStoriesPage() {
   }
 
   const stories = storiesOf(feature.id);
+  const stageOptions = STORY_STAGE_NAMES.filter((s) => canSetStoryStage(s));
+  const canMutateStories = can('edit_all') && !isReadOnly;
+  const canChangeStage = stageOptions.length > 0 && !isReadOnly;
 
   return (
     <div>
@@ -276,17 +281,21 @@ export function ManageStoriesPage() {
           description={`User stories of ${feature.id} · ${feature.name}.`}
           action={
             <div className="flex flex-wrap items-center gap-1.5">
-              <DataTransfer dataset="stories" parentId={feature.id} scopeLabel={feature.id} />
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setEditing(null);
-                  setFormOpen(true);
-                }}
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add user story
-              </Button>
+              {canMutateStories && (
+                <DataTransfer dataset="stories" parentId={feature.id} scopeLabel={feature.id} />
+              )}
+              {canMutateStories && (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setEditing(null);
+                    setFormOpen(true);
+                  }}
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add user story
+                </Button>
+              )}
             </div>
           }
         />
@@ -334,58 +343,81 @@ export function ManageStoriesPage() {
                     label={`Actions for ${story.title}`}
                     header={story.id}
                     items={[
-                      {
-                        label: 'Edit User Story',
-                        icon: PencilIcon,
-                        onSelect: () => {
-                          setEditing(story);
-                          setFormOpen(true);
-                        },
-                      },
+                      ...(canMutateStories
+                        ? [
+                            {
+                              label: 'Edit User Story',
+                              icon: PencilIcon,
+                              onSelect: () => {
+                                setEditing(story);
+                                setFormOpen(true);
+                              },
+                            },
+                          ]
+                        : []),
                       {
                         label: 'View details',
                         icon: EyeIcon,
                         onSelect: () => setDetails(story),
                       },
-                      {
-                        label:
-                          story.points != null ? 'Update story points' : 'Set story points',
-                        icon: HashIcon,
-                        onSelect: () => setPointsStory(story),
-                      },
-                      {
-                        label: story.adrDecision?.trim()
-                          ? 'Update architecture decision record'
-                          : 'Set architecture decision record',
-                        icon: FileTextIcon,
-                        onSelect: () => setAdrStory(story),
-                      },
-                      {
-                        label: 'Delete User Story',
-                        icon: Trash2Icon,
-                        danger: true,
-                        onSelect: () => removeStory(story.id),
-                      },
+                      ...(canMutateStories || canChangeStage
+                        ? [
+                            {
+                              label:
+                                story.points != null ? 'Update story points' : 'Set story points',
+                              icon: HashIcon,
+                              onSelect: () => setPointsStory(story),
+                            },
+                            {
+                              label: story.adrDecision?.trim()
+                                ? 'Update architecture decision record'
+                                : 'Set architecture decision record',
+                              icon: FileTextIcon,
+                              onSelect: () => setAdrStory(story),
+                            },
+                          ]
+                        : []),
+                      ...(canMutateStories
+                        ? [
+                            {
+                              label: 'Delete User Story',
+                              icon: Trash2Icon,
+                              danger: true,
+                              onSelect: () => removeStory(story.id),
+                            },
+                          ]
+                        : []),
                     ]}
                     submenus={[
-                      {
-                        key: 'status',
-                        label: 'Change Status',
-                        icon: SignalHighIcon,
-                        current: story.status,
-                        noneLabel: 'No status',
-                        options: CAPABILITY_STATUSES,
-                        onSelect: (v) =>
-                          updateStory(story.id, { status: v as CapabilityStatus | null }),
-                      },
-                      {
-                        key: 'stage',
-                        label: 'Change Progress',
-                        icon: WorkflowIcon,
-                        current: story.stage,
-                        options: STORY_STAGE_NAMES,
-                        onSelect: (v) => v && updateStory(story.id, { stage: v }),
-                      },
+                      ...(canMutateStories
+                        ? [
+                            {
+                              key: 'status',
+                              label: 'Change Status',
+                              icon: SignalHighIcon,
+                              current: story.status,
+                              noneLabel: 'No status',
+                              options: CAPABILITY_STATUSES,
+                              onSelect: (v: string | null) =>
+                                updateStory(story.id, {
+                                  status: v as CapabilityStatus | null,
+                                }),
+                            },
+                          ]
+                        : []),
+                      ...(canChangeStage
+                        ? [
+                            {
+                              key: 'stage',
+                              label: 'Change Progress',
+                              icon: WorkflowIcon,
+                              current: story.stage,
+                              options: stageOptions,
+                              onSelect: (v: string | null) =>
+                                v && canSetStoryStage(v) && updateStory(story.id, { stage: v }),
+                            },
+                          ]
+                        : []),
                     ]}
                   />
                 </td>

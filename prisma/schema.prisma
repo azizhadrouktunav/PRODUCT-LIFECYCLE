@@ -144,3 +144,13 @@ model Wave {
 
   @@map("waves")
 }
+
+model AppProfile {
+  userId      String   @id @map("user_id") @db.Uuid
+  email       String   @default("")
+  displayName String   @default("") @map("display_name")
+  role        String
+  productIds  String[] @default([]) @map("product_ids")
+
+  @@map("app_profiles")
+}

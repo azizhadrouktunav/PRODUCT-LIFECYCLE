@@ -11,6 +11,7 @@ import {
 import { DataTransfer } from '../components/DataTransfer';
 import { ProductModal } from '../components/ProductModal';
 import { Button, PageHeader, StatusTag } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, Product } from '../types/registry';
 import { stageIndex } from '../types/registry';
@@ -52,6 +53,7 @@ function compareValues(a: string | number, b: string | number, dir: SortDir): nu
 
 export function ProductsPage() {
   const { products, capabilities, groups, getGroup, lifecycleOf, removeProduct } = useRegistry();
+  const { can, productVisible, capabilityVisible } = useAuth();
   const [activeId, setActiveId] = useState(products[0]?.id ?? '');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -60,8 +62,11 @@ export function ProductsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const sorted = useMemo(
-    () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
-    [products]
+    () =>
+      [...products]
+        .filter((p) => productVisible(p.id))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [products, productVisible]
   );
 
   useEffect(() => {
@@ -82,9 +87,12 @@ export function ProductsPage() {
   const assigned = useMemo(
     () =>
       active
-        ? capabilities.filter((c) => (c.productIds ?? []).includes(active.id))
+        ? capabilities.filter(
+            (c) =>
+              (c.productIds ?? []).includes(active.id) && capabilityVisible(c)
+          )
         : [],
-    [capabilities, active]
+    [capabilities, active, capabilityVisible]
   );
 
   const availableGroups = useMemo(() => {
@@ -140,21 +148,23 @@ export function ProductsPage() {
     <div>
       <PageHeader
         title="Products"
-        count={`${products.length} products`}
+        count={`${sorted.length} products`}
         description="Products are assigned to capabilities and actors. Select a product to see its capabilities."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
-            <DataTransfer dataset="products" />
-            <Button
-              variant="primary"
-              onClick={() => {
-                setEditing(null);
-                setAdding(true);
-              }}
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add product
-            </Button>
+            {can('manage_products') && <DataTransfer dataset="products" />}
+            {can('manage_products') && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditing(null);
+                  setAdding(true);
+                }}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add product
+              </Button>
+            )}
           </div>
         }
       />
@@ -210,25 +220,29 @@ export function ProductsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    aria-label={`Edit ${active.name}`}
-                    onClick={() => {
-                      setEditing(active);
-                      setAdding(true);
-                    }}
-                    className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
-                  >
-                    <PencilIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Delete ${active.name}`}
-                    onClick={() => removeProduct(active.id)}
-                    className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-danger"
-                  >
-                    <Trash2Icon className="h-3.5 w-3.5" />
-                  </button>
+                  {can('manage_products') && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={`Edit ${active.name}`}
+                        onClick={() => {
+                          setEditing(active);
+                          setAdding(true);
+                        }}
+                        className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${active.name}`}
+                        onClick={() => removeProduct(active.id)}
+                        className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-danger"
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
