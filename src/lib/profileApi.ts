@@ -8,35 +8,81 @@ type ProfileRow = {
   display_name?: string | null;
   role: string;
   product_ids?: string[] | null;
-  app_roles?: {
-    label?: string | null;
-    sees_all_products?: boolean | null;
-    app_role_permissions?: { action: string }[] | null;
-  } | null;
 };
 
-function mapPermissions(rows: { action: string }[] | null | undefined): RbacAction[] {
-  return (rows ?? [])
-    .map((r) => r.action)
-    .filter(isRbacAction);
-}
+type RoleMeta = {
+  label: string;
+  seesAllProducts: boolean;
+  permissions: RbacAction[];
+};
 
-function mapProfile(row: ProfileRow): AppProfile {
-  const roleMeta = row.app_roles;
+const PROFILE_SELECT = 'user_id, email, display_name, role, product_ids';
+
+function mapBaseProfile(row: ProfileRow): AppProfile {
   return {
     userId: String(row.user_id),
     email: String(row.email ?? ''),
     displayName: String(row.display_name ?? ''),
     role: String(row.role ?? ''),
     productIds: row.product_ids ?? [],
-    roleLabel: roleMeta?.label ?? undefined,
-    seesAllProducts: !!roleMeta?.sees_all_products,
-    permissions: mapPermissions(roleMeta?.app_role_permissions),
   };
 }
 
-const PROFILE_SELECT =
-  'user_id, email, display_name, role, product_ids, app_roles(label, sees_all_products, app_role_permissions(action))';
+async function fetchRoleMetaBySlugs(slugs: string[]): Promise<Map<string, RoleMeta>> {
+  const unique = [...new Set(slugs.filter(Boolean))];
+  const map = new Map<string, RoleMeta>();
+  if (unique.length === 0) return map;
+
+  const { data: roles, error: rolesError } = await supabase
+    .from('app_roles')
+    .select('slug, label, sees_all_products')
+    .in('slug', unique);
+  if (rolesError) throw new Error(`Load roles: ${rolesError.message}`);
+
+  const { data: perms, error: permsError } = await supabase
+    .from('app_role_permissions')
+    .select('role_slug, action')
+    .in('role_slug', unique);
+  if (permsError) throw new Error(`Load role permissions: ${permsError.message}`);
+
+  const permsBySlug = new Map<string, RbacAction[]>();
+  for (const row of perms ?? []) {
+    const slug = String((row as { role_slug: string }).role_slug);
+    const action = String((row as { action: string }).action);
+    if (!isRbacAction(action)) continue;
+    const list = permsBySlug.get(slug) ?? [];
+    list.push(action);
+    permsBySlug.set(slug, list);
+  }
+
+  for (const row of roles ?? []) {
+    const slug = String((row as { slug: string }).slug);
+    map.set(slug, {
+      label: String((row as { label: string }).label ?? slug),
+      seesAllProducts: !!(row as { sees_all_products?: boolean }).sees_all_products,
+      permissions: permsBySlug.get(slug) ?? [],
+    });
+  }
+
+  return map;
+}
+
+function withRoleMeta(profile: AppProfile, meta: RoleMeta | undefined): AppProfile {
+  if (!meta) {
+    return {
+      ...profile,
+      roleLabel: profile.role,
+      seesAllProducts: false,
+      permissions: [],
+    };
+  }
+  return {
+    ...profile,
+    roleLabel: meta.label,
+    seesAllProducts: meta.seesAllProducts,
+    permissions: meta.permissions,
+  };
+}
 
 export async function fetchProfile(userId: string): Promise<AppProfile | null> {
   const { data, error } = await supabase
@@ -46,7 +92,10 @@ export async function fetchProfile(userId: string): Promise<AppProfile | null> {
     .maybeSingle();
   if (error) throw new Error(`Load profile: ${error.message}`);
   if (!data) return null;
-  return mapProfile(data as unknown as ProfileRow);
+
+  const base = mapBaseProfile(data as unknown as ProfileRow);
+  const roleMap = await fetchRoleMetaBySlugs([base.role]);
+  return withRoleMeta(base, roleMap.get(base.role));
 }
 
 export async function fetchProfiles(): Promise<AppProfile[]> {
@@ -55,7 +104,10 @@ export async function fetchProfiles(): Promise<AppProfile[]> {
     .select(PROFILE_SELECT)
     .order('email');
   if (error) throw new Error(`Load profiles: ${error.message}`);
-  return (data ?? []).map((r) => mapProfile(r as unknown as ProfileRow));
+
+  const bases = (data ?? []).map((r) => mapBaseProfile(r as unknown as ProfileRow));
+  const roleMap = await fetchRoleMetaBySlugs(bases.map((p) => p.role));
+  return bases.map((p) => withRoleMeta(p, roleMap.get(p.role)));
 }
 
 export async function upsertProfile(profile: AppProfile): Promise<void> {
