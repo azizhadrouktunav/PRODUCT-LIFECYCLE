@@ -236,6 +236,7 @@ function mapWave(row: Record<string, unknown>): Wave {
     name: String(row.name),
     description: String(row.description ?? ''),
     state: String(row.state ?? 'Planned') as WaveState,
+    deliveryDate: row.delivery_date ? String(row.delivery_date).slice(0, 10) : '',
     itemIds: (row.item_ids as string[] | null) ?? [],
   };
 }
@@ -482,6 +483,7 @@ export async function upsertWave(wave: Wave): Promise<void> {
     name: wave.name,
     description: wave.description,
     state: wave.state,
+    delivery_date: wave.deliveryDate ? wave.deliveryDate : null,
     item_ids: wave.itemIds,
   });
   throwIfError(error, 'Upsert wave');

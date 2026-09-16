@@ -394,6 +394,8 @@ export interface Wave {
   name: string;
   description: string;
   state: WaveState;
+  /** Planned delivery date (YYYY-MM-DD); empty when not set. */
+  deliveryDate: string;
   /** Mixed ids — CAP-…, EPIC-…, FEAT-… or US-… */
   itemIds: string[];
 }

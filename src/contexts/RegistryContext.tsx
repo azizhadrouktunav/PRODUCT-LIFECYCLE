@@ -74,7 +74,10 @@ export type StoryInput = Pick<
 >;
 
 export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type'>;
-export type WaveInput = Pick<Wave, 'code' | 'name' | 'description' | 'state' | 'itemIds'>;
+export type WaveInput = Pick<
+  Wave,
+  'code' | 'name' | 'description' | 'state' | 'deliveryDate' | 'itemIds'
+>;
 export type ProductInput = Pick<Product, 'name' | 'description'>;
 export type ActorInput = Pick<Actor, 'name' | 'description' | 'productIds'>;
 

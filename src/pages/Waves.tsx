@@ -55,6 +55,9 @@ export function WavesPage() {
                 </span>
                 <h2 className="text-base font-semibold text-strong">{w.name}</h2>
                 <WaveTag state={w.state} />
+                {w.deliveryDate &&
+                <span className="font-mono text-2xs text-mute">Livraison {w.deliveryDate}</span>
+                }
                 <span className="ml-auto flex items-center gap-1">
                   <button
                     type="button"

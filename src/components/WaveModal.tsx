@@ -75,6 +75,7 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [state, setState] = useState<WaveState>('Planned');
+  const [deliveryDate, setDeliveryDate] = useState('');
   const [itemIds, setItemIds] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -95,6 +96,7 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
     setName(wave?.name ?? '');
     setDescription(wave?.description ?? '');
     setState(wave?.state ?? 'Planned');
+    setDeliveryDate(wave?.deliveryDate ?? '');
     setItemIds(wave?.itemIds ?? []);
     setQuery('');
     setExpanded(wave?.itemIds.filter((id) => id.startsWith('CAP-') || id.startsWith('EPIC-')) ?? []);
@@ -124,6 +126,7 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
       name: name.trim(),
       description: description.trim(),
       state,
+      deliveryDate,
       itemIds
     };
     if (wave) updateWave(wave.id, payload);else
@@ -177,19 +180,30 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
           
         </Field>
 
-        <Field label="State">
-          <select
-            className={inputClass}
-            value={state}
-            onChange={(e) => setState(e.target.value as WaveState)}>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="State">
+            <select
+              className={inputClass}
+              value={state}
+              onChange={(e) => setState(e.target.value as WaveState)}>
+              
+              {WAVE_STATES.map((s) =>
+              <option key={s} value={s}>
+                  {s}
+                </option>
+              )}
+            </select>
+          </Field>
+
+          <Field label="Date de livraison" hint="optionnel">
+            <input
+              type="date"
+              className={inputClass}
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.target.value)} />
             
-            {WAVE_STATES.map((s) =>
-            <option key={s} value={s}>
-                {s}
-              </option>
-            )}
-          </select>
-        </Field>
+          </Field>
+        </div>
 
         <div>
           <div className="mb-1.5 flex flex-wrap items-baseline gap-2">

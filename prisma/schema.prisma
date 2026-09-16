@@ -135,12 +135,13 @@ model UserStory {
 }
 
 model Wave {
-  id          String   @id
-  code        String   @default("")
-  name        String
-  description String   @default("")
-  state       String   @default("Planned")
-  itemIds     String[] @default([]) @map("item_ids")
+  id           String    @id
+  code         String    @default("")
+  name         String
+  description  String    @default("")
+  state        String    @default("Planned")
+  deliveryDate DateTime? @db.Date @map("delivery_date")
+  itemIds      String[]  @default([]) @map("item_ids")
 
   @@map("waves")
 }
