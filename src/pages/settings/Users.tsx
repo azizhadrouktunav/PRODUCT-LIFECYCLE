@@ -171,7 +171,7 @@ export function UsersSettingsPage() {
     }
     if (
       !window.confirm(
-        `Delete user ${profile.displayName || profile.email}? This removes their Auth account and profile.`
+        `Delete user ${profile.displayName || profile.email}? This removes their account and profile.`
       )
     ) {
       return;
@@ -290,7 +290,7 @@ export function UsersSettingsPage() {
           <ShieldIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No profiles yet.</p>
           <p className="mt-1 text-xs text-mute">
-            Invite a user to create their Auth account and profile.
+            Invite a user to create their account and profile.
           </p>
         </div>
       ) : (
@@ -478,7 +478,7 @@ export function UsersSettingsPage() {
         onClose={() => setInviteOpen(false)}
         width="max-w-lg"
         title="Invite user"
-        subtitle="Sends a Supabase invite email. The profile is created when the invite succeeds."
+        subtitle="Emails a link to set a password. The profile is created when the invite succeeds."
         footer={
           <>
             <Button variant="quiet" onClick={() => setInviteOpen(false)}>

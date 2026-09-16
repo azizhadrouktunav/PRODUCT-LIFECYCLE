@@ -6,8 +6,12 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../utils/supabase';
+import type { AuthSession, AuthUser, SignInResult } from '../lib/authApi';
+import {
+  login as loginRequest,
+  logout as logoutRequest,
+  restoreSession,
+} from '../lib/authApi';
 import { fetchProfile, upsertProfile } from '../lib/profileApi';
 import type { AppProfile, AppRole, RbacAction } from '../lib/rbac';
 import {
@@ -24,13 +28,14 @@ import type { Capability } from '../types/registry';
 
 interface AuthValue {
   loading: boolean;
-  session: Session | null;
-  user: User | null;
+  session: AuthSession | null;
+  user: AuthUser | null;
   profile: AppProfile | null;
   profileMissing: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  adoptSession: (result: SignInResult) => Promise<void>;
   refreshProfile: () => Promise<void>;
   can: (action: RbacAction) => boolean;
   canSetCapabilityProgress: (stage: string) => boolean;
@@ -49,27 +54,28 @@ const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [profileMissing, setProfileMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadProfile = useCallback(async (user: User | null) => {
-    if (!user) {
+  const loadProfile = useCallback(async (account: AuthUser | null) => {
+    if (!account) {
       setProfile(null);
       setProfileMissing(false);
       return;
     }
     try {
-      const p = await fetchProfile(user.id);
+      const p = await fetchProfile(account.id);
       if (!p) {
         setProfile(null);
         setProfileMissing(true);
       } else {
         setProfile(p);
         setProfileMissing(false);
-        if (!p.email && user.email) {
-          const updated = { ...p, email: user.email };
+        if (!p.email && account.email) {
+          const updated = { ...p, email: account.email };
           setProfile(updated);
           void upsertProfile(updated).catch(() => undefined);
         }
@@ -83,40 +89,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      const { data } = await supabase.auth.getSession();
+      const restored = await restoreSession();
       if (!mounted) return;
-      setSession(data.session);
-      await loadProfile(data.session?.user ?? null);
+      setSession(restored?.session ?? null);
+      setUser(restored?.user ?? null);
+      await loadProfile(restored?.user ?? null);
       if (mounted) setLoading(false);
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      void loadProfile(next?.user ?? null);
-    });
-
     return () => {
       mounted = false;
-      sub.subscription.unsubscribe();
     };
   }, [loadProfile]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    setError(null);
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-    if (err) throw new Error(err.message);
-  }, []);
+  const adoptSession = useCallback(
+    async (result: SignInResult) => {
+      setSession(result.session);
+      setUser(result.user);
+      await loadProfile(result.user);
+    },
+    [loadProfile]
+  );
+
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      setError(null);
+      const result = await loginRequest(email, password);
+      await adoptSession(result);
+    },
+    [adoptSession]
+  );
 
   const signOut = useCallback(async () => {
     setError(null);
-    await supabase.auth.signOut();
+    await logoutRequest();
+    setSession(null);
+    setUser(null);
     setProfile(null);
     setProfileMissing(false);
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    await loadProfile(session?.user ?? null);
-  }, [loadProfile, session?.user]);
+    await loadProfile(user);
+  }, [loadProfile, user]);
 
   const role = profile?.role ?? null;
   const permissions = profile?.permissions ?? [];
@@ -127,12 +142,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       loading,
       session,
-      user: session?.user ?? null,
+      user,
       profile,
       profileMissing,
       error,
       signIn,
       signOut,
+      adoptSession,
       refreshProfile,
       can: (action) => canWithPermissions(permissions, action),
       canSetCapabilityProgress: (stage) =>
@@ -142,7 +158,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isReadOnly: isReadOnlyFromPermissions(permissions),
       assignedProductIds,
       role,
-      roleLabel: roleDisplayLabel(role, profile?.roleLabel ? [{ slug: role!, label: profile.roleLabel }] : null),
+      roleLabel: roleDisplayLabel(
+        role,
+        profile?.roleLabel ? [{ slug: role!, label: profile.roleLabel }] : null
+      ),
       permissions,
       capabilityVisible: (c) => capabilityVisibleToUser(c, seesAll, assignedProductIds),
       productVisible: (id) => productVisibleToUser(id, seesAll, assignedProductIds),
@@ -150,11 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [
       loading,
       session,
+      user,
       profile,
       profileMissing,
       error,
       signIn,
       signOut,
+      adoptSession,
       refreshProfile,
       role,
       permissions,

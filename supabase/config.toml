@@ -13,8 +13,24 @@ max_rows = 1000
 port = 54322
 major_version = 15
 
-# Auth is enforced inside the functions (requireManageUsers). Gateway JWT
-# verify blocks browser OPTIONS preflight (no Authorization) → CORS errors.
+# Authentication is our own (app_users + app_sessions), so no Supabase JWT ever
+# reaches these functions. Admin endpoints enforce access themselves through
+# requirePermission() in functions/_shared/auth.ts.
+[functions.auth-login]
+verify_jwt = false
+
+[functions.auth-session]
+verify_jwt = false
+
+[functions.auth-logout]
+verify_jwt = false
+
+[functions.auth-set-password]
+verify_jwt = false
+
+[functions.auth-request-reset]
+verify_jwt = false
+
 [functions.invite-user]
 verify_jwt = false
 
@@ -22,9 +38,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.resend-invite]
-verify_jwt = false
-
-[functions.list-auth-status]
 verify_jwt = false
 
 [functions.reset-password]

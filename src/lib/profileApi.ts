@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase';
+import { sessionHeaders } from './authApi';
 import type { AppProfile, RbacAction } from './rbac';
 import { isRbacAction } from './rbac';
 
@@ -131,61 +132,74 @@ export async function ensureProfileStub(
   return null;
 }
 
+/** Privileged call: the Edge Function checks manage_users on our own session. */
+async function callAdminFunction(
+  name: string,
+  body: Record<string, unknown>,
+  fallback: string
+): Promise<void> {
+  const { data, error } = await supabase.functions.invoke(name, {
+    body,
+    headers: sessionHeaders(),
+  });
+
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    throw new Error(String((data as { error: string }).error));
+  }
+  if (error) {
+    const context = (error as { context?: Response }).context;
+    if (context && typeof context.json === 'function') {
+      try {
+        const payload = (await context.json()) as { error?: string };
+        if (payload?.error) throw new Error(payload.error);
+      } catch (parsed) {
+        if (parsed instanceof Error && parsed.message) throw parsed;
+      }
+    }
+    throw new Error(error.message || fallback);
+  }
+}
+
 export async function inviteUser(payload: {
   email: string;
   displayName: string;
   role: string;
   productIds: string[];
 }): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('invite-user', {
-    body: payload,
-  });
-  if (error) throw new Error(error.message || 'Invite failed');
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    throw new Error(String((data as { error: string }).error));
-  }
+  await callAdminFunction('invite-user', payload, 'Invite failed');
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('delete-user', {
-    body: { userId },
-  });
-  if (error) throw new Error(error.message || 'Delete failed');
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    throw new Error(String((data as { error: string }).error));
-  }
+  await callAdminFunction('delete-user', { userId }, 'Delete failed');
 }
 
 export type AuthUserStatus = 'pending' | 'active';
 
+/**
+ * Account status from the app_user_status view, which exposes activation state
+ * without ever revealing password hashes.
+ */
 export async function fetchAuthStatuses(): Promise<Record<string, AuthUserStatus>> {
-  const { data, error } = await supabase.functions.invoke('list-auth-status', {
-    body: {},
-  });
-  if (error) throw new Error(error.message || 'Load auth status failed');
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    throw new Error(String((data as { error: string }).error));
+  const { data, error } = await supabase
+    .from('app_user_status')
+    .select('user_id, is_active');
+  if (error) throw new Error(`Load auth status: ${error.message}`);
+
+  const statuses: Record<string, AuthUserStatus> = {};
+  for (const row of data ?? []) {
+    const { user_id: userId, is_active: isActive } = row as {
+      user_id: string;
+      is_active: boolean | null;
+    };
+    statuses[String(userId)] = isActive ? 'active' : 'pending';
   }
-  const statuses = (data as { statuses?: Record<string, AuthUserStatus> } | null)?.statuses;
-  return statuses ?? {};
+  return statuses;
 }
 
 export async function resendInvite(userId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('resend-invite', {
-    body: { userId },
-  });
-  if (error) throw new Error(error.message || 'Resend invite failed');
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    throw new Error(String((data as { error: string }).error));
-  }
+  await callAdminFunction('resend-invite', { userId }, 'Resend invite failed');
 }
 
 export async function resetPassword(userId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('reset-password', {
-    body: { userId },
-  });
-  if (error) throw new Error(error.message || 'Reset password failed');
-  if (data && typeof data === 'object' && 'error' in data && data.error) {
-    throw new Error(String((data as { error: string }).error));
-  }
+  await callAdminFunction('reset-password', { userId }, 'Reset password failed');
 }

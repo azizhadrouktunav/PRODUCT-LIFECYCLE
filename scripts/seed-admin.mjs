@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,54 +57,55 @@ Add to .env:
   process.exit(2);
 }
 
+if (password.length < 10) {
+  console.error('SEED_ADMIN_PASSWORD must be at least 10 characters.');
+  process.exit(2);
+}
+
+// Must stay in sync with supabase/functions/_shared/password.ts
+const ITERATIONS = 210_000;
+const KEY_BYTES = 32;
+const SALT_BYTES = 16;
+
+function hashPassword(plain) {
+  const salt = crypto.randomBytes(SALT_BYTES);
+  const hash = crypto.pbkdf2Sync(plain, salt, ITERATIONS, KEY_BYTES, 'sha256');
+  return `pbkdf2$sha256$${ITERATIONS}$${salt.toString('base64')}$${hash.toString('base64')}`;
+}
+
 const admin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
   realtime: { transport: ws },
 });
 
-async function findUserIdByEmail(targetEmail) {
-  let page = 1;
-  const perPage = 200;
-  for (;;) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-    if (error) throw new Error(`List users: ${error.message}`);
-    const users = data?.users ?? [];
-    const match = users.find((u) => (u.email || '').toLowerCase() === targetEmail);
-    if (match) return match.id;
-    if (users.length < perPage) return null;
-    page += 1;
-  }
-}
+async function ensureAdminUser() {
+  const passwordHash = hashPassword(password);
 
-async function ensureAuthUser() {
-  const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { display_name: displayName },
-  });
+  const { data: existing, error: findError } = await admin
+    .from('app_users')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+  if (findError) throw new Error(`Look up app_users: ${findError.message}`);
 
-  if (!error && data?.user?.id) {
-    console.log(`Created Auth user ${email}`);
-    return data.user.id;
+  if (existing?.id) {
+    const { error } = await admin
+      .from('app_users')
+      .update({ password_hash: passwordHash, disabled: false })
+      .eq('id', existing.id);
+    if (error) throw new Error(`Update app_users: ${error.message}`);
+    console.log(`Reset password for existing account ${email}`);
+    return String(existing.id);
   }
 
-  const message = error?.message || '';
-  const alreadyExists =
-    /already\s*(been\s*)?registered|already exists|duplicate|User already/i.test(message);
-
-  if (!alreadyExists) {
-    throw new Error(`Create user failed: ${message || 'unknown error'}`);
-  }
-
-  const existingId = await findUserIdByEmail(email);
-  if (!existingId) {
-    throw new Error(
-      `Auth user for ${email} appears to exist but could not be found via listUsers`
-    );
-  }
-  console.log(`Auth user already exists for ${email}; reusing id`);
-  return existingId;
+  const { data: created, error } = await admin
+    .from('app_users')
+    .insert({ email, password_hash: passwordHash })
+    .select('id')
+    .single();
+  if (error) throw new Error(`Create app_users: ${error.message}`);
+  console.log(`Created account ${email}`);
+  return String(created.id);
 }
 
 async function ensureAdministratorProfile(userId) {
@@ -117,14 +119,21 @@ async function ensureAdministratorProfile(userId) {
   if (error) {
     throw new Error(
       `Upsert app_profiles failed: ${error.message}\n` +
-        `Ensure migration 20260316100000_app_roles.sql is applied (administrator role must exist).`
+        `Ensure migrations 20260316100000_app_roles.sql and 20260318100000_custom_auth.sql are applied.`
     );
   }
 }
 
+async function revokeSessions(userId) {
+  // Rotating the password invalidates anything issued before.
+  const { error } = await admin.from('app_sessions').delete().eq('user_id', userId);
+  if (error) throw new Error(`Clear sessions: ${error.message}`);
+}
+
 try {
-  const userId = await ensureAuthUser();
+  const userId = await ensureAdminUser();
   await ensureAdministratorProfile(userId);
+  await revokeSessions(userId);
   console.log(`Administrator ready.`);
   console.log(`  email: ${email}`);
   console.log(`  user_id: ${userId}`);

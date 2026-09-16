@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CapabilityEditorProvider } from './contexts/CapabilityEditorContext';
@@ -16,6 +16,7 @@ import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
 import { ProductsPage } from './pages/Products';
+import { SetPasswordPage } from './pages/SetPassword';
 import { SettingsIndexRedirect, SettingsLayout } from './pages/settings/SettingsLayout';
 import { RolesSettingsPage } from './pages/settings/Roles';
 import { UsersSettingsPage } from './pages/settings/Users';
@@ -25,47 +26,53 @@ interface AppProps {
   theme?: 'dark' | 'light';
 }
 
+/** Reachable without a session (invite / reset links). */
+const PUBLIC_PATHS = new Set(['/set-password']);
+
 function AuthenticatedApp() {
   return (
     <RegistryProvider>
-      <BrowserRouter>
-        <CapabilityEditorProvider>
-          <AppShell>
-            <Routes>
-              <Route path="/" element={<CapabilitiesPage />} />
-              <Route path="/capabilities/:capabilityId" element={<CapabilityDetailRoute />} />
-              <Route path="/capabilities/:capabilityId/epics" element={<ManageEpicsPage />} />
-              <Route
-                path="/capabilities/:capabilityId/epics/:epicId/features"
-                element={<ManageFeaturesPage />}
-              />
-              <Route
-                path="/capabilities/:capabilityId/epics/:epicId/features/:featureId/stories"
-                element={<ManageStoriesPage />}
-              />
-              <Route path="/lifecycles" element={<LifecyclesPage />} />
-              <Route path="/groups" element={<GroupsPage />} />
-              <Route path="/products" element={<ProductsPage />} />
-              <Route path="/actors" element={<ActorsPage />} />
-              <Route path="/equipment" element={<EquipmentPage />} />
-              <Route path="/waves" element={<WavesPage />} />
-              <Route path="/settings" element={<SettingsLayout />}>
-                <Route index element={<SettingsIndexRedirect />} />
-                <Route path="users" element={<UsersSettingsPage />} />
-                <Route path="roles" element={<RolesSettingsPage />} />
-              </Route>
-              <Route path="/users" element={<Navigate to="/settings/users" replace />} />
-              <Route path="*" element={<CapabilitiesPage />} />
-            </Routes>
-          </AppShell>
-        </CapabilityEditorProvider>
-      </BrowserRouter>
+      <CapabilityEditorProvider>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<CapabilitiesPage />} />
+            <Route path="/capabilities/:capabilityId" element={<CapabilityDetailRoute />} />
+            <Route path="/capabilities/:capabilityId/epics" element={<ManageEpicsPage />} />
+            <Route
+              path="/capabilities/:capabilityId/epics/:epicId/features"
+              element={<ManageFeaturesPage />}
+            />
+            <Route
+              path="/capabilities/:capabilityId/epics/:epicId/features/:featureId/stories"
+              element={<ManageStoriesPage />}
+            />
+            <Route path="/lifecycles" element={<LifecyclesPage />} />
+            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/products" element={<ProductsPage />} />
+            <Route path="/actors" element={<ActorsPage />} />
+            <Route path="/equipment" element={<EquipmentPage />} />
+            <Route path="/waves" element={<WavesPage />} />
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<SettingsIndexRedirect />} />
+              <Route path="users" element={<UsersSettingsPage />} />
+              <Route path="roles" element={<RolesSettingsPage />} />
+            </Route>
+            <Route path="/users" element={<Navigate to="/settings/users" replace />} />
+            <Route path="*" element={<CapabilitiesPage />} />
+          </Routes>
+        </AppShell>
+      </CapabilityEditorProvider>
     </RegistryProvider>
   );
 }
 
 function AuthGate() {
   const { loading, session, profile, profileMissing } = useAuth();
+  const { pathname } = useLocation();
+
+  if (PUBLIC_PATHS.has(pathname)) {
+    return <SetPasswordPage />;
+  }
 
   if (loading) {
     return (
@@ -85,9 +92,11 @@ function AuthGate() {
 export function App({ theme = 'light' }: AppProps) {
   return (
     <ThemeProvider initialTheme={theme}>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

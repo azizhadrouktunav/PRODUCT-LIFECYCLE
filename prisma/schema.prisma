@@ -174,6 +174,46 @@ model AppProfile {
   role        String
   appRole     AppRole  @relation(fields: [role], references: [slug], onDelete: Restrict, onUpdate: Cascade)
   productIds  String[] @default([]) @map("product_ids")
+  user        AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("app_profiles")
+}
+
+model AppUser {
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique
+  passwordHash String?        @map("password_hash")
+  disabled     Boolean        @default(false)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime?      @map("last_login_at") @db.Timestamptz(6)
+  profile      AppProfile?
+  tokens       AppUserToken[]
+  sessions     AppSession[]
+
+  @@map("app_users")
+}
+
+model AppUserToken {
+  tokenHash String    @id @map("token_hash")
+  userId    String    @map("user_id") @db.Uuid
+  kind      String
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("app_user_tokens")
+}
+
+model AppSession {
+  tokenHash  String   @id @map("token_hash")
+  userId     String   @map("user_id") @db.Uuid
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("app_sessions")
 }
