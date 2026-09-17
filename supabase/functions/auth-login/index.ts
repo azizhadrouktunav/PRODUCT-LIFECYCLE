@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
 import { adminClient, createSession, resolveSession } from "../_shared/auth.ts";
+import { accessGrant } from "../_shared/jwt.ts";
 import { verifyPassword } from "../_shared/password.ts";
 
 // Same message whether the email is unknown, the password is wrong or the
@@ -51,6 +52,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       token: session.token,
       expiresAt: session.expiresAt,
+      ...(await accessGrant(userId)),
       user: user ?? { id: userId, email, displayName: "", role: "", permissions: [] },
     });
   } catch (err) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { Chip, StatusTag, TONE_DOT, TONE_TEXT } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import { stageDef, stageIndex, isStoryDone, usesEquipment } from '../types/registry';
 
@@ -41,9 +42,11 @@ export function CapabilityDetailPage() {
     storiesOfEpic
   } = useRegistry();
 
+  const { capabilityVisible, productVisible } = useAuth();
+
   const capability = getCapability(capabilityId);
 
-  if (!capability) {
+  if (!capability || !capabilityVisible(capability)) {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That capability is not in the register.</p>
@@ -248,7 +251,7 @@ export function CapabilityDetailPage() {
             </MetaRow>
             <MetaRow label="Products">
               <div className="flex flex-wrap gap-1">
-                {(capability.productIds ?? []).map((id) =>
+                {(capability.productIds ?? []).filter(productVisible).map((id) =>
                 <Chip key={id} tone="brand" title={getProduct(id)?.name}>
                     {id}
                   </Chip>

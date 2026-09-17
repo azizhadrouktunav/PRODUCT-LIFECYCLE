@@ -524,6 +524,22 @@ export async function deleteEquipment(id: string): Promise<void> {
   throwIfError(error, 'Delete equipment');
 }
 
+/**
+ * Assigning capabilities to a device writes capabilities.equipment_ids, and
+ * manage_equipment deliberately has no update rights on that table. The RPC is
+ * the one path that touches the column, checking manage_equipment itself.
+ */
+export async function setEquipmentCapabilities(
+  equipmentId: string,
+  capabilityIds: string[]
+): Promise<void> {
+  const { error } = await supabase.rpc('app_set_equipment_capabilities', {
+    p_equipment_id: equipmentId,
+    p_capability_ids: capabilityIds,
+  });
+  throwIfError(error, 'Assign equipment capabilities');
+}
+
 export async function upsertCapabilities(items: Capability[]): Promise<void> {
   if (items.length === 0) return;
   const { error } = await supabase.from('capabilities').upsert(

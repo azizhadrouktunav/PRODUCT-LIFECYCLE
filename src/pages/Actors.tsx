@@ -3,36 +3,48 @@ import { PencilIcon, PlusIcon, Trash2Icon, UsersIcon } from 'lucide-react';
 import { ActorModal } from '../components/ActorModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Button, Chip, PageHeader } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Actor } from '../types/registry';
 
 export function ActorsPage() {
   const { actors, products, removeActor } = useRegistry();
+  const { can, productVisible } = useAuth();
+  const canManage = can('manage_actors');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Actor | null>(null);
 
-  const sorted = [...actors].sort((a, b) => a.name.localeCompare(b.name));
+  function visibleProductIds(actor: Actor): string[] {
+    return (actor.productIds ?? []).filter((id) => productVisible(id));
+  }
+
+  // An actor with no products is company-wide, so it stays visible to everyone.
+  const sorted = [...actors]
+    .filter((a) => (a.productIds ?? []).length === 0 || visibleProductIds(a).length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div>
       <PageHeader
         title="Actors"
-        count={`${actors.length} actors`}
+        count={`${sorted.length} actors`}
         description="Personas used in user stories. Each actor is assigned to one or more products; stories only offer actors that share a product with the capability."
         action={
-          <div className="flex flex-wrap items-center gap-1.5">
-            <DataTransfer dataset="actors" />
-            <Button
-              variant="primary"
-              onClick={() => {
-                setEditing(null);
-                setAdding(true);
-              }}
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add actor
-            </Button>
-          </div>
+          canManage ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <DataTransfer dataset="actors" />
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditing(null);
+                  setAdding(true);
+                }}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add actor
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -53,7 +65,7 @@ export function ActorsPage() {
                 <th className="w-48 py-2.5 pr-4 font-medium">Name</th>
                 <th className="py-2.5 pr-4 font-medium">Description</th>
                 <th className="w-64 py-2.5 pr-4 font-medium">Products</th>
-                <th className="w-24 py-2.5 text-right font-medium">Actions</th>
+                {canManage && <th className="w-24 py-2.5 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -68,10 +80,10 @@ export function ActorsPage() {
                   </td>
                   <td className="py-3 pr-4">
                     <div className="flex flex-wrap gap-1">
-                      {(actor.productIds ?? []).length === 0 ? (
+                      {visibleProductIds(actor).length === 0 ? (
                         <span className="text-2xs text-mute">—</span>
                       ) : (
-                        actor.productIds.map((id) => {
+                        visibleProductIds(actor).map((id) => {
                           const p = products.find((x) => x.id === id);
                           return (
                             <Chip key={id}>
@@ -83,29 +95,31 @@ export function ActorsPage() {
                       )}
                     </div>
                   </td>
-                  <td className="py-3 text-right">
-                    <div className="inline-flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        aria-label={`Edit ${actor.name}`}
-                        onClick={() => {
-                          setEditing(actor);
-                          setAdding(true);
-                        }}
-                        className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
-                      >
-                        <PencilIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Delete ${actor.name}`}
-                        onClick={() => removeActor(actor.id)}
-                        className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-danger"
-                      >
-                        <Trash2Icon className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
+                  {canManage && (
+                    <td className="py-3 text-right">
+                      <div className="inline-flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label={`Edit ${actor.name}`}
+                          onClick={() => {
+                            setEditing(actor);
+                            setAdding(true);
+                          }}
+                          className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
+                        >
+                          <PencilIcon className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${actor.name}`}
+                          onClick={() => removeActor(actor.id)}
+                          className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-danger"
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

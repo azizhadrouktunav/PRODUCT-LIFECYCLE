@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { LifecycleModal } from '../components/LifecycleModal';
 import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Lifecycle } from '../types/registry';
 import { DECOMPOSITION_LABEL, REQUIREMENT_LABEL, usesDecomposition } from '../types/registry';
 
 export function LifecyclesPage() {
   const { lifecycles, groups, removeLifecycle } = useRegistry();
+  const { can } = useAuth();
+  const canManage = can('manage_lifecycles');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Lifecycle | null>(null);
 
@@ -18,10 +21,12 @@ export function LifecyclesPage() {
         count={`${lifecycles.length} lifecycles`}
         description="Define the process tracks capability groups follow — ordered stages, prerequisites, and whether work decomposes into epics, features and user stories."
         action={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add lifecycle
-          </Button>
+          canManage ? (
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add lifecycle
+            </Button>
+          ) : undefined
         }
       />
 
@@ -32,24 +37,28 @@ export function LifecyclesPage() {
             <section key={lc.id} className="rounded-md border border-line-strong p-4">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h2 className="text-base font-semibold text-strong">{lc.label}</h2>
-                <button
-                  type="button"
-                  onClick={() => setEditing(lc)}
-                  aria-label={`Edit ${lc.label}`}
-                  title="Edit lifecycle"
-                  className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-                >
-                  <PencilIcon className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeLifecycle(lc.id)}
-                  aria-label={`Delete ${lc.label}`}
-                  title="Delete lifecycle"
-                  className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
-                >
-                  <Trash2Icon className="h-3.5 w-3.5" />
-                </button>
+                {canManage && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(lc)}
+                      aria-label={`Edit ${lc.label}`}
+                      title="Edit lifecycle"
+                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeLifecycle(lc.id)}
+                      aria-label={`Delete ${lc.label}`}
+                      title="Delete lifecycle"
+                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
                 <span className="font-mono text-2xs text-ink-500">{lc.id}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
                   {lc.stages.length} stages · {DECOMPOSITION_LABEL[lc.decomposition]}

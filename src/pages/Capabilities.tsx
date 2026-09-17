@@ -86,6 +86,12 @@ export function CapabilitiesPage() {
     [capabilities, capabilityVisible]
   );
 
+  // Offering a group whose every capability is out of scope filters to nothing.
+  const visibleGroups = useMemo(
+    () => groups.filter((g) => scopedCapabilities.some((c) => c.groupId === g.id)),
+    [groups, scopedCapabilities]
+  );
+
   function sortValue(c: Capability, key: SortKey): string | number {
     const lifecycle = lifecycleOf(c);
     const counts = countsOf(c.id);
@@ -207,7 +213,7 @@ export function CapabilitiesPage() {
           aria-label="Filter by capability group"
         >
           <option value="all">All groups</option>
-          {groups.map((g) => (
+          {visibleGroups.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>

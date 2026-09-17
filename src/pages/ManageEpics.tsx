@@ -14,6 +14,7 @@ import { DataTransfer } from '../components/DataTransfer';
 import { DetailsModal } from '../components/DetailsModal';
 import { EpicModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Epic } from '../types/registry';
 import { CAPABILITY_STATUSES, storyIsDone } from '../types/registry';
@@ -22,13 +23,15 @@ export function ManageEpicsPage() {
   const { capabilityId = '' } = useParams();
   const navigate = useNavigate();
   const { getCapability, epicsOf, featuresOf, storiesOfEpic, updateEpic, removeEpic } = useRegistry();
+  const { can, capabilityVisible } = useAuth();
   const capability = getCapability(capabilityId);
+  const canManage = can('edit_capability');
 
   const [editing, setEditing] = useState<Epic | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [details, setDetails] = useState<Epic | null>(null);
 
-  if (!capability) {
+  if (!capability || !capabilityVisible(capability)) {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That capability is not in the register.</p>
@@ -69,6 +72,7 @@ export function ManageEpicsPage() {
           count={`${epics.length} epics`}
           description={`Epics of ${capability.id} · ${capability.name}. Open an epic to manage the features inside it.`}
           action={
+          canManage ?
           <div className="flex flex-wrap items-center gap-1.5">
               <DataTransfer dataset="epics" parentId={capability.id} scopeLabel={capability.id} />
               <Button
@@ -81,7 +85,8 @@ export function ManageEpicsPage() {
                 <PlusIcon className="h-3.5 w-3.5" />
                 Add epic
               </Button>
-            </div>
+            </div> :
+          undefined
           } />
         
       </div>
@@ -127,14 +132,16 @@ export function ManageEpicsPage() {
                       label={`Actions for ${epic.name}`}
                       header={`${epic.id} · ${featuresOf(epic.id).length} features`}
                       items={[
-                      {
+                      ...canManage ?
+                      [{
                         label: 'Edit Epic',
                         icon: PencilIcon,
                         onSelect: () => {
                           setEditing(epic);
                           setFormOpen(true);
                         }
-                      },
+                      }] :
+                      [],
                       {
                         label: 'Manage Features',
                         icon: LayersIcon,
@@ -142,15 +149,18 @@ export function ManageEpicsPage() {
                         navigate(`/capabilities/${capability.id}/epics/${epic.id}/features`)
                       },
                       { label: 'View Epic Details', icon: EyeIcon, onSelect: () => setDetails(epic) },
-                      {
+                      ...canManage ?
+                      [{
                         label: 'Delete Epic',
                         icon: Trash2Icon,
                         danger: true,
                         onSelect: () => removeEpic(epic.id)
-                      }]
+                      }] :
+                      []]
                       }
-                      submenus={[
-                      {
+                      submenus={
+                      canManage ?
+                      [{
                         key: 'status',
                         label: 'Change Status',
                         icon: SignalHighIcon,
@@ -159,7 +169,8 @@ export function ManageEpicsPage() {
                         options: CAPABILITY_STATUSES,
                         onSelect: (v) =>
                         updateEpic(epic.id, { status: v as CapabilityStatus | null })
-                      }]
+                      }] :
+                      []
                       } />
                     
                   </td>

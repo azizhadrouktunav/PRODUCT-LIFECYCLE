@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { WaveModal } from '../components/WaveModal';
 import { Button, Chip, PageHeader, ProgressBar, WaveTag } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Wave } from '../types/registry';
 import { storyIsDone } from '../types/registry';
@@ -11,6 +12,8 @@ import { waveCounts, waveStories } from '../utils/scope';
 export function WavesPage() {
   const { waves, epics, features, stories, getCapability, getEpic, getFeature, getStory, removeWave } =
   useRegistry();
+  const { can, capabilityVisible } = useAuth();
+  const canManage = can('manage_waves');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Wave | null>(null);
 
@@ -21,13 +24,36 @@ export function WavesPage() {
     return { label: getStory(id)?.title ?? id, tone: 'neutral' };
   }
 
+  /** Every wave item resolves back to one capability, which carries the products. */
+  function itemVisible(id: string): boolean {
+    if (id.startsWith('CAP-')) {
+      const capability = getCapability(id);
+      return !!capability && capabilityVisible(capability);
+    }
+    if (id.startsWith('EPIC-')) {
+      const epic = getEpic(id);
+      return !!epic && itemVisible(epic.capabilityId);
+    }
+    if (id.startsWith('FEAT-')) {
+      const feature = getFeature(id);
+      return !!feature && itemVisible(feature.epicId);
+    }
+    const story = getStory(id);
+    return !!story && itemVisible(story.featureId);
+  }
+
+  const visibleWaves = waves
+    .map((w) => ({ wave: w, itemIds: w.itemIds.filter(itemVisible) }))
+    .filter((entry) => entry.itemIds.length > 0);
+
   return (
     <div>
       <PageHeader
         title="Waves"
-        count={`${waves.length} increments`}
+        count={`${visibleWaves.length} increments`}
         description="One increment you can put on production and test end to end — any mix of capabilities, epics, features and user stories, tracked as a unit."
         action={
+        canManage ?
         <Button
           variant="primary"
           onClick={() => {
@@ -37,15 +63,17 @@ export function WavesPage() {
           
             <PlusIcon className="h-3.5 w-3.5" />
             Define wave
-          </Button>
+          </Button> :
+        undefined
         } />
       
 
       <div className="mt-4 space-y-5">
-        {waves.map((w) => {
-          const scope = waveStories(w, { epics, features, stories });
+        {visibleWaves.map(({ wave: w, itemIds }) => {
+          const scoped = { ...w, itemIds };
+          const scope = waveStories(scoped, { epics, features, stories });
           const done = scope.filter(storyIsDone).length;
-          const counts = waveCounts(w);
+          const counts = waveCounts(scoped);
 
           return (
             <article key={w.id} className="border-t border-line pt-4">
@@ -58,6 +86,7 @@ export function WavesPage() {
                 {w.deliveryDate &&
                 <span className="font-mono text-2xs text-mute">Livraison {w.deliveryDate}</span>
                 }
+                {canManage &&
                 <span className="ml-auto flex items-center gap-1">
                   <button
                     type="button"
@@ -79,6 +108,7 @@ export function WavesPage() {
                     <Trash2Icon className="h-3.5 w-3.5" />
                   </button>
                 </span>
+                }
               </div>
 
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">{w.description}</p>
@@ -95,7 +125,7 @@ export function WavesPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {w.itemIds.map((id) => {
+                {itemIds.map((id) => {
                   const { label, tone } = labelFor(id);
                   const href = id.startsWith('CAP-') ? `/capabilities/${id}` : undefined;
                   const chip =
@@ -116,7 +146,7 @@ export function WavesPage() {
 
         })}
 
-        {waves.length === 0 &&
+        {visibleWaves.length === 0 &&
         <div className="rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
             <p className="text-sm font-medium text-strong">No waves defined yet</p>
             <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-mute">

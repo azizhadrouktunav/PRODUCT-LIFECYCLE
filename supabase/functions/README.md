@@ -10,19 +10,23 @@ administrator's browser, which sends it through
 
 ## Bootstrap order
 
-1. Apply migrations (including `20260318100000_custom_auth.sql`): `npm run db:migrate`
-2. Set the function secrets (see below)
+1. Set the function secrets (see below), `SUPABASE_JWT_SECRET` first
+2. Apply migrations (including `20260319100000_rbac_rls.sql`): `npm run db:migrate`
 3. Deploy the functions
 4. Seed the first administrator: set `SUPABASE_SERVICE_ROLE_KEY` and `SEED_ADMIN_PASSWORD` in `.env`, then `npm run seed:admin`
 5. Sign in as that admin → Settings → invite other users
 
 ## Secrets
 
-`APP_BASE_URL` is the only one left:
-
 ```powershell
 npx supabase secrets set APP_BASE_URL=https://tunav-ref.vercel.app --project-ref pxlbuncwdswxisjnszas
+npx supabase secrets set SUPABASE_JWT_SECRET=<Dashboard → Settings → API → JWT Settings → JWT Secret> --project-ref pxlbuncwdswxisjnszas
 ```
+
+`SUPABASE_JWT_SECRET` signs the access tokens from `_shared/jwt.ts`. Without it
+`auth-login`, `auth-session` and `auth-set-password` fail, and with the wrong
+value every database read comes back empty, because the RLS policies in
+`20260319100000_rbac_rls.sql` resolve the caller from that token.
 
 Secrets are read on each invocation, so changing one needs no redeploy.
 
@@ -65,6 +69,20 @@ work.
 
 ## Deploy
 
+Order matters for the RBAC rollout, because each step is broken without the one
+before it:
+
+1. `npx supabase secrets set SUPABASE_JWT_SECRET=…` — the three auth functions
+   refuse to answer without it, so setting it after the deploy means a window
+   where nobody can sign in
+2. Deploy the functions below — they now return `accessToken` as well, which an
+   older browser bundle simply ignores
+3. Ship the frontend (Vercel) so browsers start sending that token
+4. Apply `20260319100000_rbac_rls.sql` (`npm run db:migrate 20260319100000`) —
+   from here on a request without the token reads nothing
+5. `npm run verify:rbac` — creates a throwaway Technical Manager, checks what it
+   can see and write, and rolls the whole transaction back
+
 ```bash
 npx supabase login
 npx supabase functions deploy auth-login --project-ref pxlbuncwdswxisjnszas
@@ -87,8 +105,8 @@ preflight without CORS headers. Admin endpoints enforce access themselves throug
 
 Public (no session):
 
-- **auth-login** — `{ email, password }` → `{ token, expiresAt, user }`
-- **auth-set-password** — `{ token, password }` consumes an invite or reset link → `{ token, expiresAt, user }`
+- **auth-login** — `{ email, password }` → `{ token, expiresAt, accessToken, accessTokenExpiresAt, user }`
+- **auth-set-password** — `{ token, password }` consumes an invite or reset link → the same shape
 
 There is no public "forgot password" endpoint. Mail is sent by the browser, so
 such an endpoint would have to hand a reset token to an anonymous caller, which
@@ -97,7 +115,7 @@ Settings → Users.
 
 Session required:
 
-- **auth-session** — `{}` → `{ user }`, used on app start to restore a session
+- **auth-session** — `{}` → `{ user, accessToken, accessTokenExpiresAt }`, used on app start to restore a session and afterwards to re-mint the access token
 - **auth-logout** — `{}` revokes the current session
 
 `manage_users` required:
@@ -130,6 +148,24 @@ ever sees the link.
 - `tokens.ts` — random tokens, sha256 storage, TTL constants
 - `auth.ts` — session creation and `requireSession` / `requirePermission` guards
 - `links.ts` — `APP_BASE_URL` plus the set-password URL builder
+- `jwt.ts` — the one-hour HS256 access token PostgREST identifies the user by
 
 Account status shown in Settings → Users comes from the `public.app_user_status`
-view, so the browser never touches `app_users` (which has no `anon` grants).
+view, so the browser never touches `app_users` (which has no grants outside the
+service role). The view only returns rows to a caller holding `manage_users`.
+
+## Two tokens, two jobs
+
+The opaque session token lives seven days, is stored hashed in `app_sessions`,
+travels as `X-Session-Token` and is what these functions check — revoking a
+session is one delete. It is useless to PostgREST, which only understands JWTs.
+
+So the same three functions also mint a one-hour HS256 access token whose `sub`
+is the `app_users` id. `src/lib/accessToken.ts` holds it, `src/utils/supabase.ts`
+hands it to supabase-js as the `accessToken` option, and the RLS policies read
+`request.jwt.claims -> sub` out of it. It is short-lived precisely because
+nothing can revoke it early; `auth-session` re-mints it a minute before expiry.
+
+Deploy the functions and `20260319100000_rbac_rls.sql` together: the policies
+without the token lock everyone out, and the token without the policies changes
+nothing.

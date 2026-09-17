@@ -679,9 +679,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         });
         const changed = next.filter((cap, i) => cap !== prev[i]);
         if (changed.length > 0) {
-          void api.upsertCapabilities(changed).catch((err) =>
-            persistError('setEquipmentCapabilities', err)
-          );
+          void api
+            .setEquipmentCapabilities(equipmentId, capabilityIds)
+            .catch((err) => persistError('setEquipmentCapabilities', err));
         }
         return next;
       });

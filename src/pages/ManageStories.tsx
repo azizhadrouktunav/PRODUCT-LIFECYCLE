@@ -245,7 +245,7 @@ export function ManageStoriesPage() {
 
   const stories = storiesOf(feature.id);
   const stageOptions = STORY_STAGE_NAMES.filter((s) => canSetStoryStage(s));
-  const canMutateStories = can('edit_all') && !isReadOnly;
+  const canMutateStories = can('edit_capability') && !isReadOnly;
   const canChangeStage = stageOptions.length > 0 && !isReadOnly;
 
   return (

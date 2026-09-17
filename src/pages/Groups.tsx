@@ -79,7 +79,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
 
 export function GroupsPage() {
   const { groups, capabilities, removeGroup, getLifecycle } = useRegistry();
-  const { can } = useAuth();
+  const { can, capabilityVisible } = useAuth();
   const canManage = can('manage_groups');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CapabilityGroup | null>(null);
@@ -106,7 +106,9 @@ export function GroupsPage() {
 
       <div className="mt-4 space-y-6">
         {groups.map((g) => {
-          const members = capabilities.filter((c) => c.groupId === g.id);
+          const members = capabilities.filter(
+            (c) => c.groupId === g.id && capabilityVisible(c)
+          );
           const lifecycle = getLifecycle(g.track);
           return (
             <section key={g.id}>

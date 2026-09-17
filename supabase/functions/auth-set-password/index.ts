@@ -6,6 +6,7 @@ import {
   resolveSession,
   revokeAllSessions,
 } from "../_shared/auth.ts";
+import { accessGrant } from "../_shared/jwt.ts";
 import { hashPassword, passwordProblem } from "../_shared/password.ts";
 import { sha256Hex } from "../_shared/tokens.ts";
 
@@ -80,6 +81,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       token: session.token,
       expiresAt: session.expiresAt,
+      ...(await accessGrant(userId)),
       user,
     });
   } catch (err) {

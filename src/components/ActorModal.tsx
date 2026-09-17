@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Actor } from '../types/registry';
 
@@ -19,6 +20,7 @@ export function ActorModal({
   actor?: Actor | null;
 }) {
   const { products, addActor, updateActor } = useRegistry();
+  const { productVisible } = useAuth();
   const isEdit = !!actor;
 
   const [name, setName] = useState('');
@@ -33,7 +35,9 @@ export function ActorModal({
   }, [open, actor]);
 
   const valid = name.trim().length > 1 && productIds.length > 0;
-  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedProducts = products
+    .filter((p) => productVisible(p.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   function submit() {
     if (!valid) return;

@@ -1,4 +1,6 @@
 import { supabase } from '../utils/supabase';
+import type { AccessGrant } from './accessToken';
+import { clearGrant, setGrantRefresher, storeGrant } from './accessToken';
 import type { RbacAction } from './rbac';
 import { isRbacAction } from './rbac';
 
@@ -105,6 +107,14 @@ export interface SignInResult {
   user: AuthUser;
 }
 
+// The session token outlives the JWT by days, so supabase-js asks for a new one
+// through here whenever the one it holds is about to expire.
+setGrantRefresher(async (): Promise<AccessGrant | null> => {
+  if (!currentToken()) return null;
+  const data = await callFunction<AccessGrant>('auth-session', {});
+  return data?.accessToken ? data : null;
+});
+
 export async function login(email: string, password: string): Promise<SignInResult> {
   const data = await callFunction<{ token: string; expiresAt: string; user: unknown }>(
     'auth-login',
@@ -113,6 +123,7 @@ export async function login(email: string, password: string): Promise<SignInResu
   );
   const session = { token: data.token, expiresAt: data.expiresAt };
   writeStored(session);
+  storeGrant(data);
   return { session, user: mapUser(data.user) };
 }
 
@@ -122,9 +133,11 @@ export async function restoreSession(): Promise<SignInResult | null> {
   if (!stored) return null;
   try {
     const data = await callFunction<{ user: unknown }>('auth-session', {});
+    storeGrant(data);
     return { session: stored, user: mapUser(data.user) };
   } catch {
     writeStored(null);
+    clearGrant();
     return null;
   }
 }
@@ -134,6 +147,7 @@ export async function logout(): Promise<void> {
     if (currentToken()) await callFunction<{ ok: boolean }>('auth-logout', {});
   } finally {
     writeStored(null);
+    clearGrant();
   }
 }
 
@@ -148,5 +162,6 @@ export async function setPassword(
   );
   const session = { token: data.token, expiresAt: data.expiresAt };
   writeStored(session);
+  storeGrant(data);
   return { session, user: mapUser(data.user) };
 }

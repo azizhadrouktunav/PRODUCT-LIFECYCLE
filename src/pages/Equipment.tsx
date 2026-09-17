@@ -18,8 +18,13 @@ export function EquipmentPage() {
     removeEquipment,
     removeEquipmentType,
   } = useRegistry();
-  const { can } = useAuth();
+  const { can, capabilityVisible } = useAuth();
   const canEdit = can('manage_equipment');
+  // Equipment is company-wide, but the capabilities it serves are product-scoped.
+  const visibleHardware = useMemo(
+    () => hardwareCapabilities.filter(capabilityVisible),
+    [hardwareCapabilities, capabilityVisible]
+  );
   const [activeId, setActiveId] = useState(equipment[0]?.id ?? '');
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
@@ -40,10 +45,8 @@ export function EquipmentPage() {
   const active = equipment.find((e) => e.id === activeId) ?? equipment[0];
   const supported = useMemo(
     () =>
-      active
-        ? hardwareCapabilities.filter((c) => c.equipmentIds.includes(active.id))
-        : [],
-    [hardwareCapabilities, active]
+      active ? visibleHardware.filter((c) => c.equipmentIds.includes(active.id)) : [],
+    [visibleHardware, active]
   );
 
   const sortedTypes = useMemo(
@@ -59,7 +62,13 @@ export function EquipmentPage() {
 
   function save() {
     if (!active) return;
-    setEquipmentCapabilities(active.id, draft);
+    // setEquipmentCapabilities unassigns everything absent from the list, so carry
+    // over capabilities outside this user's products rather than dropping them.
+    const visible = new Set(visibleHardware.map((c) => c.id));
+    const hidden = hardwareCapabilities
+      .filter((c) => !visible.has(c.id) && c.equipmentIds.includes(active.id))
+      .map((c) => c.id);
+    setEquipmentCapabilities(active.id, [...draft, ...hidden]);
     setAssigning(false);
   }
 
@@ -143,7 +152,7 @@ export function EquipmentPage() {
           <nav aria-label="Equipment models" className="border-t border-line">
             {equipment.map((e) => {
               const isActive = e.id === active.id;
-              const count = hardwareCapabilities.filter((c) =>
+              const count = visibleHardware.filter((c) =>
                 c.equipmentIds.includes(e.id)
               ).length;
               return (
@@ -248,7 +257,7 @@ export function EquipmentPage() {
         }
       >
         <ul className="space-y-1">
-          {hardwareCapabilities.map((c) => {
+          {visibleHardware.map((c) => {
             const checked = draft.includes(c.id);
             return (
               <li key={c.id}>

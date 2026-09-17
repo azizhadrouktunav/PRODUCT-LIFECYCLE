@@ -14,6 +14,7 @@ import { DataTransfer } from '../components/DataTransfer';
 import { DetailsModal } from '../components/DetailsModal';
 import { FeatureModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Feature } from '../types/registry';
 import { CAPABILITY_STATUSES, storyIsDone } from '../types/registry';
@@ -22,14 +23,16 @@ export function ManageFeaturesPage() {
   const { capabilityId = '', epicId = '' } = useParams();
   const navigate = useNavigate();
   const { getCapability, getEpic, featuresOf, storiesOf, updateFeature, removeFeature } = useRegistry();
+  const { can, capabilityVisible } = useAuth();
   const capability = getCapability(capabilityId);
   const epic = getEpic(epicId);
+  const canManage = can('edit_capability');
 
   const [editing, setEditing] = useState<Feature | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [details, setDetails] = useState<Feature | null>(null);
 
-  if (!capability || !epic) {
+  if (!capability || !epic || !capabilityVisible(capability)) {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That epic is not in the register.</p>
@@ -72,6 +75,7 @@ export function ManageFeaturesPage() {
           count={`${features.length} features`}
           description={`Features of ${epic.id} · ${epic.name}. Open a feature to manage the user stories inside it.`}
           action={
+          canManage ?
           <div className="flex flex-wrap items-center gap-1.5">
               <DataTransfer dataset="features" parentId={epic.id} scopeLabel={epic.id} />
               <Button
@@ -84,7 +88,8 @@ export function ManageFeaturesPage() {
                 <PlusIcon className="h-3.5 w-3.5" />
                 Add feature
               </Button>
-            </div>
+            </div> :
+          undefined
           } />
         
       </div>
@@ -125,14 +130,16 @@ export function ManageFeaturesPage() {
                       label={`Actions for ${feature.name}`}
                       header={`${feature.id} · ${stories.length} stories`}
                       items={[
-                      {
+                      ...canManage ?
+                      [{
                         label: 'Edit Feature',
                         icon: PencilIcon,
                         onSelect: () => {
                           setEditing(feature);
                           setFormOpen(true);
                         }
-                      },
+                      }] :
+                      [],
                       {
                         label: 'Manage User Stories',
                         icon: ListTreeIcon,
@@ -142,15 +149,18 @@ export function ManageFeaturesPage() {
                         )
                       },
                       { label: 'View Feature Details', icon: EyeIcon, onSelect: () => setDetails(feature) },
-                      {
+                      ...canManage ?
+                      [{
                         label: 'Delete Feature',
                         icon: Trash2Icon,
                         danger: true,
                         onSelect: () => removeFeature(feature.id)
-                      }]
+                      }] :
+                      []]
                       }
-                      submenus={[
-                      {
+                      submenus={
+                      canManage ?
+                      [{
                         key: 'status',
                         label: 'Change Status',
                         icon: SignalHighIcon,
@@ -159,7 +169,8 @@ export function ManageFeaturesPage() {
                         options: CAPABILITY_STATUSES,
                         onSelect: (v) =>
                         updateFeature(feature.id, { status: v as CapabilityStatus | null })
-                      }]
+                      }] :
+                      []
                       } />
                     
                   </td>
