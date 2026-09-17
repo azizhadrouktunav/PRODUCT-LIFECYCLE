@@ -4,25 +4,58 @@
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+// Values pasted from the docs often arrive with wrapping quotes or a trailing
+// shell continuation backslash; those must never reach the Resend headers.
+function secret(name: string): string {
+  const raw = Deno.env.get(name);
+  if (!raw) throw new Error(`Missing ${name} secret`);
+  return raw.trim().replace(/\\+$/, "").replace(/^["']|["']$/g, "").trim();
+}
+
+const PLACEHOLDER_KEYS = new Set([
+  "re_xxx",
+  "re_your_api_key",
+  "re_paste_your_real_key_here",
+]);
+
 export function appBaseUrl(): string {
-  const raw = Deno.env.get("APP_BASE_URL");
-  if (!raw) throw new Error("Missing APP_BASE_URL secret");
-  return raw.replace(/\/+$/, "");
+  return secret("APP_BASE_URL").replace(/\/+$/, "");
 }
 
 export function setPasswordUrl(token: string): string {
   return `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
 }
 
+/**
+ * A refused recipient is not a failure: the token is already valid, so callers
+ * can hand the link over manually instead of losing it.
+ */
+export type SendResult = { delivered: true } | { delivered: false; reason: string };
+
+function resendMessage(detail: string): string {
+  try {
+    const parsed = JSON.parse(detail) as { message?: string };
+    if (parsed.message) return parsed.message;
+  } catch {
+    // Not JSON — fall through to the raw body.
+  }
+  return detail;
+}
+
 export async function sendEmail(message: {
   to: string;
   subject: string;
   html: string;
-}): Promise<void> {
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("RESEND_FROM");
-  if (!apiKey) throw new Error("Missing RESEND_API_KEY secret");
-  if (!from) throw new Error("Missing RESEND_FROM secret");
+}): Promise<SendResult> {
+  const apiKey = secret("RESEND_API_KEY");
+  const from = secret("RESEND_FROM");
+  if (PLACEHOLDER_KEYS.has(apiKey.toLowerCase())) {
+    throw new Error(
+      "RESEND_API_KEY is still the placeholder value. Create a key at " +
+        "https://resend.com/api-keys and set it with: npx supabase secrets set " +
+        "RESEND_API_KEY=re_yourkey --project-ref <project-ref>"
+    );
+  }
 
   const res = await fetch(RESEND_ENDPOINT, {
     method: "POST",
@@ -40,8 +73,19 @@ export async function sendEmail(message: {
 
   if (!res.ok) {
     const detail = await res.text();
+    if (res.status === 401) {
+      throw new Error(
+        "Resend rejected the API key (401). Create a fresh key at " +
+          "https://resend.com/api-keys and update the RESEND_API_KEY secret."
+      );
+    }
+    if (res.status === 403) {
+      return { delivered: false, reason: resendMessage(detail) };
+    }
     throw new Error(`Resend ${res.status}: ${detail}`);
   }
+
+  return { delivered: true };
 }
 
 function escapeHtml(value: string): string {

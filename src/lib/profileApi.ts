@@ -133,11 +133,11 @@ export async function ensureProfileStub(
 }
 
 /** Privileged call: the Edge Function checks manage_users on our own session. */
-async function callAdminFunction(
+async function callAdminFunction<T extends Record<string, unknown>>(
   name: string,
   body: Record<string, unknown>,
   fallback: string
-): Promise<void> {
+): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, {
     body,
     headers: sessionHeaders(),
@@ -158,6 +158,32 @@ async function callAdminFunction(
     }
     throw new Error(error.message || fallback);
   }
+
+  return (data ?? {}) as T;
+}
+
+/**
+ * Resend refuses recipients other than the account owner until a sending domain
+ * is verified. The function then returns the link so an admin can pass it on.
+ */
+export type SendOutcome = {
+  emailed: boolean;
+  link?: string;
+  emailError?: string;
+};
+
+type SendPayload = {
+  emailed?: boolean;
+  link?: string;
+  emailError?: string;
+};
+
+function sendOutcome(payload: SendPayload): SendOutcome {
+  return {
+    emailed: payload.emailed !== false,
+    link: payload.link,
+    emailError: payload.emailError,
+  };
 }
 
 export async function inviteUser(payload: {
@@ -165,8 +191,10 @@ export async function inviteUser(payload: {
   displayName: string;
   role: string;
   productIds: string[];
-}): Promise<void> {
-  await callAdminFunction('invite-user', payload, 'Invite failed');
+}): Promise<SendOutcome> {
+  return sendOutcome(
+    await callAdminFunction<SendPayload>('invite-user', payload, 'Invite failed')
+  );
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {
@@ -196,10 +224,22 @@ export async function fetchAuthStatuses(): Promise<Record<string, AuthUserStatus
   return statuses;
 }
 
-export async function resendInvite(userId: string): Promise<void> {
-  await callAdminFunction('resend-invite', { userId }, 'Resend invite failed');
+export async function resendInvite(userId: string): Promise<SendOutcome> {
+  return sendOutcome(
+    await callAdminFunction<SendPayload>(
+      'resend-invite',
+      { userId },
+      'Resend invite failed'
+    )
+  );
 }
 
-export async function resetPassword(userId: string): Promise<void> {
-  await callAdminFunction('reset-password', { userId }, 'Reset password failed');
+export async function resetPassword(userId: string): Promise<SendOutcome> {
+  return sendOutcome(
+    await callAdminFunction<SendPayload>(
+      'reset-password',
+      { userId },
+      'Reset password failed'
+    )
+  );
 }

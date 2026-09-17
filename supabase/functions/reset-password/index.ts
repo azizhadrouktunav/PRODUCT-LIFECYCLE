@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
 import { requirePermission } from "../_shared/auth.ts";
-import { resetEmail, sendEmail } from "../_shared/email.ts";
+import { resetEmail, sendEmail, setPasswordUrl } from "../_shared/email.ts";
 import { expiresIn, randomToken, RESET_TTL_HOURS, sha256Hex } from "../_shared/tokens.ts";
 
 // Administrator-triggered reset from Settings → Users.
@@ -65,9 +65,19 @@ Deno.serve(async (req) => {
       token,
       hours: RESET_TTL_HOURS,
     });
-    await sendEmail({ to: email, ...message });
+    const sent = await sendEmail({ to: email, ...message });
 
-    return jsonResponse({ ok: true });
+    return jsonResponse(
+      sent.delivered
+        ? { ok: true, userId, emailed: true }
+        : {
+            ok: true,
+            userId,
+            emailed: false,
+            link: setPasswordUrl(token),
+            emailError: sent.reason,
+          }
+    );
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },

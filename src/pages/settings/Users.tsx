@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  CheckIcon,
+  CopyIcon,
   KeyRoundIcon,
   MailIcon,
   PencilIcon,
@@ -20,6 +22,7 @@ import {
   resetPassword,
   upsertProfile,
   type AuthUserStatus,
+  type SendOutcome,
 } from '../../lib/profileApi';
 import type { AppProfile, AppRoleRecord } from '../../lib/rbac';
 import { roleDisplayLabel } from '../../lib/rbac';
@@ -40,6 +43,10 @@ export function UsersSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [manualLink, setManualLink] = useState<
+    { email: string; url: string; reason: string } | null
+  >(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [authStatuses, setAuthStatuses] = useState<Record<string, AuthUserStatus>>({});
 
@@ -135,6 +142,35 @@ export function UsersSettingsPage() {
     );
   }
 
+  function clearFeedback() {
+    setError(null);
+    setMessage(null);
+    setManualLink(null);
+    setLinkCopied(false);
+  }
+
+  /** Resend may refuse the recipient; the returned link still works. */
+  function applyOutcome(outcome: SendOutcome, email: string, sent: string) {
+    if (outcome.emailed) {
+      setMessage(sent);
+    } else if (outcome.link) {
+      setManualLink({ email, url: outcome.link, reason: outcome.emailError ?? '' });
+    } else {
+      setError(outcome.emailError ?? 'The email could not be delivered.');
+    }
+  }
+
+  async function copyManualLink() {
+    if (!manualLink) return;
+    try {
+      await navigator.clipboard.writeText(manualLink.url);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      setError('Could not copy to clipboard — select the link and copy it manually.');
+    }
+  }
+
   async function saveEdit() {
     if (!editing) return;
     setSaving(true);
@@ -192,11 +228,10 @@ export function UsersSettingsPage() {
 
   async function onResend(profile: AppProfile) {
     setBusyId(profile.userId);
-    setError(null);
-    setMessage(null);
+    clearFeedback();
     try {
-      await resendInvite(profile.userId);
-      setMessage(`Invite resent to ${profile.email}.`);
+      const outcome = await resendInvite(profile.userId);
+      applyOutcome(outcome, profile.email, `Invite resent to ${profile.email}.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -214,11 +249,14 @@ export function UsersSettingsPage() {
       return;
     }
     setBusyId(profile.userId);
-    setError(null);
-    setMessage(null);
+    clearFeedback();
     try {
-      await resetPassword(profile.userId);
-      setMessage(`Password reset email sent to ${profile.email}.`);
+      const outcome = await resetPassword(profile.userId);
+      applyOutcome(
+        outcome,
+        profile.email,
+        `Password reset email sent to ${profile.email}.`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -230,11 +268,10 @@ export function UsersSettingsPage() {
     const email = inviteEmail.trim().toLowerCase();
     if (!email || !inviteRole) return;
     setInviting(true);
-    setError(null);
-    setMessage(null);
+    clearFeedback();
     try {
       const seesAll = roleSeesAllProducts(inviteRole);
-      await inviteUser({
+      const outcome = await inviteUser({
         email,
         displayName: inviteName.trim(),
         role: inviteRole,
@@ -244,7 +281,7 @@ export function UsersSettingsPage() {
       setInviteEmail('');
       setInviteName('');
       setInviteProducts([]);
-      setMessage(`Invite sent to ${email}.`);
+      applyOutcome(outcome, email, `Invite sent to ${email}.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -271,8 +308,7 @@ export function UsersSettingsPage() {
           variant="primary"
           onClick={() => {
             setInviteOpen(true);
-            setError(null);
-            setMessage(null);
+            clearFeedback();
           }}
         >
           <PlusIcon className="h-3.5 w-3.5" />
@@ -282,6 +318,32 @@ export function UsersSettingsPage() {
 
       {error && <p className="mt-3 text-xs text-danger">{error}</p>}
       {message && <p className="mt-3 text-xs text-soft">{message}</p>}
+
+      {manualLink && (
+        <div className="mt-3 rounded-md border border-warn/40 bg-ink-800 p-3">
+          <p className="text-xs text-soft">
+            The email could not be delivered to{' '}
+            <span className="text-strong">{manualLink.email}</span>. This link is
+            valid — share it with them directly.
+          </p>
+          {manualLink.reason && (
+            <p className="mt-1 text-2xs text-mute">{manualLink.reason}</p>
+          )}
+          <div className="mt-2 flex items-start gap-2">
+            <code className="flex-1 break-all rounded bg-ink-900 px-2 py-1.5 font-mono text-2xs text-soft">
+              {manualLink.url}
+            </code>
+            <Button variant="ghost" onClick={() => void copyManualLink()}>
+              {linkCopied ? (
+                <CheckIcon className="h-3.5 w-3.5" />
+              ) : (
+                <CopyIcon className="h-3.5 w-3.5" />
+              )}
+              {linkCopied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="mt-8 text-sm text-mute">Loading profiles…</p>
@@ -478,7 +540,7 @@ export function UsersSettingsPage() {
         onClose={() => setInviteOpen(false)}
         width="max-w-lg"
         title="Invite user"
-        subtitle="Emails a link to set a password. The profile is created when the invite succeeds."
+        subtitle="Emails a link to set a password. If the email cannot be delivered, the link is shown here so you can share it yourself."
         footer={
           <>
             <Button variant="quiet" onClick={() => setInviteOpen(false)}>

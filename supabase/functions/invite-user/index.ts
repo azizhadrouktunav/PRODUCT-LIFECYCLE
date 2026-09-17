@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
 import { requirePermission } from "../_shared/auth.ts";
-import { inviteEmail, sendEmail } from "../_shared/email.ts";
+import { inviteEmail, sendEmail, setPasswordUrl } from "../_shared/email.ts";
 import { expiresIn, INVITE_TTL_HOURS, randomToken, sha256Hex } from "../_shared/tokens.ts";
 
 Deno.serve(async (req) => {
@@ -94,9 +94,19 @@ Deno.serve(async (req) => {
       token,
       days: Math.round(INVITE_TTL_HOURS / 24),
     });
-    await sendEmail({ to: email, ...message });
+    const sent = await sendEmail({ to: email, ...message });
 
-    return jsonResponse({ ok: true, userId });
+    return jsonResponse(
+      sent.delivered
+        ? { ok: true, userId, emailed: true }
+        : {
+            ok: true,
+            userId,
+            emailed: false,
+            link: setPasswordUrl(token),
+            emailError: sent.reason,
+          }
+    );
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },
