@@ -150,11 +150,3 @@ export async function setPassword(
   writeStored(session);
   return { session, user: mapUser(data.user) };
 }
-
-export async function requestReset(email: string): Promise<void> {
-  await callFunction<{ ok: boolean }>(
-    'auth-request-reset',
-    { email },
-    { withSession: false }
-  );
-}

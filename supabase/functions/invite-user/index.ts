@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
 import { requirePermission } from "../_shared/auth.ts";
-import { inviteEmail, sendEmail, setPasswordUrl } from "../_shared/email.ts";
+import { setPasswordUrl } from "../_shared/links.ts";
 import { expiresIn, INVITE_TTL_HOURS, randomToken, sha256Hex } from "../_shared/tokens.ts";
 
 Deno.serve(async (req) => {
@@ -81,32 +81,24 @@ Deno.serve(async (req) => {
       .is("used_at", null);
 
     const token = randomToken();
+    const expiresAt = expiresIn(INVITE_TTL_HOURS);
     const { error: tokenError } = await admin.from("app_user_tokens").insert({
       token_hash: await sha256Hex(token),
       user_id: userId,
       kind: "invite",
-      expires_at: expiresIn(INVITE_TTL_HOURS),
+      expires_at: expiresAt,
     });
     if (tokenError) return jsonResponse({ error: tokenError.message }, 500);
 
-    const message = inviteEmail({
+    // The caller holds manage_users and mails the link itself through EmailJS.
+    return jsonResponse({
+      ok: true,
+      userId,
+      email,
       displayName,
-      token,
-      days: Math.round(INVITE_TTL_HOURS / 24),
+      link: setPasswordUrl(token),
+      expiresAt,
     });
-    const sent = await sendEmail({ to: email, ...message });
-
-    return jsonResponse(
-      sent.delivered
-        ? { ok: true, userId, emailed: true }
-        : {
-            ok: true,
-            userId,
-            emailed: false,
-            link: setPasswordUrl(token),
-            emailError: sent.reason,
-          }
-    );
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },

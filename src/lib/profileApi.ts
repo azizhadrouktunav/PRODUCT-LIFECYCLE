@@ -1,5 +1,8 @@
 import { supabase } from '../utils/supabase';
 import { sessionHeaders } from './authApi';
+import { sendEmail } from './emailjs';
+import type { EmailMessage } from './emailTemplates';
+import { expiryPhrase, inviteEmail, resetEmail } from './emailTemplates';
 import type { AppProfile, RbacAction } from './rbac';
 import { isRbacAction } from './rbac';
 
@@ -163,8 +166,8 @@ async function callAdminFunction<T extends Record<string, unknown>>(
 }
 
 /**
- * Resend refuses recipients other than the account owner until a sending domain
- * is verified. The function then returns the link so an admin can pass it on.
+ * When EmailJS refuses the send the token is still valid, so the link travels
+ * back to the caller for an administrator to pass on by hand.
  */
 export type SendOutcome = {
   emailed: boolean;
@@ -172,18 +175,33 @@ export type SendOutcome = {
   emailError?: string;
 };
 
-type SendPayload = {
-  emailed?: boolean;
+/** What the Edge Functions answer now that they no longer send mail. */
+type LinkPayload = {
+  email?: string;
+  displayName?: string;
   link?: string;
-  emailError?: string;
+  expiresAt?: string;
 };
 
-function sendOutcome(payload: SendPayload): SendOutcome {
-  return {
-    emailed: payload.emailed !== false,
-    link: payload.link,
-    emailError: payload.emailError,
-  };
+async function deliver(
+  payload: LinkPayload,
+  compose: (params: { displayName: string; link: string; expiry: string }) => EmailMessage
+): Promise<SendOutcome> {
+  const link = String(payload.link ?? '');
+  const to = String(payload.email ?? '');
+  if (!link || !to) {
+    return { emailed: false, emailError: 'The server did not return a set-password link.' };
+  }
+
+  const displayName = String(payload.displayName ?? '');
+  const content = compose({
+    displayName,
+    link,
+    expiry: expiryPhrase(String(payload.expiresAt ?? '')),
+  });
+  const sent = await sendEmail({ to, toName: displayName, content });
+
+  return sent.delivered ? { emailed: true } : { emailed: false, link, emailError: sent.reason };
 }
 
 export async function inviteUser(payload: {
@@ -192,8 +210,9 @@ export async function inviteUser(payload: {
   role: string;
   productIds: string[];
 }): Promise<SendOutcome> {
-  return sendOutcome(
-    await callAdminFunction<SendPayload>('invite-user', payload, 'Invite failed')
+  return deliver(
+    await callAdminFunction<LinkPayload>('invite-user', payload, 'Invite failed'),
+    inviteEmail
   );
 }
 
@@ -225,21 +244,15 @@ export async function fetchAuthStatuses(): Promise<Record<string, AuthUserStatus
 }
 
 export async function resendInvite(userId: string): Promise<SendOutcome> {
-  return sendOutcome(
-    await callAdminFunction<SendPayload>(
-      'resend-invite',
-      { userId },
-      'Resend invite failed'
-    )
+  return deliver(
+    await callAdminFunction<LinkPayload>('resend-invite', { userId }, 'Resend invite failed'),
+    inviteEmail
   );
 }
 
 export async function resetPassword(userId: string): Promise<SendOutcome> {
-  return sendOutcome(
-    await callAdminFunction<SendPayload>(
-      'reset-password',
-      { userId },
-      'Reset password failed'
-    )
+  return deliver(
+    await callAdminFunction<LinkPayload>('reset-password', { userId }, 'Reset password failed'),
+    resetEmail
   );
 }

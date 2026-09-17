@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { jsonResponse, preflight } from "../_shared/cors.ts";
 import { requirePermission } from "../_shared/auth.ts";
-import { resetEmail, sendEmail, setPasswordUrl } from "../_shared/email.ts";
+import { setPasswordUrl } from "../_shared/links.ts";
 import { expiresIn, randomToken, RESET_TTL_HOURS, sha256Hex } from "../_shared/tokens.ts";
 
 // Administrator-triggered reset from Settings → Users.
@@ -52,32 +52,24 @@ Deno.serve(async (req) => {
       .is("used_at", null);
 
     const token = randomToken();
+    const expiresAt = expiresIn(RESET_TTL_HOURS);
     const { error: tokenError } = await admin.from("app_user_tokens").insert({
       token_hash: await sha256Hex(token),
       user_id: userId,
       kind: "reset",
-      expires_at: expiresIn(RESET_TTL_HOURS),
+      expires_at: expiresAt,
     });
     if (tokenError) return jsonResponse({ error: tokenError.message }, 500);
 
-    const message = resetEmail({
+    // The caller holds manage_users and mails the link itself through EmailJS.
+    return jsonResponse({
+      ok: true,
+      userId,
+      email,
       displayName: String(profile?.display_name ?? ""),
-      token,
-      hours: RESET_TTL_HOURS,
+      link: setPasswordUrl(token),
+      expiresAt,
     });
-    const sent = await sendEmail({ to: email, ...message });
-
-    return jsonResponse(
-      sent.delivered
-        ? { ok: true, userId, emailed: true }
-        : {
-            ok: true,
-            userId,
-            emailed: false,
-            link: setPasswordUrl(token),
-            emailError: sent.reason,
-          }
-    );
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },

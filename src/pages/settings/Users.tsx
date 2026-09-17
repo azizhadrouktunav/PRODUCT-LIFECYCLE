@@ -149,7 +149,7 @@ export function UsersSettingsPage() {
     setLinkCopied(false);
   }
 
-  /** Resend may refuse the recipient; the returned link still works. */
+  /** EmailJS may refuse the send; the returned link still works. */
   function applyOutcome(outcome: SendOutcome, email: string, sent: string) {
     if (outcome.emailed) {
       setMessage(sent);
