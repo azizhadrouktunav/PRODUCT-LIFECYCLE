@@ -39,6 +39,12 @@ npx supabase secrets set RESEND_API_KEY=<YOUR-RESEND-KEY> "RESEND_FROM=TUNAV ONE
 
 Secrets are read on each invocation, so changing one needs no redeploy.
 
+`APP_BASE_URL` must point at a host that serves the SPA on every path. The app
+is a client-routed Vite build, so `/set-password` only exists in React Router —
+`vercel.json` at the repo root rewrites unmatched paths to `/index.html`. Drop
+that rewrite (or move to a host without an equivalent) and every invite link
+answers `404 NOT_FOUND` before any JavaScript runs.
+
 The sending domain must be verified in Resend. Without a verified domain only
 `RESEND_FROM="TUNAV ONE <onboarding@resend.dev>"` works, and it only delivers to
 the email address that owns the Resend account — invites to anyone else come
