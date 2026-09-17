@@ -6,9 +6,11 @@
 // secret; supabase-js sends it as the Authorization header, and the policies in
 // 20260319100000_rbac_rls.sql read `auth.jwt() ->> 'sub'` out of it.
 //
-// Requires the secret SUPABASE_JWT_SECRET (Dashboard, Settings, API, JWT
-// Settings, "JWT Secret"):
-//   npx supabase secrets set SUPABASE_JWT_SECRET=... --project-ref <project-ref>
+// Requires the secret APP_JWT_SECRET, which holds the project's JWT secret
+// (Dashboard, Settings, JWT Keys). The name cannot start with SUPABASE_: the
+// CLI reserves that prefix for the variables the Edge runtime injects, and
+// silently skips anything else using it.
+//   npx supabase secrets set "APP_JWT_SECRET=..." --project-ref <project-ref>
 
 /** Short by design: it is a bearer token that no session revocation can reach. */
 export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
@@ -25,8 +27,8 @@ function encodeSegment(value: unknown): string {
 }
 
 async function signingKey(): Promise<CryptoKey> {
-  const secret = (Deno.env.get("SUPABASE_JWT_SECRET") ?? "").trim();
-  if (!secret) throw new Error("Missing SUPABASE_JWT_SECRET secret");
+  const secret = (Deno.env.get("APP_JWT_SECRET") ?? "").trim();
+  if (!secret) throw new Error("Missing APP_JWT_SECRET secret");
   return crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),

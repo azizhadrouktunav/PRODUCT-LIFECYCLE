@@ -17,6 +17,7 @@ export interface AccessGrant {
 
 let refresher: (() => Promise<AccessGrant | null>) | null = null;
 let pending: Promise<string | null> | null = null;
+let refreshing = false;
 
 function read(): AccessGrant | null {
   try {
@@ -73,9 +74,18 @@ export function setGrantRefresher(fn: () => Promise<AccessGrant | null>): void {
 export async function currentAccessToken(): Promise<string | null> {
   const stored = read();
   if (usable(stored)) return stored.accessToken;
-  if (!refresher) return null;
+  if (pending) return pending;
 
-  pending ??= refresher()
+  // Anything asking for a token while the refresh is mid-flight is the refresh
+  // itself, so answer null and let it use the publishable key. The refresher
+  // registered in authApi deliberately uses plain fetch for this reason: a
+  // refresh sent through supabase-js would ask for a token before sending,
+  // re-enter here, and recurse until the stack gave out — with every unwound
+  // frame firing its own auth-session request.
+  if (!refresher || refreshing) return null;
+
+  refreshing = true;
+  pending = refresher()
     .then((grant) => {
       if (!grant?.accessToken) {
         write(null);
@@ -86,6 +96,7 @@ export async function currentAccessToken(): Promise<string | null> {
     })
     .catch(() => null)
     .finally(() => {
+      refreshing = false;
       pending = null;
     });
 

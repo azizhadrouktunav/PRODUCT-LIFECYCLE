@@ -109,10 +109,33 @@ export interface SignInResult {
 
 // The session token outlives the JWT by days, so supabase-js asks for a new one
 // through here whenever the one it holds is about to expire.
+//
+// This one call cannot go through supabase-js. Every request it sends asks for
+// an access token first, so routing the refresh through it would re-enter the
+// refresher before this request left the browser, and keep doing so until the
+// stack gave out. Plain fetch has no such hook.
 setGrantRefresher(async (): Promise<AccessGrant | null> => {
-  if (!currentToken()) return null;
-  const data = await callFunction<AccessGrant>('auth-session', {});
-  return data?.accessToken ? data : null;
+  const token = currentToken();
+  if (!token) return null;
+
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auth-session`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'X-Session-Token': token,
+      },
+      body: '{}',
+    }
+  );
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as Partial<AccessGrant>;
+  return data?.accessToken && data?.accessTokenExpiresAt ? (data as AccessGrant) : null;
 });
 
 export async function login(email: string, password: string): Promise<SignInResult> {

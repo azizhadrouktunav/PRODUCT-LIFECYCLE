@@ -10,7 +10,7 @@ administrator's browser, which sends it through
 
 ## Bootstrap order
 
-1. Set the function secrets (see below), `SUPABASE_JWT_SECRET` first
+1. Set the function secrets (see below), `APP_JWT_SECRET` first
 2. Apply migrations (including `20260319100000_rbac_rls.sql`): `npm run db:migrate`
 3. Deploy the functions
 4. Seed the first administrator: set `SUPABASE_SERVICE_ROLE_KEY` and `SEED_ADMIN_PASSWORD` in `.env`, then `npm run seed:admin`
@@ -20,13 +20,18 @@ administrator's browser, which sends it through
 
 ```powershell
 npx supabase secrets set APP_BASE_URL=https://tunav-ref.vercel.app --project-ref pxlbuncwdswxisjnszas
-npx supabase secrets set SUPABASE_JWT_SECRET=<Dashboard → Settings → API → JWT Settings → JWT Secret> --project-ref pxlbuncwdswxisjnszas
+npx supabase secrets set "APP_JWT_SECRET=<Dashboard → Settings → JWT Keys → JWT Secret>" --project-ref pxlbuncwdswxisjnszas
 ```
 
-`SUPABASE_JWT_SECRET` signs the access tokens from `_shared/jwt.ts`. Without it
-`auth-login`, `auth-session` and `auth-set-password` fail, and with the wrong
-value every database read comes back empty, because the RLS policies in
+`APP_JWT_SECRET` signs the access tokens from `_shared/jwt.ts`. Without it
+`auth-login`, `auth-session` and `auth-set-password` answer 500, and with the
+wrong value every database read comes back empty, because the RLS policies in
 `20260319100000_rbac_rls.sql` resolve the caller from that token.
+
+Do not call it `SUPABASE_JWT_SECRET`. The CLI reserves that prefix for the
+variables the Edge runtime injects and skips anything else that uses it, with
+only a one-line warning. Quote the assignment, too: the secret is base64 and
+routinely contains `/`, `+` and `=`.
 
 Secrets are read on each invocation, so changing one needs no redeploy.
 
@@ -72,7 +77,7 @@ work.
 Order matters for the RBAC rollout, because each step is broken without the one
 before it:
 
-1. `npx supabase secrets set SUPABASE_JWT_SECRET=…` — the three auth functions
+1. `npx supabase secrets set "APP_JWT_SECRET=…"` — the three auth functions
    refuse to answer without it, so setting it after the deploy means a window
    where nobody can sign in
 2. Deploy the functions below — they now return `accessToken` as well, which an
