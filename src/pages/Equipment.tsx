@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+} from 'lucide-react';
 import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { EquipmentModal } from '../components/EquipmentModal';
@@ -8,6 +14,9 @@ import { Button, PageHeader, StagePill } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Equipment } from '../types/registry';
+
+const menuItemClass =
+  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
 
 export function EquipmentPage() {
   const {
@@ -24,7 +33,6 @@ export function EquipmentPage() {
     () => equipment.filter((e) => entityVisible(e.productIds)),
     [equipment, entityVisible]
   );
-  // Capabilities assigned to equipment stay product-scoped.
   const visibleHardware = useMemo(
     () => hardwareCapabilities.filter(capabilityVisible),
     [hardwareCapabilities, capabilityVisible]
@@ -33,8 +41,10 @@ export function EquipmentPage() {
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
   const [addingType, setAddingType] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
+  const addMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (visibleEquipment.length === 0) {
@@ -45,6 +55,23 @@ export function EquipmentPage() {
       setActiveId(visibleEquipment[0].id);
     }
   }, [visibleEquipment, activeId]);
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (addMenuRef.current?.contains(e.target as Node)) return;
+      setAddMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAddMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [addMenuOpen]);
 
   const active = visibleEquipment.find((e) => e.id === activeId) ?? visibleEquipment[0];
   const supported = useMemo(
@@ -66,8 +93,6 @@ export function EquipmentPage() {
 
   function save() {
     if (!active) return;
-    // setEquipmentCapabilities unassigns everything absent from the list, so carry
-    // over capabilities outside this user's products rather than dropping them.
     const visible = new Set(visibleHardware.map((c) => c.id));
     const hidden = hardwareCapabilities
       .filter((c) => !visible.has(c.id) && c.equipmentIds.includes(active.id))
@@ -86,33 +111,57 @@ export function EquipmentPage() {
       <PageHeader
         title="Equipment"
         count={`${visibleEquipment.length} models`}
-        description="What each device model can actually do. Hardware capabilities are assigned here, and the assignment is the same record the register reads from."
         action={
           canEdit ? (
             <div className="flex flex-nowrap items-center gap-1.5">
               <DataTransfer dataset="equipment" />
+              <div ref={addMenuRef} className="relative">
+                <Button variant="primary" onClick={() => setAddMenuOpen((v) => !v)}>
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                </Button>
+                {addMenuOpen && (
+                  <div
+                    role="menu"
+                    className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setAddingType(true);
+                      }}
+                    >
+                      Add type
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass}
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        setAddingEquipment(true);
+                      }}
+                    >
+                      Add equipment
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ) : undefined
         }
       />
 
       <section className="mt-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-            Equipment types · {sortedTypes.length}
-          </h2>
-          {canEdit && (
-            <Button variant="quiet" onClick={() => setAddingType(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add type
-            </Button>
-          )}
-        </div>
+        <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+          Equipment types · {sortedTypes.length}
+        </h2>
         {sortedTypes.length === 0 ? (
-          <p className="mt-3 text-sm text-mute">
-            No types yet. Use <span className="text-soft">Add type</span> before registering
-            equipment models.
-          </p>
+          <p className="mt-3 text-sm text-mute">No types yet.</p>
         ) : (
           <ul className="mt-3 flex flex-wrap gap-2">
             {sortedTypes.map((t) => {
@@ -143,30 +192,16 @@ export function EquipmentPage() {
       </section>
 
       {visibleEquipment.length === 0 || !active ? (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong px-4 py-4">
-          <p className="text-sm text-mute">
-            No equipment models yet. Add a model or import an Equipment sheet to get started.
-          </p>
-          {canEdit && (
-            <Button variant="primary" onClick={() => setAddingEquipment(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add equipment
-            </Button>
-          )}
+        <div className="mt-6 rounded-md border border-line-strong px-4 py-4">
+          <p className="text-sm text-mute">No models yet.</p>
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
           <div className="border-b border-line-strong lg:border-b-0 lg:border-r lg:border-line-strong">
-            <div className="flex h-12 items-center justify-between gap-2 border-b border-line-strong px-3">
+            <div className="flex h-12 items-center border-b border-line-strong px-3">
               <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
                 Models · {visibleEquipment.length}
               </h2>
-              {canEdit && (
-                <Button variant="primary" onClick={() => setAddingEquipment(true)}>
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Add equipment
-                </Button>
-              )}
             </div>
             <nav aria-label="Equipment models">
               {visibleEquipment.map((e) => {
@@ -212,17 +247,25 @@ export function EquipmentPage() {
               </div>
               {canEdit && (
                 <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
-                  <Button variant="quiet" onClick={() => setEditing(active)}>
+                  <Button
+                    variant="quiet"
+                    onClick={() => setEditing(active)}
+                    className="!px-2"
+                    title="Edit"
+                  >
                     <PencilIcon className="h-3.5 w-3.5" />
-                    Edit
                   </Button>
-                  <Button variant="quiet" onClick={handleDelete}>
+                  <Button
+                    variant="quiet"
+                    onClick={handleDelete}
+                    className="!px-2"
+                    title="Delete"
+                  >
                     <Trash2Icon className="h-3.5 w-3.5" />
-                    Delete
                   </Button>
                   <Button variant="primary" onClick={openAssign}>
                     <PlusIcon className="h-3.5 w-3.5" />
-                    Assign capabilities
+                    Assign
                   </Button>
                 </div>
               )}
@@ -244,17 +287,17 @@ export function EquipmentPage() {
                           <StagePill track="hardware" stage={c.progress} />
                         </span>
                       </div>
-                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-mute">
-                        {c.description}
-                      </p>
+                      {c.description ? (
+                        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-mute">
+                          {c.description}
+                        </p>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="mt-3 border-t border-line pt-4 text-sm text-mute">
-                  Nothing assigned yet. Use{' '}
-                  <span className="text-soft">Assign capabilities</span> to declare what this device
-                  supports.
+                  Nothing assigned yet.
                 </p>
               )}
             </div>
@@ -305,9 +348,11 @@ export function EquipmentPage() {
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm text-strong">{c.name}</span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-mute">
-                      {c.description}
-                    </span>
+                    {c.description ? (
+                      <span className="mt-0.5 block text-xs leading-relaxed text-mute">
+                        {c.description}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               </li>

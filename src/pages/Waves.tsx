@@ -51,7 +51,6 @@ export function WavesPage() {
       <PageHeader
         title="Waves"
         count={`${visibleWaves.length} increments`}
-        description="One increment you can put on production and test end to end — any mix of capabilities, epics, features and user stories, tracked as a unit."
         action={
         canManage ?
         <Button
@@ -148,10 +147,7 @@ export function WavesPage() {
 
         {visibleWaves.length === 0 &&
         <div className="rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
-            <p className="text-sm font-medium text-strong">No waves defined yet</p>
-            <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-mute">
-              Define your first increment to group the work that goes to production together.
-            </p>
+            <p className="text-sm font-medium text-strong">No waves yet.</p>
           </div>
         }
       </div>

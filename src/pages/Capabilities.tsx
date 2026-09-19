@@ -194,7 +194,6 @@ export function CapabilitiesPage() {
       <PageHeader
         title="Capability Register"
         count={`${scopedCapabilities.length} entries`}
-        description="Every capability across TUNAV ONE Core, FleetIQ and CoreIQ."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             {can('import_export') && <FullDataTransfer />}

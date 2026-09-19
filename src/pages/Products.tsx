@@ -149,7 +149,6 @@ export function ProductsPage() {
       <PageHeader
         title="Products"
         count={`${sorted.length} products`}
-        description="Products are assigned to capabilities and actors. Select a product to see its capabilities."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             {can('manage_products') && <DataTransfer dataset="products" />}
@@ -173,7 +172,6 @@ export function ProductsPage() {
         <div className="mt-8 border-t border-line pt-12 text-center">
           <PackageIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No products yet.</p>
-          <p className="mt-1 text-xs text-mute">Add a product with a name and description.</p>
         </div>
       ) : (
         <div className="mt-4 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">

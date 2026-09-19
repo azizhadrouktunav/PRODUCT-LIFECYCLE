@@ -28,7 +28,6 @@ export function ActorsPage() {
       <PageHeader
         title="Actors"
         count={`${sorted.length} actors`}
-        description="Personas used in user stories. Each actor is assigned to one or more products; stories only offer actors that share a product with the capability."
         action={
           canManage ? (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -52,9 +51,6 @@ export function ActorsPage() {
         <div className="mt-8 border-t border-line pt-12 text-center">
           <UsersIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No actors yet.</p>
-          <p className="mt-1 text-xs text-mute">
-            Add an actor with a name, description and products, then select them in user stories.
-          </p>
         </div>
       ) : (
         <div className="scroll-thin mt-3 overflow-x-auto border-t border-line">

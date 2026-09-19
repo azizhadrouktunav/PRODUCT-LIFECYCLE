@@ -91,7 +91,6 @@ export function GroupsPage() {
       <PageHeader
         title="Capability Groups"
         count={`${visibleGroups.length} groups`}
-        description="Every capability belongs to exactly one group. The group decides which layer owns delivery, which lifecycle the capability follows, and whether equipment compatibility applies."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             {canManage && <DataTransfer dataset="groups" />}

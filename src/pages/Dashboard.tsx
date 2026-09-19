@@ -210,7 +210,6 @@ export function DashboardPage() {
       <PageHeader
         title="Dashboard"
         count={roleLabel}
-        description="Live portfolio health across products — definition maturity, story execution, wave delivery and risk. Figures update as the register changes."
         action={
           <Link
             to="/capabilities"
@@ -268,7 +267,6 @@ export function DashboardPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-strong">Portfolio health</h2>
-        <p className="mt-1 text-xs text-mute">Capability status distribution</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
             to="/capabilities?status=none"
@@ -293,7 +291,6 @@ export function DashboardPage() {
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section>
           <h2 className="text-sm font-semibold text-strong">Story funnel</h2>
-          <p className="mt-1 text-xs text-mute">Visible stories by execution stage</p>
           {funnel.length === 0 ? (
             <p className="mt-3 text-xs text-mute">No stories in scope.</p>
           ) : (
@@ -313,7 +310,6 @@ export function DashboardPage() {
 
         <section>
           <h2 className="text-sm font-semibold text-strong">Wave delivery</h2>
-          <p className="mt-1 text-xs text-mute">Upcoming increments and story completion</p>
           {waveRows.length === 0 ? (
             <p className="mt-3 text-xs text-mute">No waves in scope.</p>
           ) : (
@@ -373,7 +369,6 @@ export function DashboardPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-strong">By product</h2>
-        <p className="mt-1 text-xs text-mute">Caps, story completion, on-hold count, next wave</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-xs">
             <thead>

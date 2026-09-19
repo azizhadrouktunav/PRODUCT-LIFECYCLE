@@ -19,8 +19,7 @@ export function LifecyclesPage() {
     <div>
       <PageHeader
         title="Lifecycles"
-        count={`${visible.length} lifecycles`}
-        description="Define the process tracks capability groups follow — ordered stages, prerequisites, and whether work decomposes into epics, features and user stories."
+        count={`${visible.length} lifecycles`}
         action={
           canManage ? (
             <Button variant="primary" onClick={() => setAdding(true)}>

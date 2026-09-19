@@ -277,8 +277,7 @@ export function ManageStoriesPage() {
       <div className="mt-3">
         <PageHeader
           title="Manage User Stories"
-          count={`${stories.length} stories`}
-          description={`User stories of ${feature.id} · ${feature.name}.`}
+          count={`${feature.id} · ${stories.length}`}
           action={
             <div className="flex flex-wrap items-center gap-1.5">
               {canMutateStories && (
@@ -428,8 +427,7 @@ export function ManageStoriesPage() {
 
         {stories.length === 0 && (
           <div className="border-t border-line-soft py-20 text-center">
-            <p className="text-sm text-soft">No user stories yet in this feature.</p>
-            <p className="mt-1 text-xs text-mute">Add the first story to continue the breakdown.</p>
+            <p className="text-sm text-soft">No user stories yet.</p>
           </div>
         )}
       </div>

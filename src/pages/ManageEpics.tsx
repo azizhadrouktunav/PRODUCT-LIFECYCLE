@@ -69,8 +69,7 @@ export function ManageEpicsPage() {
       <div className="mt-3">
         <PageHeader
           title="Manage Epics"
-          count={`${epics.length} epics`}
-          description={`Epics of ${capability.id} · ${capability.name}. Open an epic to manage the features inside it.`}
+          count={`${capability.id} · ${epics.length}`}
           action={
           canManage ?
           <div className="flex flex-wrap items-center gap-1.5">
@@ -182,8 +181,7 @@ export function ManageEpicsPage() {
 
         {epics.length === 0 &&
         <div className="border-t border-line-soft py-20 text-center">
-            <p className="text-sm text-soft">No epics yet for this capability.</p>
-            <p className="mt-1 text-xs text-mute">Add the first epic to start the breakdown.</p>
+            <p className="text-sm text-soft">No epics yet.</p>
           </div>
         }
       </div>

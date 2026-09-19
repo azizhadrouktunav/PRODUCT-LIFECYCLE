@@ -126,7 +126,7 @@ export function FullDataTransfer() {
       <div ref={rootRef} className="relative">
         <Button onClick={() => setMenuOpen((v) => !v)}>
           <FileSpreadsheetIcon className="h-3.5 w-3.5" />
-          Import and export
+          Data
           <ChevronDownIcon className="h-3.5 w-3.5" />
         </Button>
 

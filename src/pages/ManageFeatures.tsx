@@ -72,8 +72,7 @@ export function ManageFeaturesPage() {
       <div className="mt-3">
         <PageHeader
           title="Manage Features"
-          count={`${features.length} features`}
-          description={`Features of ${epic.id} · ${epic.name}. Open a feature to manage the user stories inside it.`}
+          count={`${epic.id} · ${features.length}`}
           action={
           canManage ?
           <div className="flex flex-wrap items-center gap-1.5">
@@ -182,8 +181,7 @@ export function ManageFeaturesPage() {
 
         {features.length === 0 &&
         <div className="border-t border-line-soft py-20 text-center">
-            <p className="text-sm text-soft">No features yet in this epic.</p>
-            <p className="mt-1 text-xs text-mute">Add the first feature to continue the breakdown.</p>
+            <p className="text-sm text-soft">No features yet.</p>
           </div>
         }
       </div>

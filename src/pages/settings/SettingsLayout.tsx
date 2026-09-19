@@ -23,7 +23,6 @@ export function SettingsLayout() {
     <div>
       <PageHeader
         title="Settings"
-        description="Manage users, roles, and permissions for this workspace."
       />
       <nav className="mt-4 flex gap-1 border-b border-line">
         {TABS.map(({ to, label, end }) => (
