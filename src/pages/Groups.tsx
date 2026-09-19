@@ -9,7 +9,7 @@ import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
 import { REQUIREMENT_LABEL, storyStagesOf, usesEquipment } from '../types/registry';
 
-function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClose: () => void }) {
+export function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClose: () => void }) {
   const { getLifecycle } = useRegistry();
   if (!group) return null;
   const track = getLifecycle(group.track);

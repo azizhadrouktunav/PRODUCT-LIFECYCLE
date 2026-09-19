@@ -224,6 +224,7 @@ export function navVisible(
     path === '/' ||
     path === '/products' ||
     path === '/equipment' ||
+    path === '/structure' ||
     path === '/capabilities' ||
     path.startsWith('/capabilities/') ||
     path === '/lifecycles' ||

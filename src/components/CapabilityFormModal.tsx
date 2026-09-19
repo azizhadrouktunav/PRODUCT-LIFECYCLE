@@ -14,11 +14,19 @@ interface Props {
   onClose: () => void;
   /** When provided the modal edits this capability instead of creating a new one. */
   capability?: Capability | null;
+  /** Prefill group when creating (e.g. from Structure selection). */
+  defaultGroupId?: string;
   /** Fired after a brand new capability is registered, so the caller can open its breakdown. */
   onCreated?: (capability: Capability) => void;
 }
 
-export function CapabilityFormModal({ open, onClose, capability = null, onCreated }: Props) {
+export function CapabilityFormModal({
+  open,
+  onClose,
+  capability = null,
+  defaultGroupId,
+  onCreated,
+}: Props) {
   const { groups, equipment, addCapability, updateCapability, getLifecycle } = useRegistry();
   const { entityVisible } = useAuth();
   const isEdit = !!capability;
@@ -54,17 +62,21 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
     } else {
       setName('');
       setDescription('');
-      setGroupId('');
+      setGroupId(defaultGroupId ?? '');
       setProductIds([]);
       setEquipmentIds([]);
     }
-  }, [open, capability]);
+  }, [open, capability, defaultGroupId]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || capability) return;
     if (groupId && eligibleGroups.some((g) => g.id === groupId)) return;
-    setGroupId(eligibleGroups[0]?.id ?? '');
-  }, [open, groupId, eligibleGroups]);
+    const preferred =
+      defaultGroupId && eligibleGroups.some((g) => g.id === defaultGroupId)
+        ? defaultGroupId
+        : eligibleGroups[0]?.id ?? '';
+    setGroupId(preferred);
+  }, [open, capability, groupId, eligibleGroups, defaultGroupId]);
 
   const trackId = groups.find((g) => g.id === groupId)?.track ?? '';
   const lifecycle = getLifecycle(trackId);

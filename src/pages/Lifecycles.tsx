@@ -33,6 +33,7 @@ export function LifecyclesPage() {
   const [templateMode, setTemplateMode] = useState<TemplateModalMode>('create');
   const [templateOpen, setTemplateOpen] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<LifecycleTemplate | null>(null);
+  const [seedTemplateId, setSeedTemplateId] = useState<string | undefined>();
 
   const visible = lifecycles.filter((lc) => entityVisible(lc.productIds));
   const visibleTemplates = lifecycleTemplates.filter(
@@ -302,7 +303,14 @@ export function LifecyclesPage() {
         })}
       </div>
 
-      <LifecycleModal open={adding} onClose={() => setAdding(false)} />
+      <LifecycleModal
+        open={adding}
+        onClose={() => {
+          setAdding(false);
+          setSeedTemplateId(undefined);
+        }}
+        seedTemplateId={seedTemplateId}
+      />
       <LifecycleModal open={!!editing} onClose={() => setEditing(null)} lifecycle={editing} />
       <LifecycleTemplateModal
         open={templateOpen}
@@ -312,6 +320,14 @@ export function LifecyclesPage() {
         }}
         mode={templateMode}
         template={activeTemplate}
+        onRequestEdit={() => {
+          if (!activeTemplate) return;
+          setTemplateMode('edit');
+        }}
+        onApply={(t) => {
+          setSeedTemplateId(t.id);
+          setAdding(true);
+        }}
       />
     </div>
   );

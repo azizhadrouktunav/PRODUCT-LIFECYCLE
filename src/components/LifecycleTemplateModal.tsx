@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { ProductMultiSelect } from './ProductMultiSelect';
+import { LifecycleTemplateViewer } from './LifecycleTemplateViewer';
 import { useRegistry } from '../contexts/RegistryContext';
 import type {
   AutomationRule,
@@ -31,14 +32,20 @@ export function LifecycleTemplateModal({
   onClose,
   mode,
   template = null,
+  onRequestEdit,
+  onApply,
 }: {
   open: boolean;
   onClose: () => void;
   mode: TemplateModalMode;
   template?: LifecycleTemplate | null;
+  /** When viewing, optional switch to edit. */
+  onRequestEdit?: () => void;
+  /** When viewing, apply template to a new lifecycle. */
+  onApply?: (template: LifecycleTemplate) => void;
 }) {
   const { addLifecycleTemplate, updateLifecycleTemplate } = useRegistry();
-  const readOnly = mode === 'view';
+  const isView = mode === 'view';
   const isEdit = mode === 'edit' && !!template;
 
   const [label, setLabel] = useState('');
@@ -53,7 +60,7 @@ export function LifecycleTemplateModal({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isView) return;
     if (template) {
       const draft = templateToLifecycleDraft(template);
       setLabel(draft.label);
@@ -89,7 +96,7 @@ export function LifecycleTemplateModal({
         }))
       );
     }
-  }, [open, template]);
+  }, [open, template, isView]);
 
   const draftForReqs = useMemo(
     () =>
@@ -119,10 +126,7 @@ export function LifecycleTemplateModal({
     workItemTypes.every((t) => t.id.trim().length > 0 && t.label.trim().length > 0);
 
   function submit() {
-    if (readOnly || !valid) return;
-    if (template?.isSystem && mode === 'edit') {
-      // Allow updating content of system templates but keep isSystem
-    }
+    if (isView || !valid) return;
     const legacy = syncLegacyFromTypes({ workItemTypes, stages });
     const payload = {
       label: label.trim(),
@@ -157,143 +161,132 @@ export function LifecycleTemplateModal({
     onClose();
   }
 
-  const title =
-    mode === 'view'
-      ? `Template · ${template?.label ?? ''}`
-      : isEdit
-        ? 'Edit template'
-        : 'Add a template';
+  if (isView) {
+    return (
+      <LifecycleTemplateViewer
+        open={open}
+        onClose={onClose}
+        template={template}
+        onEdit={onRequestEdit}
+        onApply={
+          template && onApply
+            ? () => {
+                onApply(template);
+                onClose();
+              }
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       width="max-w-3xl"
-      title={title}
+      title={isEdit ? 'Edit template' : 'Add a template'}
       subtitle={
         template
           ? `${template.id}${template.isSystem ? ' · system' : ''}`
           : 'Reusable lifecycle configuration'
       }
       footer={
-        readOnly ? (
-          <Button variant="primary" onClick={onClose}>
-            Close
+        <>
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
           </Button>
-        ) : (
-          <>
-            <Button variant="quiet" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={submit} disabled={!valid}>
-              {isEdit ? 'Save template' : 'Add template'}
-            </Button>
-          </>
-        )
+          <Button variant="primary" onClick={submit} disabled={!valid}>
+            {isEdit ? 'Save template' : 'Add template'}
+          </Button>
+        </>
       }
     >
-      <div className={`space-y-5 ${readOnly ? 'pointer-events-none opacity-90' : ''}`}>
+      <div className="space-y-5">
         <Field label="Template name" required>
           <input
             className={inputClass}
             value={label}
-            readOnly={readOnly}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="e.g. Platform delivery template"
           />
         </Field>
-        {!readOnly && (
-          <div>
-            <span className="mb-1.5 block text-xs font-medium text-soft">
-              Products <span className="font-normal text-mute">(optional — empty = company-wide)</span>
-            </span>
-            <ProductMultiSelect
-              productIds={productIds}
-              onChange={setProductIds}
-              emptyHint="No products yet. Leave empty for a company-wide template."
-            />
-          </div>
-        )}
-        {readOnly && (
-          <Field label="Product scope">
-            <p className="text-xs text-mute">
-              {productIds.length === 0
-                ? 'Company-wide (all products)'
-                : productIds.join(', ')}
-            </p>
-          </Field>
-        )}
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-soft">
+            Products{' '}
+            <span className="font-normal text-mute">(optional — empty = company-wide)</span>
+          </span>
+          <ProductMultiSelect
+            productIds={productIds}
+            onChange={setProductIds}
+            emptyHint="No products yet. Leave empty for a company-wide template."
+          />
+        </div>
         <Field label="Summary">
           <textarea
             className={`${inputClass} min-h-[72px] resize-y`}
             value={summary}
-            readOnly={readOnly}
             onChange={(e) => setSummary(e.target.value)}
             placeholder="What this template is for."
           />
         </Field>
 
-        {!readOnly && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="quiet"
-              type="button"
-              onClick={() => {
-                const tpl = LIFECYCLE_TEMPLATES.delivery;
-                setStages(tpl.stages.map((s) => ({ ...s })));
-                setWorkItemTypes(
-                  tpl.workItemTypes.map((t) => ({
-                    ...t,
-                    stages: t.stages.map((s) => ({ ...s })),
-                  }))
-                );
-                setAutomationRules(
-                  tpl.automationRules.map((r) => ({
-                    ...r,
-                    id: newRuleId(),
-                    when: normalizeRuleWhen(r),
-                  }))
-                );
-                if (!label.trim()) setLabel(tpl.label);
-                if (!summary.trim()) setSummary(tpl.summary);
-              }}
-            >
-              Start from delivery
-            </Button>
-            <Button
-              variant="quiet"
-              type="button"
-              onClick={() => {
-                const tpl = LIFECYCLE_TEMPLATES.none;
-                setStages(tpl.stages.map((s) => ({ ...s })));
-                setWorkItemTypes([]);
-                setAutomationRules(
-                  tpl.automationRules.map((r) => ({
-                    ...r,
-                    id: newRuleId(),
-                    when: normalizeRuleWhen(r),
-                  }))
-                );
-                if (!label.trim()) setLabel(tpl.label);
-                if (!summary.trim()) setSummary(tpl.summary);
-              }}
-            >
-              Start from hardware
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="quiet"
+            type="button"
+            onClick={() => {
+              const tpl = LIFECYCLE_TEMPLATES.delivery;
+              setStages(tpl.stages.map((s) => ({ ...s })));
+              setWorkItemTypes(
+                tpl.workItemTypes.map((t) => ({
+                  ...t,
+                  stages: t.stages.map((s) => ({ ...s })),
+                }))
+              );
+              setAutomationRules(
+                tpl.automationRules.map((r) => ({
+                  ...r,
+                  id: newRuleId(),
+                  when: normalizeRuleWhen(r),
+                }))
+              );
+              if (!label.trim()) setLabel(tpl.label);
+              if (!summary.trim()) setSummary(tpl.summary);
+            }}
+          >
+            Start from delivery
+          </Button>
+          <Button
+            variant="quiet"
+            type="button"
+            onClick={() => {
+              const tpl = LIFECYCLE_TEMPLATES.none;
+              setStages(tpl.stages.map((s) => ({ ...s })));
+              setWorkItemTypes([]);
+              setAutomationRules(
+                tpl.automationRules.map((r) => ({
+                  ...r,
+                  id: newRuleId(),
+                  when: normalizeRuleWhen(r),
+                }))
+              );
+              if (!label.trim()) setLabel(tpl.label);
+              if (!summary.trim()) setSummary(tpl.summary);
+            }}
+          >
+            Start from hardware
+          </Button>
+        </div>
 
-        <WorkItemTypesEditor
-          types={workItemTypes}
-          onChange={readOnly ? () => undefined : setWorkItemTypes}
-        />
+        <WorkItemTypesEditor types={workItemTypes} onChange={setWorkItemTypes} />
 
         <StageListEditor
           title="Capability stages"
           stages={stages}
           requirementOptions={requirementOptions}
           typeOptions={workItemTypes}
-          onChange={readOnly ? () => undefined : setStages}
+          onChange={setStages}
           withAutoStatus
           allowTableLink
         />
@@ -301,7 +294,7 @@ export function LifecycleTemplateModal({
         <AutomationRulesEditor
           rules={automationRules}
           lifecycleDraft={{ stages, storyStages, workItemTypes }}
-          onChange={readOnly ? () => undefined : setAutomationRules}
+          onChange={setAutomationRules}
         />
       </div>
     </Modal>

@@ -12,10 +12,13 @@ export function AddGroupModal({
   open,
   onClose,
   group = null,
+  initialTrack,
 }: {
   open: boolean;
   onClose: () => void;
   group?: CapabilityGroup | null;
+  /** Prefill lifecycle track when creating (e.g. from Structure selection). */
+  initialTrack?: TrackId;
 }) {
   const { addGroup, updateGroup, lifecycles, groups } = useRegistry();
   const { entityVisible } = useAuth();
@@ -35,6 +38,9 @@ export function AddGroupModal({
   }, [lifecycles, entityVisible, productIds]);
 
   const defaultTrack =
+    (initialTrack && visibleLifecycles.some((l) => l.id === initialTrack)
+      ? initialTrack
+      : undefined) ??
     visibleLifecycles.find((l) => l.decomposition === 'delivery')?.id ??
     visibleLifecycles[0]?.id ??
     '';

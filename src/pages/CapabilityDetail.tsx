@@ -416,7 +416,11 @@ export function CapabilityDetailPage() {
           <dl className="mt-1">
             <MetaRow label="Group">
               <Link
-                to="/groups"
+                to={
+                  group
+                    ? `/structure?panel=capabilities&lifecycle=${encodeURIComponent(group.track)}&group=${encodeURIComponent(group.id)}`
+                    : '/structure?panel=groups'
+                }
                 className="transition-colors duration-150 ease-out hover:text-strong"
               >
                 {group?.name ?? '—'}
@@ -442,7 +446,7 @@ export function CapabilityDetailPage() {
             </MetaRow>
             <MetaRow label="Lifecycle">
               <Link
-                to="/lifecycles"
+                to={`/structure?panel=lifecycles&lifecycle=${encodeURIComponent(lifecycle.id)}`}
                 className="transition-colors duration-150 ease-out hover:text-strong"
               >
                 {lifecycle.label}

@@ -2,10 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   BoxesIcon,
-  GitBranchIcon,
-  LayersIcon,
+  FolderTreeIcon,
   LayoutDashboardIcon,
-  ListTreeIcon,
   LogOutIcon,
   MoonIcon,
   PackageIcon,
@@ -22,9 +20,7 @@ import { navVisible } from '../lib/rbac';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboardIcon, end: true },
-  { to: '/capabilities', label: 'Capabilities', icon: ListTreeIcon, end: true },
-  { to: '/lifecycles', label: 'Lifecycles', icon: GitBranchIcon, end: false },
-  { to: '/groups', label: 'Capability Groups', icon: LayersIcon, end: false },
+  { to: '/structure', label: 'Structure', icon: FolderTreeIcon, end: false },
   { to: '/products', label: 'Products', icon: PackageIcon, end: false },
   { to: '/actors', label: 'Actors', icon: UsersIcon, end: false },
   { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },

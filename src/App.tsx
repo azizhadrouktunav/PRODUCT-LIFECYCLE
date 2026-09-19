@@ -1,17 +1,14 @@
 import React from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CapabilityEditorProvider } from './contexts/CapabilityEditorContext';
 import { RegistryProvider } from './contexts/RegistryContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ActorsPage } from './pages/Actors';
-import { CapabilitiesPage } from './pages/Capabilities';
 import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
 import { DashboardPage } from './pages/Dashboard';
 import { EquipmentPage } from './pages/Equipment';
-import { GroupsPage } from './pages/Groups';
-import { LifecyclesPage } from './pages/Lifecycles';
 import { LoginPage } from './pages/Login';
 import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
@@ -22,6 +19,7 @@ import { SetPasswordPage } from './pages/SetPassword';
 import { SettingsIndexRedirect, SettingsLayout } from './pages/settings/SettingsLayout';
 import { RolesSettingsPage } from './pages/settings/Roles';
 import { UsersSettingsPage } from './pages/settings/Users';
+import { StructurePage } from './pages/Structure';
 import { WavesPage } from './pages/Waves';
 
 interface AppProps {
@@ -31,6 +29,13 @@ interface AppProps {
 /** Reachable without a session (invite / reset links). */
 const PUBLIC_PATHS = new Set(['/set-password']);
 
+function StructureRedirect({ panel }: { panel: 'lifecycles' | 'groups' | 'capabilities' }) {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.set('panel', panel);
+  return <Navigate to={`/structure?${next.toString()}`} replace />;
+}
+
 function AuthenticatedApp() {
   return (
     <RegistryProvider>
@@ -38,7 +43,8 @@ function AuthenticatedApp() {
         <AppShell>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
-            <Route path="/capabilities" element={<CapabilitiesPage />} />
+            <Route path="/structure" element={<StructurePage />} />
+            <Route path="/capabilities" element={<StructureRedirect panel="capabilities" />} />
             <Route path="/capabilities/:capabilityId" element={<CapabilityDetailRoute />} />
             <Route path="/capabilities/:capabilityId/epics" element={<ManageEpicsPage />} />
             <Route
@@ -53,8 +59,8 @@ function AuthenticatedApp() {
               path="/capabilities/:capabilityId/items/:typeId"
               element={<ManageWorkItemsPage />}
             />
-            <Route path="/lifecycles" element={<LifecyclesPage />} />
-            <Route path="/groups" element={<GroupsPage />} />
+            <Route path="/lifecycles" element={<StructureRedirect panel="lifecycles" />} />
+            <Route path="/groups" element={<StructureRedirect panel="groups" />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/actors" element={<ActorsPage />} />
             <Route path="/equipment" element={<EquipmentPage />} />

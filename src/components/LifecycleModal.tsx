@@ -48,6 +48,7 @@ import {
   relatedSourceEntities,
   summarizeWhen,
 } from '../lib/automationCatalog';
+import { LifecycleTemplateViewer } from './LifecycleTemplateViewer';
 
 export function blankStage(): StageDef {
   return {
@@ -886,10 +887,13 @@ export function LifecycleModal({
   open,
   onClose,
   lifecycle = null,
+  seedTemplateId,
 }: {
   open: boolean;
   onClose: () => void;
   lifecycle?: Lifecycle | null;
+  /** When creating, prefer this template over the default delivery template. */
+  seedTemplateId?: string;
 }) {
   const { addLifecycle, updateLifecycle, lifecycleTemplates, addLifecycleTemplate } =
     useRegistry();
@@ -936,11 +940,14 @@ export function LifecycleModal({
       setSelectedTemplateId('');
     } else {
       const defaultTpl =
+        (seedTemplateId
+          ? templates.find((t) => t.id === seedTemplateId)
+          : undefined) ??
         templates.find((t) => t.id === 'tpl-delivery') ??
         templates[0] ??
         builtInLifecycleTemplates()[1];
       const draft = templateToLifecycleDraft(defaultTpl);
-      setLabel('');
+      setLabel(seedTemplateId ? draft.label : '');
       setSummary(draft.summary);
       setStages(draft.stages.map((s) => ({ ...s })));
       setWorkItemTypes(
@@ -959,7 +966,7 @@ export function LifecycleModal({
       );
       setSelectedTemplateId(defaultTpl.id);
     }
-  }, [open, lifecycle, templates]);
+  }, [open, lifecycle, templates, seedTemplateId]);
 
   function applyTemplateById(templateId: string, force = false) {
     const t = templates.find((x) => x.id === templateId);
@@ -1180,53 +1187,20 @@ export function LifecycleModal({
         />
       </div>
     </Modal>
-    <Modal
+    <LifecycleTemplateViewer
       open={!!viewTemplate}
       onClose={() => setViewTemplate(null)}
-      width="max-w-lg"
-      title={viewTemplate?.label ?? 'Template'}
-      subtitle={
+      template={viewTemplate}
+      applyLabel="Apply this template"
+      onApply={
         viewTemplate
-          ? `${viewTemplate.id}${viewTemplate.isSystem ? ' · system' : ''}`
-          : undefined
-      }
-      footer={
-        <Button variant="primary" onClick={() => setViewTemplate(null)}>
-          Close
-        </Button>
-      }
-    >
-      {viewTemplate && (
-        <div className="space-y-3 text-xs text-soft">
-          {viewTemplate.summary && (
-            <p className="leading-relaxed text-mute">{viewTemplate.summary}</p>
-          )}
-          <p>
-            <span className="text-mute">Stages: </span>
-            {viewTemplate.stages.map((s) => s.name).join(' → ') || '—'}
-          </p>
-          <p>
-            <span className="text-mute">Work item types: </span>
-            {(viewTemplate.workItemTypes ?? []).map((t) => t.label).join(' → ') ||
-              'none'}
-          </p>
-          <p>
-            <span className="text-mute">Automation rules: </span>
-            {(viewTemplate.automationRules ?? []).length}
-          </p>
-          <Button
-            variant="quiet"
-            type="button"
-            onClick={() => {
+          ? () => {
               applyTemplateById(viewTemplate.id, true);
               setViewTemplate(null);
-            }}
-          >
-            Apply this template
-          </Button>
-        </div>
-      )}
-    </Modal>
+            }
+          : undefined
+      }
+    />
     </>
   );
 }
