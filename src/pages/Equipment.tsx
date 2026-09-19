@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckIcon,
-  ChevronDownIcon,
+  LayersIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -13,7 +13,7 @@ import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { CapabilityStatus, Equipment } from '../types/registry';
+import type { CapabilityStatus, Equipment, EquipmentType } from '../types/registry';
 import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus } from '../types/registry';
 
 const menuItemClass =
@@ -43,6 +43,8 @@ export function EquipmentPage() {
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
   const [addingType, setAddingType] = useState(false);
+  const [editingType, setEditingType] = useState<EquipmentType | null>(null);
+  const [manageTypesOpen, setManageTypesOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
@@ -108,60 +110,81 @@ export function EquipmentPage() {
     removeEquipment(active.id);
   }
 
+  const addMenu = canEdit ? (
+    <div ref={addMenuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setAddMenuOpen((v) => !v)}
+        aria-label="Add"
+        aria-expanded={addMenuOpen}
+        title="Add"
+        className="rounded-md border border-line-strong p-1.5 text-mute transition-colors duration-150 ease-out hover:border-brand hover:text-strong"
+      >
+        <PlusIcon className="h-3.5 w-3.5" />
+      </button>
+      {addMenuOpen && (
+        <div
+          role="menu"
+          className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className={menuItemClass}
+            onClick={() => {
+              setAddMenuOpen(false);
+              setAddingType(true);
+            }}
+          >
+            Add type
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={menuItemClass}
+            onClick={() => {
+              setAddMenuOpen(false);
+              setAddingEquipment(true);
+            }}
+          >
+            Add equipment
+          </button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const modelsHeader = (
+    <div className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
+      <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+        Models · {visibleEquipment.length}
+      </h2>
+      <div className="ml-auto flex items-center gap-1">
+        {canEdit && <DataTransfer dataset="equipment" />}
+        {addMenu}
+      </div>
+    </div>
+  );
+
   return (
     <div>
-      <PageHeader
-        title="Equipment"
-        count={`${visibleEquipment.length} models`}
-        action={
-          canEdit ? (
-            <div className="flex flex-nowrap items-center gap-1.5">
-              <DataTransfer dataset="equipment" />
-              <div ref={addMenuRef} className="relative">
-                <Button variant="primary" onClick={() => setAddMenuOpen((v) => !v)}>
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Add
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
-                </Button>
-                {addMenuOpen && (
-                  <div
-                    role="menu"
-                    className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
-                  >
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass}
-                      onClick={() => {
-                        setAddMenuOpen(false);
-                        setAddingType(true);
-                      }}
-                    >
-                      Add type
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className={menuItemClass}
-                      onClick={() => {
-                        setAddMenuOpen(false);
-                        setAddingEquipment(true);
-                      }}
-                    >
-                      Add equipment
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : undefined
-        }
-      />
+      <PageHeader title="Equipment" />
 
       <section className="mt-5">
-        <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-          Equipment types · {sortedTypes.length}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+            Equipment types · {sortedTypes.length}
+          </h2>
+          <button
+            type="button"
+            onClick={() => setManageTypesOpen(true)}
+            aria-label="Manage equipment types"
+            title="Manage types"
+            className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+          >
+            <LayersIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
         {sortedTypes.length === 0 ? (
           <p className="mt-3 text-sm text-mute">No types yet.</p>
         ) : (
@@ -175,17 +198,6 @@ export function EquipmentPage() {
                 >
                   <span className="text-xs text-strong">{t.name}</span>
                   <span className="font-mono text-2xs text-ink-500">{count}</span>
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => removeEquipmentType(t.id)}
-                      aria-label={`Delete type ${t.name}`}
-                      title="Delete type"
-                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
-                    >
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
                 </li>
               );
             })}
@@ -194,17 +206,16 @@ export function EquipmentPage() {
       </section>
 
       {visibleEquipment.length === 0 || !active ? (
-        <div className="mt-6 rounded-md border border-line-strong px-4 py-4">
-          <p className="text-sm text-mute">No models yet.</p>
+        <div className="mt-6 overflow-hidden rounded-md border border-line-strong">
+          {modelsHeader}
+          <div className="px-4 py-4">
+            <p className="text-sm text-mute">No models yet.</p>
+          </div>
         </div>
       ) : (
         <div className="mt-6 overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
           <div className="border-b border-line-strong lg:border-b-0 lg:border-r lg:border-line-strong">
-            <div className="flex h-12 items-center border-b border-line-strong px-3">
-              <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-                Models · {visibleEquipment.length}
-              </h2>
-            </div>
+            {modelsHeader}
             <nav aria-label="Equipment models">
               {visibleEquipment.map((e) => {
                 const isActive = e.id === active.id;
@@ -332,6 +343,79 @@ export function EquipmentPage() {
       )}
 
       <Modal
+        open={manageTypesOpen}
+        onClose={() => setManageTypesOpen(false)}
+        width="max-w-lg"
+        title="Manage equipment types"
+        subtitle="View, add, rename, or remove types used by device models"
+        footer={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="quiet" onClick={() => setManageTypesOpen(false)}>
+              Close
+            </Button>
+            {canEdit && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEditingType(null);
+                  setAddingType(true);
+                }}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add type
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {sortedTypes.length === 0 ? (
+          <p className="text-sm text-mute">No types yet.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {sortedTypes.map((t) => {
+              const count = equipment.filter((e) => e.type === t.name).length;
+              return (
+                <li
+                  key={t.id}
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-line-soft px-3 py-2"
+                >
+                  <span className="text-xs font-medium text-strong">{t.name}</span>
+                  <span className="font-mono text-2xs text-mute">
+                    {count} model{count === 1 ? '' : 's'}
+                  </span>
+                  {canEdit && (
+                    <span className="ml-auto flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingType(t);
+                          setAddingType(false);
+                        }}
+                        className="rounded p-0.5 text-mute hover:text-brand-bright"
+                        aria-label={`Edit ${t.name}`}
+                        title="Edit"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeEquipmentType(t.id)}
+                        className="rounded p-0.5 text-mute hover:text-danger"
+                        aria-label={`Delete ${t.name}`}
+                        title="Delete"
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Modal>
+
+      <Modal
         open={assigning && !!active}
         onClose={() => setAssigning(false)}
         title="Assign hardware capabilities"
@@ -387,7 +471,15 @@ export function EquipmentPage() {
         </ul>
       </Modal>
 
-      <AddEquipmentTypeModal open={addingType} onClose={() => setAddingType(false)} />
+      <AddEquipmentTypeModal
+        open={addingType}
+        onClose={() => setAddingType(false)}
+      />
+      <AddEquipmentTypeModal
+        open={!!editingType}
+        onClose={() => setEditingType(null)}
+        equipmentType={editingType}
+      />
       <EquipmentModal
         open={addingEquipment}
         onClose={() => setAddingEquipment(false)}

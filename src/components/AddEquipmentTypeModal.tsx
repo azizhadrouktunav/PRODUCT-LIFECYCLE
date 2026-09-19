@@ -1,29 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
+import type { EquipmentType } from '../types/registry';
 
 export function AddEquipmentTypeModal({
   open,
   onClose,
+  equipmentType = null,
 }: {
   open: boolean;
   onClose: () => void;
+  equipmentType?: EquipmentType | null;
 }) {
-  const { addEquipmentType } = useRegistry();
+  const { addEquipmentType, updateEquipmentType } = useRegistry();
   const [name, setName] = useState('');
+  const isEdit = !!equipmentType;
 
   useEffect(() => {
     if (!open) return;
-    setName('');
-  }, [open]);
+    setName(equipmentType?.name ?? '');
+  }, [open, equipmentType]);
 
   const valid = name.trim().length > 0;
 
   function submit() {
     if (!valid) return;
-    const created = addEquipmentType(name);
-    if (created) onClose();
+    if (isEdit && equipmentType) {
+      const updated = updateEquipmentType(equipmentType.id, name);
+      if (updated) onClose();
+    } else {
+      const created = addEquipmentType(name);
+      if (created) onClose();
+    }
   }
 
   return (
@@ -31,15 +40,19 @@ export function AddEquipmentTypeModal({
       open={open}
       onClose={onClose}
       width="max-w-md"
-      title="Add equipment type"
-      subtitle="Types classify device models. Create them before registering equipment."
+      title={isEdit ? 'Edit equipment type' : 'Add equipment type'}
+      subtitle={
+        isEdit
+          ? 'Renaming updates all models that use this type.'
+          : 'Types classify device models. Create them before registering equipment.'
+      }
       footer={
         <>
           <Button variant="quiet" onClick={onClose}>
             Cancel
           </Button>
           <Button variant="primary" onClick={submit} disabled={!valid}>
-            Add type
+            {isEdit ? 'Save' : 'Add type'}
           </Button>
         </>
       }

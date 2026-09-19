@@ -216,6 +216,7 @@ interface RegistryValue {
   updateEquipment: (id: string, patch: Partial<EquipmentInput>) => void;
   removeEquipment: (id: string) => void;
   addEquipmentType: (name: string) => EquipmentType | null;
+  updateEquipmentType: (id: string, name: string) => EquipmentType | null;
   removeEquipmentType: (id: string) => boolean;
   addWave: (input: WaveInput) => Wave;
   updateWave: (id: string, patch: Partial<WaveInput>) => void;
@@ -537,6 +538,43 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setEquipmentTypes((prev) => [...prev, created]);
       void api.upsertEquipmentType(created).catch((err) => persistError('addEquipmentType', err));
       return created;
+    },
+    [equipmentTypes]
+  );
+
+  const updateEquipmentType = useCallback(
+    (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const target = equipmentTypes.find((t) => t.id === id);
+      if (!target) return null;
+      if (
+        equipmentTypes.some(
+          (t) => t.id !== id && t.name.toLowerCase() === trimmed.toLowerCase()
+        )
+      ) {
+        window.alert(`Equipment type "${trimmed}" already exists.`);
+        return null;
+      }
+      if (target.name === trimmed) return target;
+      const updated: EquipmentType = { ...target, name: trimmed };
+      setEquipmentTypes((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      void api.upsertEquipmentType(updated).catch((err) =>
+        persistError('updateEquipmentType', err)
+      );
+      const oldName = target.name;
+      setEquipment((prev) => {
+        const next = prev.map((item) => {
+          if (item.type !== oldName) return item;
+          const patched = { ...item, type: trimmed };
+          void api.upsertEquipment(patched).catch((err) =>
+            persistError('updateEquipmentType equipment', err)
+          );
+          return patched;
+        });
+        return next;
+      });
+      return updated;
     },
     [equipmentTypes]
   );
@@ -1953,6 +1991,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       updateEquipment,
       removeEquipment,
       addEquipmentType,
+      updateEquipmentType,
       removeEquipmentType,
       addWave,
       updateWave,
@@ -2033,6 +2072,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     updateEquipment,
     removeEquipment,
     addEquipmentType,
+    updateEquipmentType,
     removeEquipmentType,
     addWave,
     updateWave,
