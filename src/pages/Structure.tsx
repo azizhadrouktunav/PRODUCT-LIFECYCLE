@@ -192,6 +192,48 @@ export function StructurePage() {
     [groupOptions, capabilities, capabilityVisible]
   );
 
+  const scopedCaps = useMemo(() => {
+    let list = capabilities.filter((c) => capabilityVisible(c));
+    if (selectedGroupId) {
+      list = list.filter((c) => c.groupId === selectedGroupId);
+    } else if (selectedLifecycleId) {
+      list = list.filter(
+        (c) => groups.find((g) => g.id === c.groupId)?.track === selectedLifecycleId
+      );
+    }
+    return list;
+  }, [
+    capabilities,
+    capabilityVisible,
+    selectedGroupId,
+    selectedLifecycleId,
+    groups,
+  ]);
+
+  const capStats = useMemo(() => {
+    let inProgress = 0;
+    let onHold = 0;
+    let completed = 0;
+    for (const c of scopedCaps) {
+      if (c.status === 'In Progress') inProgress += 1;
+      else if (c.status === 'On Hold') onHold += 1;
+      else if (c.status === 'Completed') completed += 1;
+    }
+    return {
+      total: scopedCaps.length,
+      inProgress,
+      onHold,
+      completed,
+    };
+  }, [scopedCaps]);
+
+  const statCards = [
+    { label: 'Total', value: capStats.total },
+    { label: 'In Progress', value: capStats.inProgress },
+    { label: 'On Hold', value: capStats.onHold },
+    { label: 'Completed', value: capStats.completed },
+  ];
+
   return (
     <div>
       <PageHeader
@@ -240,6 +282,18 @@ export function StructurePage() {
           </div>
         }
       />
+
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {statCards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-md border border-line-strong px-3 py-2.5"
+          >
+            <p className="text-2xs uppercase tracking-[0.14em] text-ink-500">{card.label}</p>
+            <p className="mt-1 font-mono text-lg text-strong">{card.value}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="mt-3">
         <CapabilityRegister

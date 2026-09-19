@@ -120,7 +120,7 @@ export function CapabilityRegister({
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(5);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   const showStructureFilters = Array.isArray(lifecycleOptions) && Array.isArray(groupOptions);
 
@@ -297,7 +297,7 @@ export function CapabilityRegister({
     openCreate(groupId ? { groupId } : undefined);
   }
 
-  const tableMaxHeight = `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 60vh)`;
+  const tableMaxHeight = `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 70vh)`;
 
   return (
     <div>
@@ -430,9 +430,6 @@ export function CapabilityRegister({
             Clear
           </button>
         )}
-        <span className="ml-auto font-mono text-2xs text-ink-500">
-          {rows.length} of {scopedCapabilities.length}
-        </span>
       </div>
 
       <div
