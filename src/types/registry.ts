@@ -32,11 +32,30 @@ export const STAGE_TONES: StageTone[] = [
   'gray',
 ];
 
+/** Operational / derived status flags (progress stage is separate). */
+export type CapabilityStatus =
+  | 'On Hold'
+  | 'In Progress'
+  | 'Needs Review'
+  | 'Completed';
+
+export const CAPABILITY_STATUSES: CapabilityStatus[] = [
+  'On Hold',
+  'In Progress',
+  'Needs Review',
+  'Completed',
+];
+
+/** Manual-only flags a user may set without fighting auto-derived status. */
+export const MANUAL_CAPABILITY_STATUSES: CapabilityStatus[] = ['On Hold', 'Needs Review'];
+
 export interface StageDef {
   name: string;
   description: string;
   tone: StageTone;
   requirement: StageRequirement;
+  /** Status applied automatically when this stage is the capability's progress. */
+  status?: CapabilityStatus | null;
 }
 
 /** Lifecycle id stored on capability groups (`track` column). */
@@ -68,24 +87,28 @@ const HARDWARE_STAGES: StageDef[] = [
     description: 'The hardware capability has been identified and documented.',
     tone: 'blue',
     requirement: 'none',
+    status: 'In Progress',
   },
   {
     name: 'Ready for Assignment',
-    description: 'Approved and ready to be assigned to compatible equipment.',
+    description: 'Ready to be assigned to compatible equipment.',
     tone: 'violet',
     requirement: 'none',
+    status: 'In Progress',
   },
   {
     name: 'Assigned to Equipment',
     description: 'The capability has been linked to one or more equipment models.',
     tone: 'blue',
     requirement: 'equipment',
+    status: 'In Progress',
   },
   {
     name: 'Active',
     description: 'The capability is officially active and usable.',
     tone: 'green',
     requirement: 'equipment',
+    status: 'Completed',
   },
 ];
 
@@ -95,24 +118,28 @@ const DELIVERY_STAGES: StageDef[] = [
     description: 'The capability has been identified and written down.',
     tone: 'blue',
     requirement: 'none',
+    status: 'In Progress',
   },
   {
     name: 'Epic Definition',
     description: 'The capability is being divided into epics.',
     tone: 'violet',
     requirement: 'none',
+    status: 'In Progress',
   },
   {
     name: 'Feature Definition',
     description: 'Each epic is being divided into features.',
     tone: 'violet',
     requirement: 'epics',
+    status: 'In Progress',
   },
   {
     name: 'User Story Definition',
     description: 'Each feature is being divided into user stories.',
     tone: 'violet',
     requirement: 'features',
+    status: 'Completed',
   },
 ];
 
@@ -278,24 +305,33 @@ export function isStageAhead(lifecycle: Lifecycle, stage: string, counts: Record
   return i > stageIndex(lifecycle, allowedStage(lifecycle, counts).name);
 }
 
-export type CapabilityStatus =
-  | 'On Hold'
-  | 'In Progress'
-  | 'Approved'
-  | 'Blocked'
-  | 'Needs Review'
-  | 'Rejected'
-  | 'Completed';
+/** Furthest stage name the capability's evidence supports. */
+export function computeCapabilityProgress(lifecycle: Lifecycle, counts: RecordCounts): string {
+  return allowedStage(lifecycle, counts).name;
+}
 
-export const CAPABILITY_STATUSES: CapabilityStatus[] = [
-  'On Hold',
-  'In Progress',
-  'Approved',
-  'Blocked',
-  'Needs Review',
-  'Rejected',
-  'Completed',
-];
+/**
+ * Status implied by a lifecycle stage. Uses stage.status when set; otherwise
+ * last stage → Completed, earlier → In Progress.
+ */
+export function statusForStage(
+  lifecycle: Lifecycle,
+  stageName: string
+): CapabilityStatus {
+  const stages = lifecycle.stages;
+  const idx = stageIndex(lifecycle, stageName);
+  const stage = idx >= 0 ? stages[idx] : undefined;
+  if (stage && stage.status !== undefined && stage.status !== null) {
+    return stage.status;
+  }
+  if (idx >= 0 && idx === stages.length - 1) return 'Completed';
+  return 'In Progress';
+}
+
+/** True when status is left to auto-recompute (not a manual hold/review flag). */
+export function isAutoManagedStatus(status: CapabilityStatus | null | undefined): boolean {
+  return status == null || status === 'In Progress' || status === 'Completed';
+}
 
 export interface Product {
   id: string;

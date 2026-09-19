@@ -42,22 +42,25 @@ export function StagePill({ track, stage }: {track: TrackId;stage: string;}) {
 const STATUS_TONE: Record<CapabilityStatus, string> = {
   'On Hold': 'border-warn/40 text-warn',
   'In Progress': 'border-brand/40 text-brand-bright',
-  Approved: 'border-ok/40 text-ok',
-  Blocked: 'border-danger/40 text-danger',
   'Needs Review': 'border-aqua/40 text-aqua',
-  Rejected: 'border-line-strong text-mute line-through',
-  Completed: 'border-ok/40 text-ok'
+  Completed: 'border-ok/40 text-ok',
 };
 
-export function StatusTag({ status }: {status: CapabilityStatus | null;}) {
-  if (!status) return <span className="text-xs text-ink-500">—</span>;
+export function StatusTag({ status }: { status: CapabilityStatus | null }) {
+  if (!status) {
+    return (
+      <span className="inline-flex whitespace-nowrap rounded border border-line-strong px-1.5 py-0.5 text-2xs font-medium text-mute">
+        No flag
+      </span>
+    );
+  }
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded border px-1.5 py-0.5 text-2xs font-medium ${STATUS_TONE[status]}`}>
-      
+      className={`inline-flex whitespace-nowrap rounded border px-1.5 py-0.5 text-2xs font-medium ${STATUS_TONE[status]}`}
+    >
       {status}
-    </span>);
-
+    </span>
+  );
 }
 
 export function StoryStagePill({

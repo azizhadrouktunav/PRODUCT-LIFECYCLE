@@ -141,7 +141,9 @@ export function DashboardPage() {
   }, [scopedStories]);
 
   const risk = useMemo(() => {
-    const blocked = scopedCaps.filter((c) => c.status === 'Blocked' || c.status === 'On Hold');
+    const flagged = scopedCaps.filter(
+      (c) => c.status === 'On Hold' || c.status === 'Needs Review'
+    );
     const today = todayIso();
     const overdue = scopedWaves.filter((w) => {
       if (!w.deliveryDate || w.deliveryDate >= today || w.state === 'Closed') return false;
@@ -149,7 +151,7 @@ export function DashboardPage() {
       const done = scope.filter((s) => isStoryDone(s)).length;
       return scope.length === 0 || done < scope.length;
     });
-    return { blocked, overdue };
+    return { flagged, overdue };
   }, [scopedCaps, scopedWaves, epics, features, stories]);
 
   const waveRows = useMemo(() => {
@@ -176,7 +178,7 @@ export function DashboardPage() {
       const featureIds = new Set(features.filter((f) => epicIds.has(f.epicId)).map((f) => f.id));
       const productStories = stories.filter((s) => featureIds.has(s.featureId));
       const done = productStories.filter((s) => isStoryDone(s)).length;
-      const blocked = caps.filter((c) => c.status === 'Blocked').length;
+      const onHold = caps.filter((c) => c.status === 'On Hold').length;
       const nextWave = waves
         .filter((w) => entityVisible(w.productIds) && sharesProducts(w.productIds, [p.id]))
         .filter((w) => w.deliveryDate)
@@ -185,7 +187,7 @@ export function DashboardPage() {
         product: p,
         caps: caps.length,
         storyPct: pct(done, productStories.length),
-        blocked,
+        onHold,
         nextWave: nextWave?.deliveryDate ?? '—',
       };
     });
@@ -257,10 +259,10 @@ export function DashboardPage() {
         />
         <KpiCard
           label="At risk"
-          value={String(risk.blocked.length + risk.overdue.length)}
-          hint={`${risk.blocked.length} blocked/hold · ${risk.overdue.length} overdue waves`}
-          to="/capabilities?status=Blocked"
-          danger={risk.blocked.length + risk.overdue.length > 0}
+          value={String(risk.flagged.length + risk.overdue.length)}
+          hint={`${risk.flagged.length} on hold/review · ${risk.overdue.length} overdue waves`}
+          to="/capabilities?status=On%20Hold"
+          danger={risk.flagged.length + risk.overdue.length > 0}
         />
       </div>
 
@@ -268,6 +270,13 @@ export function DashboardPage() {
         <h2 className="text-sm font-semibold text-strong">Portfolio health</h2>
         <p className="mt-1 text-xs text-mute">Capability status distribution</p>
         <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            to="/capabilities?status=none"
+            className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5 transition-colors hover:border-brand"
+          >
+            <StatusTag status={null} />
+            <span className="font-mono text-xs text-soft">{statusCounts.unset}</span>
+          </Link>
           {CAPABILITY_STATUSES.map((s) => (
             <Link
               key={s}
@@ -278,11 +287,6 @@ export function DashboardPage() {
               <span className="font-mono text-xs text-soft">{statusCounts.map[s]}</span>
             </Link>
           ))}
-          {statusCounts.unset > 0 && (
-            <span className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5 text-xs text-mute">
-              No flag <span className="font-mono text-soft">{statusCounts.unset}</span>
-            </span>
-          )}
         </div>
       </section>
 
@@ -337,7 +341,7 @@ export function DashboardPage() {
         </section>
       </div>
 
-      {(risk.blocked.length > 0 || risk.overdue.length > 0 || definition.ahead > 0) && (
+      {(risk.flagged.length > 0 || risk.overdue.length > 0 || definition.ahead > 0) && (
         <section className="mt-8 rounded-md border border-amber/30 bg-amber/5 p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-strong">
             <AlertTriangleIcon className="h-4 w-4 text-amber" />
@@ -350,7 +354,7 @@ export function DashboardPage() {
                 of supporting evidence
               </li>
             )}
-            {risk.blocked.slice(0, 5).map((c) => (
+            {risk.flagged.slice(0, 5).map((c) => (
               <li key={c.id}>
                 <Link to={`/capabilities/${c.id}`} className="text-brand-bright hover:text-strong">
                   {c.id}
@@ -369,7 +373,7 @@ export function DashboardPage() {
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-strong">By product</h2>
-        <p className="mt-1 text-xs text-mute">Caps, story completion, blocked count, next wave</p>
+        <p className="mt-1 text-xs text-mute">Caps, story completion, on-hold count, next wave</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-xs">
             <thead>
@@ -377,7 +381,7 @@ export function DashboardPage() {
                 <th className="py-2 pr-3 font-medium">Product</th>
                 <th className="py-2 pr-3 font-medium">Caps</th>
                 <th className="py-2 pr-3 font-medium">Stories done</th>
-                <th className="py-2 pr-3 font-medium">Blocked</th>
+                <th className="py-2 pr-3 font-medium">On hold</th>
                 <th className="py-2 font-medium">Next wave</th>
               </tr>
             </thead>
@@ -397,7 +401,7 @@ export function DashboardPage() {
                       <span className="font-mono text-mute">{row.storyPct}%</span>
                     </div>
                   </td>
-                  <td className="py-2.5 pr-3 font-mono text-soft">{row.blocked}</td>
+                  <td className="py-2.5 pr-3 font-mono text-soft">{row.onHold}</td>
                   <td className="py-2.5 font-mono text-mute">{row.nextWave}</td>
                 </tr>
               ))}

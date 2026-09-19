@@ -12,20 +12,12 @@ import {
   PencilIcon,
   Trash2Icon,
 } from 'lucide-react';
-import { TONE_DOT } from './Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
-import {
-  CAPABILITY_STATUSES,
-  REQUIREMENT_LABEL,
-  meetsRequirement,
-  usesEquipment,
-  usesDecomposition,
-} from '../types/registry';
-import { statusFromProgress } from '../lib/rbac';
+import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus, usesEquipment, usesDecomposition } from '../types/registry';
 
-type Panel = 'root' | 'progress' | 'status';
+type Panel = 'root' | 'status';
 
 interface Props {
   capability: Capability;
@@ -49,15 +41,10 @@ function placeMenu(btn: DOMRect, menuHeight = MENU_ESTIMATE): MenuCoords {
 
 export function RowActions({ capability, onEdit }: Props) {
   const { updateCapability, removeCapability, countsOf, lifecycleOf } = useRegistry();
-  const {
-    can,
-    canSetCapabilityProgress,
-    isReadOnly,
-  } = useAuth();
+  const { can, isReadOnly } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>('root');
-  const [alsoUpdateStatus, setAlsoUpdateStatus] = useState(false);
   const [coords, setCoords] = useState<MenuCoords | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,8 +55,8 @@ export function RowActions({ capability, onEdit }: Props) {
   const canDecompose = usesDecomposition(lifecycle);
   const canEdit = can('edit_capability') && !isReadOnly;
   const canDelete = can('delete_capability') && !isReadOnly;
-  const canProgress = can('edit_capability_progress') && !isReadOnly;
-  const canStatus = can('edit_all') && !isReadOnly;
+  const canStatus =
+    (can('edit_capability') || can('edit_capability_progress') || can('edit_all')) && !isReadOnly;
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -110,18 +97,7 @@ export function RowActions({ capability, onEdit }: Props) {
   function toggleOpen(e: React.MouseEvent) {
     e.stopPropagation();
     setPanel('root');
-    setAlsoUpdateStatus(false);
     setOpen((v) => !v);
-  }
-
-  function setProgress(stage: string) {
-    if (!canSetCapabilityProgress(stage)) return;
-    const patch: Partial<Omit<Capability, 'id'>> = { progress: stage };
-    if (alsoUpdateStatus) {
-      patch.status = statusFromProgress(stage, lifecycle);
-    }
-    updateCapability(capability.id, patch);
-    setOpen(false);
   }
 
   function setStatus(status: CapabilityStatus | null) {
@@ -132,8 +108,6 @@ export function RowActions({ capability, onEdit }: Props) {
 
   const itemClass =
     'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
-  const lockedClass =
-    'flex w-full cursor-not-allowed items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs text-mute';
 
   return (
     <>
@@ -173,6 +147,9 @@ export function RowActions({ capability, onEdit }: Props) {
                 <>
                   <p className="px-2.5 pb-1.5 pt-1.5 font-mono text-2xs font-medium text-soft">
                     {capability.id} · {lifecycle.label}
+                  </p>
+                  <p className="px-2.5 pb-2 text-2xs text-mute">
+                    Progress is automatic from lifecycle evidence · {capability.progress}
                   </p>
                   <button
                     type="button"
@@ -232,22 +209,12 @@ export function RowActions({ capability, onEdit }: Props) {
                       Delete capability
                     </button>
                   )}
-                  {canProgress && (
-                    <button type="button" className={itemClass} onClick={() => setPanel('progress')}>
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-                      Change progress
-                      <span className="ml-auto flex items-center gap-1 truncate text-2xs font-normal text-mute">
-                        {capability.progress}
-                        <ChevronRightIcon className="h-3 w-3 shrink-0" />
-                      </span>
-                    </button>
-                  )}
                   {canStatus && (
                     <button type="button" className={itemClass} onClick={() => setPanel('status')}>
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-aqua" aria-hidden="true" />
-                      Change status
+                      Flag status
                       <span className="ml-auto flex items-center gap-1 text-2xs font-normal text-mute">
-                        {capability.status ?? 'None'}
+                        {capability.status ?? 'No flag'}
                         <ChevronRightIcon className="h-3 w-3" />
                       </span>
                     </button>
@@ -255,7 +222,7 @@ export function RowActions({ capability, onEdit }: Props) {
                 </>
               )}
 
-              {panel !== 'root' && (
+              {panel === 'status' && (
                 <>
                   <button
                     type="button"
@@ -263,93 +230,30 @@ export function RowActions({ capability, onEdit }: Props) {
                     className="mb-1 flex w-full items-center gap-1.5 border-b border-line px-2.5 pb-2 pt-1.5 text-2xs font-medium uppercase tracking-[0.14em] text-soft transition-colors duration-150 ease-out hover:text-strong"
                   >
                     <ChevronLeftIcon className="h-3 w-3" />
-                    {panel === 'progress' ? lifecycle.label : 'Status'}
+                    Flag status
                   </button>
-
-                  {panel === 'progress' && (
-                    <>
-                      <label className="mb-1 flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-xs text-soft">
-                        <input
-                          type="checkbox"
-                          checked={alsoUpdateStatus}
-                          onChange={(e) => setAlsoUpdateStatus(e.target.checked)}
-                          className="rounded border-line-strong"
-                        />
-                        Also update Status
-                      </label>
-                      {lifecycle.stages.map((s, i) => {
-                        const met = meetsRequirement(s.requirement, counts);
-                        const current = capability.progress === s.name;
-                        const allowed = canSetCapabilityProgress(s.name);
-                        if (!met || !allowed) {
-                          return (
-                            <span
-                              key={s.name}
-                              className={lockedClass}
-                              title={
-                                !allowed
-                                  ? 'Not allowed for your role'
-                                  : `Locked — ${REQUIREMENT_LABEL[s.requirement]}`
-                              }
-                            >
-                              <span className="w-4 shrink-0 font-mono text-2xs">{i + 1}</span>
-                              <span
-                                className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-600"
-                                aria-hidden="true"
-                              />
-                              <span className="truncate">{s.name}</span>
-                              {current && <span className="ml-auto text-2xs text-warn">current</span>}
-                            </span>
-                          );
-                        }
-                        return (
-                          <button
-                            key={s.name}
-                            type="button"
-                            className={itemClass}
-                            title={s.description}
-                            onClick={() => setProgress(s.name)}
-                          >
-                            <span className="w-4 shrink-0 font-mono text-2xs font-normal text-mute">
-                              {i + 1}
-                            </span>
-                            <span
-                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${TONE_DOT[s.tone]}`}
-                              aria-hidden="true"
-                            />
-                            <span className="truncate">{s.name}</span>
-                            {current && (
-                              <CheckIcon className="ml-auto h-3.5 w-3.5 shrink-0 text-brand-bright" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </>
-                  )}
-
-                  {panel === 'status' && (
-                    <>
-                      <button type="button" className={itemClass} onClick={() => setStatus(null)}>
-                        No flag
-                        {capability.status === null && (
-                          <CheckIcon className="ml-auto h-3.5 w-3.5 text-brand-bright" />
-                        )}
-                      </button>
-                      {CAPABILITY_STATUSES.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          className={itemClass}
-                          onClick={() => setStatus(s)}
-                        >
-                          {s}
-                          {capability.status === s && (
-                            <CheckIcon className="ml-auto h-3.5 w-3.5 text-brand-bright" />
-                          )}
-                        </button>
-                      ))}
-                    </>
-                  )}
+                  <p className="px-2.5 pb-1.5 text-2xs text-mute">
+                    On Hold / Needs Review pause auto status. No flag resumes lifecycle-driven status.
+                  </p>
+                  <button type="button" className={itemClass} onClick={() => setStatus(null)}>
+                    No flag (auto)
+                    {isAutoManagedStatus(capability.status) && (
+                      <CheckIcon className="ml-auto h-3.5 w-3.5 text-brand-bright" />
+                    )}
+                  </button>
+                  {MANUAL_CAPABILITY_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={itemClass}
+                      onClick={() => setStatus(s)}
+                    >
+                      {s}
+                      {capability.status === s && (
+                        <CheckIcon className="ml-auto h-3.5 w-3.5 text-brand-bright" />
+                      )}
+                    </button>
+                  ))}
                 </>
               )}
             </motion.div>

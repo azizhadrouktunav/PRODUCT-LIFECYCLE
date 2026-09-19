@@ -79,8 +79,13 @@ export function CapabilitiesPage() {
 
   useEffect(() => {
     const status = searchParams.get('status');
-    if (status && (CAPABILITY_STATUSES as string[]).includes(status)) {
+    if (!status) return;
+    if (status === 'none' || (CAPABILITY_STATUSES as string[]).includes(status)) {
       setStatusFilter(status);
+    } else if (status === 'Blocked' || status === 'Rejected') {
+      setStatusFilter('On Hold');
+    } else if (status === 'Approved') {
+      setStatusFilter('In Progress');
     }
   }, [searchParams]);
 

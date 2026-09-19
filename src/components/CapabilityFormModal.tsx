@@ -5,8 +5,8 @@ import { Button, Field, inputClass } from './Primitives';
 import { ProductMultiSelect } from './ProductMultiSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Capability, CapabilityStatus } from '../types/registry';
-import { CAPABILITY_STATUSES, stageIndex, usesEquipment } from '../types/registry';
+import type { Capability } from '../types/registry';
+import { usesEquipment } from '../types/registry';
 import { sharesProducts } from '../lib/rbac';
 
 interface Props {
@@ -28,8 +28,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
   const [groupId, setGroupId] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
-  const [progress, setProgress] = useState<string>('Identified');
-  const [status, setStatus] = useState<CapabilityStatus | ''>('');
   const [touched, setTouched] = useState(false);
 
   const eligibleGroups = useMemo(() => {
@@ -53,16 +51,12 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       setGroupId(capability.groupId);
       setProductIds(capability.productIds ?? []);
       setEquipmentIds(capability.equipmentIds);
-      setProgress(capability.progress);
-      setStatus(capability.status ?? '');
     } else {
       setName('');
       setDescription('');
       setGroupId('');
       setProductIds([]);
       setEquipmentIds([]);
-      setProgress('Identified');
-      setStatus('');
     }
   }, [open, capability]);
 
@@ -76,12 +70,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
   const lifecycle = getLifecycle(trackId);
   const isHardware = usesEquipment(lifecycle);
   const valid = name.trim().length > 1 && productIds.length > 0 && groupId !== '';
-
-  useEffect(() => {
-    if (stageIndex(lifecycle, progress) < 0) {
-      setProgress(lifecycle.stages[0]?.name ?? 'Identified');
-    }
-  }, [lifecycle, progress]);
 
   function toggleEquip(id: string) {
     setEquipmentIds((prev) =>
@@ -100,8 +88,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
         productIds,
         jiraEpic: capability.jiraEpic,
         equipmentIds: isHardware ? equipmentIds : [],
-        progress,
-        status: status === '' ? null : status,
       });
     } else {
       const created = addCapability({
@@ -124,7 +110,7 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       title={isEdit ? 'Edit capability' : 'Register a capability'}
       subtitle={
         isEdit
-          ? `${capability?.id} · changes apply across the register immediately`
+          ? `${capability?.id} · progress and status follow the lifecycle automatically`
           : 'An ID is assigned automatically. Next you will break it into epics, features and user stories.'
       }
       footer={
@@ -180,38 +166,6 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
             </select>
           )}
         </Field>
-
-        {isEdit && (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Progress">
-              <select
-                className={inputClass}
-                value={progress}
-                onChange={(e) => setProgress(e.target.value)}
-              >
-                {lifecycle.stages.map((s, i) => (
-                  <option key={s.name} value={s.name}>
-                    {i + 1}. {s.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Status flag" hint="optional">
-              <select
-                className={inputClass}
-                value={status}
-                onChange={(e) => setStatus(e.target.value as CapabilityStatus | '')}
-              >
-                <option value="">No flag</option>
-                {CAPABILITY_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        )}
 
         {isHardware && (
           <div>

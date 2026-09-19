@@ -5,6 +5,7 @@ import { Button, Field, inputClass } from './Primitives';
 import { ProductMultiSelect } from './ProductMultiSelect';
 import { useRegistry } from '../contexts/RegistryContext';
 import type {
+  CapabilityStatus,
   DecompositionMode,
   Lifecycle,
   StageDef,
@@ -12,6 +13,7 @@ import type {
   StageTone,
 } from '../types/registry';
 import {
+  CAPABILITY_STATUSES,
   DECOMPOSITION_LABEL,
   LIFECYCLE_TEMPLATES,
   REQUIREMENT_LABEL,
@@ -25,6 +27,7 @@ function blankStage(_mode: DecompositionMode): StageDef {
     description: '',
     tone: 'blue',
     requirement: 'none',
+    status: 'In Progress',
   };
 }
 
@@ -33,11 +36,13 @@ function StageListEditor({
   stages,
   mode,
   onChange,
+  withAutoStatus = false,
 }: {
   title: string;
   stages: StageDef[];
   mode: DecompositionMode;
   onChange: (next: StageDef[]) => void;
+  withAutoStatus?: boolean;
 }) {
   const allowedReqs = requirementsForMode(mode);
 
@@ -151,6 +156,30 @@ function StageListEditor({
                   ))}
                 </select>
               </Field>
+              {withAutoStatus && (
+                <Field
+                  label="Maps to status"
+                  hint="applied automatically when progress reaches this stage"
+                >
+                  <select
+                    className={inputClass}
+                    value={s.status === null || s.status === undefined ? '' : s.status}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateAt(i, {
+                        status: v === '' ? null : (v as CapabilityStatus),
+                      });
+                    }}
+                  >
+                    <option value="">No flag (default In Progress / Completed)</option>
+                    {CAPABILITY_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
             </div>
           </li>
         ))}
@@ -351,6 +380,7 @@ export function LifecycleModal({
           stages={stages}
           mode={decomposition}
           onChange={setStages}
+          withAutoStatus
         />
 
         {decomposition === 'delivery' && (

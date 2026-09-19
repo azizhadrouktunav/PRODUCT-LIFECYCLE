@@ -1,5 +1,5 @@
 import type { Capability, CapabilityStatus, Lifecycle } from '../types/registry';
-import { stageIndex } from '../types/registry';
+import { statusForStage } from '../types/registry';
 
 /** Role slug (DB-backed; seeded system roles + custom). */
 export type AppRole = string;
@@ -200,25 +200,15 @@ export function sharesProducts(a: string[] | null | undefined, b: string[] | nul
   return left.some((id) => set.has(id));
 }
 
-/** Map a progress/stage name to a Status when “Also update Status” is on. */
+/** Map a progress/stage name to a Status using lifecycle stage config. */
 export function statusFromProgress(
   stage: string,
   lifecycle?: Lifecycle | null
 ): CapabilityStatus {
+  if (lifecycle) return statusForStage(lifecycle, stage);
   const lower = stage.toLowerCase();
-  if (
-    lower.includes('released') ||
-    lower === 'active' ||
-    lower.includes('completed')
-  ) {
+  if (lower.includes('released') || lower === 'active' || lower.includes('completed')) {
     return 'Completed';
-  }
-  if (lifecycle) {
-    const idx = stageIndex(lifecycle, stage);
-    if (idx <= 0) return 'In Progress';
-  }
-  if (lower.includes('identified') || lower.includes('ready for assignment')) {
-    return 'In Progress';
   }
   return 'In Progress';
 }

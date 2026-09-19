@@ -61,11 +61,21 @@ function mapStageDef(raw: unknown): StageDef | null {
   if (!name) return null;
   const toneRaw = String(row.tone ?? 'blue') as StageTone;
   const reqRaw = String(row.requirement ?? 'none') as StageRequirement;
+  const statusRaw = row.status;
+  let status: CapabilityStatus | null | undefined;
+  if (statusRaw === null || statusRaw === '') status = null;
+  else if (typeof statusRaw === 'string') {
+    const hit = (['On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
+      (s) => s === statusRaw
+    );
+    status = hit;
+  }
   return {
     name,
     description: String(row.description ?? ''),
     tone: VALID_TONES.has(toneRaw) ? toneRaw : 'blue',
     requirement: VALID_REQUIREMENTS.has(reqRaw) ? reqRaw : 'none',
+    ...(status !== undefined ? { status } : {}),
   };
 }
 
@@ -118,7 +128,12 @@ async function ensureDefaultLifecycles(): Promise<Lifecycle[]> {
 
 function asStatus(raw: string | null | undefined): CapabilityStatus | null {
   if (raw == null || raw === '') return null;
-  return raw as CapabilityStatus;
+  if (raw === 'Approved') return 'In Progress';
+  if (raw === 'Blocked' || raw === 'Rejected') return 'On Hold';
+  const hit = (['On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
+    (s) => s === raw
+  );
+  return hit ?? null;
 }
 
 function mapProduct(row: Record<string, unknown>): Product {
