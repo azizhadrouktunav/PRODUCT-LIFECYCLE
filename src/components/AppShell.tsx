@@ -20,7 +20,7 @@ import { navVisible } from '../lib/rbac';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboardIcon, end: true },
-  { to: '/structure', label: 'Structure', icon: FolderTreeIcon, end: false },
+  { to: '/structure', label: 'Capability', icon: FolderTreeIcon, end: false },
   { to: '/products', label: 'Products', icon: PackageIcon, end: false },
   { to: '/actors', label: 'Actors', icon: UsersIcon, end: false },
   { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },

@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
+  InfoIcon,
   PlusIcon,
   SearchIcon,
   XIcon,
@@ -20,8 +23,13 @@ import { CAPABILITY_STATUSES, isStageAhead, stageIndex, usesEquipment } from '..
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
+const ROW_HEIGHT_REM = 3.25;
+
 type SortKey = 'id' | 'name' | 'group' | 'products' | 'breakdown' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
+
+export type RegisterFilterOption = { id: string; label: string };
 
 const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
   { key: 'id', label: 'ID', className: 'w-24' },
@@ -61,18 +69,34 @@ export function CapabilityRegister({
   hideGroupFilter = false,
   compact = false,
   onAddCapability,
+  lifecycleValue,
+  onLifecycleChange,
+  lifecycleOptions,
+  groupValue,
+  onGroupChange,
+  groupOptions,
+  onGroupProcess,
 }: {
   /** When set, only capabilities in this group. */
   groupId?: string | null;
   /** When set (and no groupId), only capabilities whose group uses this lifecycle track. */
   lifecycleId?: string | null;
   hideHeader?: boolean;
-  /** Hide the group dropdown (e.g. when already scoped to a group). */
+  /** Hide the internal group dropdown (e.g. when Structure owns group filter). */
   hideGroupFilter?: boolean;
   /** Tighter chrome for embedding in Structure. */
   compact?: boolean;
   /** Override Add capability (defaults to openCreate with optional groupId). */
   onAddCapability?: () => void;
+  /** Controlled Structure lifecycle filter (shown in the same filter row). */
+  lifecycleValue?: string;
+  onLifecycleChange?: (id: string) => void;
+  lifecycleOptions?: RegisterFilterOption[];
+  /** Controlled Structure group filter. */
+  groupValue?: string;
+  onGroupChange?: (id: string) => void;
+  groupOptions?: RegisterFilterOption[];
+  onGroupProcess?: () => void;
 }) {
   const {
     capabilities,
@@ -95,6 +119,10 @@ export function CapabilityRegister({
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(5);
+
+  const showStructureFilters = Array.isArray(lifecycleOptions) && Array.isArray(groupOptions);
 
   useEffect(() => {
     const status = searchParams.get('status');
@@ -205,7 +233,37 @@ export function CapabilityRegister({
     sortDir,
   ]);
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = rows.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const pageEnd = Math.min(safePage * pageSize, rows.length);
+  const pageRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [
+    query,
+    groupFilter,
+    groupId,
+    lifecycleId,
+    productFilter,
+    statusFilter,
+    sortKey,
+    sortDir,
+    pageSize,
+    lifecycleValue,
+    groupValue,
+  ]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const structureFiltersActive =
+    showStructureFilters && (!!lifecycleValue || !!groupValue);
+
   const filtered =
+    structureFiltersActive ||
     (!groupId && groupFilter !== 'all') ||
     productFilter !== 'all' ||
     statusFilter !== 'all' ||
@@ -216,6 +274,10 @@ export function CapabilityRegister({
     if (!groupId) setGroupFilter('all');
     setProductFilter('all');
     setStatusFilter('all');
+    if (showStructureFilters) {
+      onLifecycleChange?.('');
+      onGroupChange?.('');
+    }
   }
 
   function toggleSort(key: SortKey) {
@@ -234,6 +296,8 @@ export function CapabilityRegister({
     }
     openCreate(groupId ? { groupId } : undefined);
   }
+
+  const tableMaxHeight = `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 60vh)`;
 
   return (
     <div>
@@ -255,8 +319,54 @@ export function CapabilityRegister({
         />
       )}
 
-      <div className={`flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}>
-        <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+      <div
+        className={`flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}
+      >
+        {showStructureFilters && (
+          <>
+            <select
+              className={`${selectClass} max-w-[200px]`}
+              value={lifecycleValue ?? ''}
+              onChange={(e) => onLifecycleChange?.(e.target.value)}
+              aria-label="Filter by lifecycle"
+            >
+              <option value="">All lifecycles</option>
+              {(lifecycleOptions ?? []).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1">
+              <select
+                className={`${selectClass} max-w-[200px]`}
+                value={groupValue ?? ''}
+                onChange={(e) => onGroupChange?.(e.target.value)}
+                aria-label="Filter by capability group"
+              >
+                <option value="">All groups</option>
+                {(groupOptions ?? []).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {groupValue && onGroupProcess && (
+                <button
+                  type="button"
+                  onClick={onGroupProcess}
+                  className="shrink-0 rounded p-1.5 text-mute hover:text-brand-bright"
+                  title="View process"
+                  aria-label="View group process"
+                >
+                  <InfoIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="relative min-w-[160px] flex-1 sm:max-w-xs">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-500" />
           <input
             className={`${inputClass} py-1.5 pl-8 text-xs`}
@@ -266,7 +376,7 @@ export function CapabilityRegister({
             aria-label="Search capabilities"
           />
         </div>
-        {!hideGroupFilter && !groupId && (
+        {!hideGroupFilter && !groupId && !showStructureFilters && (
           <select
             className={selectClass}
             value={groupFilter}
@@ -325,9 +435,12 @@ export function CapabilityRegister({
         </span>
       </div>
 
-      <div className="scroll-thin overflow-x-auto border-t border-line">
+      <div
+        className="scroll-thin overflow-auto border-t border-line"
+        style={{ maxHeight: tableMaxHeight }}
+      >
         <table className="w-full min-w-[900px] border-collapse text-left">
-          <thead>
+          <thead className="sticky top-0 z-[1] bg-ink-900">
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
               {columns.map((col) => {
                 const active = sortKey === col.key;
@@ -339,7 +452,7 @@ export function CapabilityRegister({
                 return (
                   <th
                     key={col.key}
-                    className={`${col.className} py-2.5 pr-4 font-medium`}
+                    className={`${col.className} border-b border-line bg-ink-900 py-2.5 pr-4 font-medium`}
                     aria-sort={ariaSort}
                   >
                     <button
@@ -360,11 +473,13 @@ export function CapabilityRegister({
                   </th>
                 );
               })}
-              <th className="w-16 py-2.5 text-right font-medium">Actions</th>
+              <th className="w-16 border-b border-line bg-ink-900 py-2.5 text-right font-medium">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => {
+            {pageRows.map((c) => {
               const counts = countsOf(c.id);
               const lifecycle = lifecycleOf(c);
               const ahead = isStageAhead(lifecycle, c.progress, counts);
@@ -466,6 +581,54 @@ export function CapabilityRegister({
           </div>
         )}
       </div>
+
+      {rows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-line py-2.5">
+          <span className="font-mono text-2xs text-ink-500">
+            Showing {pageStart}–{pageEnd} of {rows.length}
+          </span>
+          <label className="inline-flex items-center gap-1.5 text-xs text-mute">
+            Rows
+            <select
+              className={selectClass}
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs text-mute transition-colors duration-150 ease-out hover:border-brand hover:text-strong disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Previous page"
+            >
+              <ChevronLeftIcon className="h-3.5 w-3.5" />
+              Prev
+            </button>
+            <span className="px-2 font-mono text-2xs text-ink-500">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 rounded-md border border-line-strong px-2 py-1 text-xs text-mute transition-colors duration-150 ease-out hover:border-brand hover:text-strong disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Next page"
+            >
+              Next
+              <ChevronRightIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,10 +8,10 @@ import {
   PencilIcon,
   PlusIcon,
   Trash2Icon,
-  XIcon,
 } from 'lucide-react';
 import { AddGroupModal } from '../components/AddGroupModal';
 import { CapabilityRegister } from '../components/CapabilityRegister';
+import { FullDataTransfer } from '../components/FullDataTransfer';
 import { LifecycleModal } from '../components/LifecycleModal';
 import {
   LifecycleTemplateModal,
@@ -25,9 +25,6 @@ import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup, Lifecycle, LifecycleTemplate } from '../types/registry';
 import { DECOMPOSITION_LABEL } from '../types/registry';
 import { ProcessModal } from './Groups';
-
-const selectClass =
-  'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
 export function StructurePage() {
   const {
@@ -172,7 +169,28 @@ export function StructurePage() {
     });
   }
 
-  const filtersActive = !!selectedLifecycleId || !!selectedGroupId;
+  const lifecycleFilterOptions = useMemo(
+    () =>
+      visibleLifecycles.map((lc) => {
+        const gCount = groups.filter((g) => g.track === lc.id).length;
+        const cCount = capCountForLifecycle(lc.id);
+        return {
+          id: lc.id,
+          label: `${lc.label} (${gCount} groups · ${cCount} caps)`,
+        };
+      }),
+    // capCount uses capabilities/groups; include them
+    [visibleLifecycles, groups, capabilities, capabilityVisible]
+  );
+
+  const groupFilterOptions = useMemo(
+    () =>
+      groupOptions.map((g) => ({
+        id: g.id,
+        label: `${g.name} (${g.code} · ${capCountForGroup(g.id)})`,
+      })),
+    [groupOptions, capabilities, capabilityVisible]
+  );
 
   return (
     <div>
@@ -181,6 +199,7 @@ export function StructurePage() {
         count={`${visibleLifecycles.length} lifecycles · ${visibleGroups.length} groups`}
         action={
           <div className="flex flex-wrap items-center gap-1.5">
+            {can('import_export') && <FullDataTransfer />}
             <button
               type="button"
               onClick={() => setManageLcOpen(true)}
@@ -222,93 +241,21 @@ export function StructurePage() {
         }
       />
 
-      <div className="mt-3 flex flex-wrap items-end gap-3 rounded-md border border-line-strong bg-ink-950/40 px-3 py-3">
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 sm:max-w-xs">
-          <span className="text-2xs uppercase tracking-[0.14em] text-ink-500">Lifecycle</span>
-          <select
-            className={selectClass}
-            value={selectedLifecycleId}
-            onChange={(e) => onLifecycleChange(e.target.value)}
-            aria-label="Filter by lifecycle"
-          >
-            <option value="">All lifecycles</option>
-            {visibleLifecycles.map((lc) => {
-              const gCount = groups.filter((g) => g.track === lc.id).length;
-              const cCount = capCountForLifecycle(lc.id);
-              return (
-                <option key={lc.id} value={lc.id}>
-                  {lc.label} ({gCount} groups · {cCount} caps)
-                </option>
-              );
-            })}
-          </select>
-        </label>
-
-        <label className="flex min-w-[180px] flex-1 flex-col gap-1 sm:max-w-xs">
-          <span className="text-2xs uppercase tracking-[0.14em] text-ink-500">Group</span>
-          <div className="flex items-center gap-1.5">
-            <select
-              className={`${selectClass} min-w-0 flex-1`}
-              value={selectedGroupId}
-              onChange={(e) => onGroupChange(e.target.value)}
-              aria-label="Filter by capability group"
-            >
-              <option value="">All groups</option>
-              {groupOptions.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} ({g.code} · {capCountForGroup(g.id)})
-                </option>
-              ))}
-            </select>
-            {selectedGroup && (
-              <button
-                type="button"
-                onClick={() => setProcessGroup(selectedGroup)}
-                className="shrink-0 rounded p-1.5 text-mute hover:text-brand-bright"
-                title="View process"
-                aria-label="View group process"
-              >
-                <InfoIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-          {selectedLifecycleId && groupOptions.length === 0 && (
-            <span className="text-2xs text-mute">
-              No groups on this lifecycle.
-              {canManageGroups && (
-                <>
-                  {' '}
-                  <button
-                    type="button"
-                    className="text-brand-bright hover:text-strong"
-                    onClick={() => setAddingGroup(true)}
-                  >
-                    Add one
-                  </button>
-                </>
-              )}
-            </span>
-          )}
-        </label>
-
-        {filtersActive && (
-          <button
-            type="button"
-            onClick={() => patchParams({ lifecycle: null, group: null })}
-            className="mb-0.5 inline-flex items-center gap-1 px-1 text-xs text-mute transition-colors duration-150 ease-out hover:text-strong"
-          >
-            <XIcon className="h-3 w-3" />
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      <div className="mt-4">
+      <div className="mt-3">
         <CapabilityRegister
           groupId={selectedGroupId || null}
           lifecycleId={!selectedGroupId && selectedLifecycleId ? selectedLifecycleId : null}
           hideHeader
           hideGroupFilter
+          lifecycleValue={selectedLifecycleId}
+          onLifecycleChange={onLifecycleChange}
+          lifecycleOptions={lifecycleFilterOptions}
+          groupValue={selectedGroupId}
+          onGroupChange={onGroupChange}
+          groupOptions={groupFilterOptions}
+          onGroupProcess={
+            selectedGroup ? () => setProcessGroup(selectedGroup) : undefined
+          }
           onAddCapability={() =>
             openCreate(selectedGroupId ? { groupId: selectedGroupId } : undefined)
           }
