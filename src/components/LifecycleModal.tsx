@@ -1,10 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { ProductMultiSelect } from './ProductMultiSelect';
 import { useRegistry } from '../contexts/RegistryContext';
 import type {
+  AutoAggregate,
+  AutoEntity,
+  AutoField,
+  AutoOp,
+  AutomationCondition,
+  AutomationRule,
   CapabilityStatus,
   DecompositionMode,
   Lifecycle,
@@ -13,6 +19,9 @@ import type {
   StageTone,
 } from '../types/registry';
 import {
+  AUTO_AGGREGATES,
+  AUTO_ENTITIES,
+  AUTO_OPS,
   CAPABILITY_STATUSES,
   DECOMPOSITION_LABEL,
   LIFECYCLE_TEMPLATES,
@@ -20,6 +29,16 @@ import {
   STAGE_TONES,
   requirementsForMode,
 } from '../types/registry';
+import {
+  AUTO_AGGREGATE_LABEL,
+  AUTO_ENTITY_LABEL,
+  AUTO_FIELD_LABEL,
+  AUTO_OP_LABEL,
+  fieldsForEntity,
+  newRuleId,
+  optionsForField,
+  relatedSourceEntities,
+} from '../lib/automationCatalog';
 
 function blankStage(_mode: DecompositionMode): StageDef {
   return {
@@ -28,6 +47,30 @@ function blankStage(_mode: DecompositionMode): StageDef {
     tone: 'blue',
     requirement: 'none',
     status: 'In Progress',
+  };
+}
+
+function blankCondition(target: AutoEntity): AutomationCondition {
+  const sources = relatedSourceEntities(target);
+  const sourceEntity = sources[0] ?? 'story';
+  const sourceField = fieldsForEntity(sourceEntity)[0] ?? 'status';
+  return {
+    sourceEntity,
+    sourceField,
+    aggregate: 'all',
+    op: 'eq',
+    value: 'Completed',
+  };
+}
+
+function blankRule(): AutomationRule {
+  return {
+    id: newRuleId(),
+    enabled: true,
+    targetEntity: 'feature',
+    targetField: 'status',
+    setValue: 'Completed',
+    conditions: [blankCondition('feature')],
   };
 }
 
@@ -188,6 +231,297 @@ function StageListEditor({
   );
 }
 
+function AutomationRulesEditor({
+  rules,
+  lifecycleDraft,
+  onChange,
+}: {
+  rules: AutomationRule[];
+  lifecycleDraft: Pick<Lifecycle, 'stages' | 'storyStages'>;
+  onChange: (next: AutomationRule[]) => void;
+}) {
+  const draftLifecycle = useMemo(
+    () =>
+      ({
+        id: '_draft',
+        label: '',
+        summary: '',
+        decomposition: 'delivery' as const,
+        stages: lifecycleDraft.stages,
+        storyStages: lifecycleDraft.storyStages,
+        productIds: [],
+        automationRules: rules,
+      }) satisfies Lifecycle,
+    [lifecycleDraft.stages, lifecycleDraft.storyStages, rules]
+  );
+
+  function updateRule(index: number, patch: Partial<AutomationRule>) {
+    onChange(rules.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  function updateCondition(
+    ruleIndex: number,
+    condIndex: number,
+    patch: Partial<AutomationCondition>
+  ) {
+    const rule = rules[ruleIndex];
+    const conditions = rule.conditions.map((c, i) =>
+      i === condIndex ? { ...c, ...patch } : c
+    );
+    updateRule(ruleIndex, { conditions });
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-soft">Status automation</span>
+        <Button variant="quiet" type="button" onClick={() => onChange([...rules, blankRule()])}>
+          <PlusIcon className="h-3.5 w-3.5" />
+          Add rule
+        </Button>
+      </div>
+      {rules.length === 0 ? (
+        <p className="rounded-md border border-line-strong px-3 py-3 text-xs text-mute">
+          No rules — statuses stay manual except capability stage maps.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {rules.map((rule, ri) => {
+            const targetFields = fieldsForEntity(rule.targetEntity);
+            const setOptions = optionsForField(
+              rule.targetEntity,
+              rule.targetField,
+              draftLifecycle
+            );
+            const sources = relatedSourceEntities(rule.targetEntity);
+            return (
+              <li key={rule.id} className="rounded-md border border-line-strong p-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 text-xs text-soft">
+                    <input
+                      type="checkbox"
+                      checked={rule.enabled}
+                      onChange={(e) => updateRule(ri, { enabled: e.target.checked })}
+                    />
+                    Enabled
+                  </label>
+                  <button
+                    type="button"
+                    aria-label="Remove rule"
+                    onClick={() => onChange(rules.filter((_, i) => i !== ri))}
+                    className="ml-auto rounded p-0.5 text-mute hover:text-danger"
+                  >
+                    <Trash2Icon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Field label="Set entity">
+                    <select
+                      className={inputClass}
+                      value={rule.targetEntity}
+                      onChange={(e) => {
+                        const targetEntity = e.target.value as AutoEntity;
+                        const targetField = fieldsForEntity(targetEntity)[0] ?? 'status';
+                        const setValue =
+                          optionsForField(targetEntity, targetField, draftLifecycle)[0] ?? '';
+                        updateRule(ri, {
+                          targetEntity,
+                          targetField,
+                          setValue,
+                          conditions: [blankCondition(targetEntity)],
+                        });
+                      }}
+                    >
+                      {AUTO_ENTITIES.map((ent) => (
+                        <option key={ent} value={ent}>
+                          {AUTO_ENTITY_LABEL[ent]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Field">
+                    <select
+                      className={inputClass}
+                      value={rule.targetField}
+                      onChange={(e) => {
+                        const targetField = e.target.value as AutoField;
+                        const setValue =
+                          optionsForField(rule.targetEntity, targetField, draftLifecycle)[0] ??
+                          '';
+                        updateRule(ri, { targetField, setValue });
+                      }}
+                    >
+                      {targetFields.map((f) => (
+                        <option key={f} value={f}>
+                          {AUTO_FIELD_LABEL[f]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="To value">
+                    <select
+                      className={inputClass}
+                      value={rule.setValue}
+                      onChange={(e) => updateRule(ri, { setValue: e.target.value })}
+                    >
+                      {setOptions.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-2xs uppercase tracking-[0.12em] text-ink-500">
+                      When (all conditions)
+                    </span>
+                    <Button
+                      variant="quiet"
+                      type="button"
+                      onClick={() =>
+                        updateRule(ri, {
+                          conditions: [...rule.conditions, blankCondition(rule.targetEntity)],
+                        })
+                      }
+                    >
+                      <PlusIcon className="h-3 w-3" />
+                      Condition
+                    </Button>
+                  </div>
+                  {rule.conditions.map((cond, ci) => {
+                    const srcFields = fieldsForEntity(cond.sourceEntity);
+                    const valOptions = optionsForField(
+                      cond.sourceEntity,
+                      cond.sourceField,
+                      draftLifecycle
+                    );
+                    return (
+                      <div
+                        key={ci}
+                        className="grid gap-2 rounded border border-line-soft p-2 sm:grid-cols-5"
+                      >
+                        <Field label="Related">
+                          <select
+                            className={inputClass}
+                            value={cond.sourceEntity}
+                            onChange={(e) => {
+                              const sourceEntity = e.target.value as AutoEntity;
+                              const sourceField = fieldsForEntity(sourceEntity)[0] ?? 'status';
+                              const value =
+                                optionsForField(sourceEntity, sourceField, draftLifecycle)[0] ??
+                                '';
+                              updateCondition(ri, ci, { sourceEntity, sourceField, value });
+                            }}
+                          >
+                            {(sources.length ? sources : AUTO_ENTITIES).map((ent) => (
+                              <option key={ent} value={ent}>
+                                {AUTO_ENTITY_LABEL[ent]}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Field">
+                          <select
+                            className={inputClass}
+                            value={cond.sourceField}
+                            onChange={(e) => {
+                              const sourceField = e.target.value as AutoField;
+                              const value =
+                                optionsForField(
+                                  cond.sourceEntity,
+                                  sourceField,
+                                  draftLifecycle
+                                )[0] ?? '';
+                              updateCondition(ri, ci, { sourceField, value });
+                            }}
+                          >
+                            {srcFields.map((f) => (
+                              <option key={f} value={f}>
+                                {AUTO_FIELD_LABEL[f]}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Match">
+                          <select
+                            className={inputClass}
+                            value={cond.aggregate}
+                            onChange={(e) =>
+                              updateCondition(ri, ci, {
+                                aggregate: e.target.value as AutoAggregate,
+                              })
+                            }
+                          >
+                            {AUTO_AGGREGATES.map((a) => (
+                              <option key={a} value={a}>
+                                {AUTO_AGGREGATE_LABEL[a]}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Op">
+                          <select
+                            className={inputClass}
+                            value={cond.op}
+                            onChange={(e) =>
+                              updateCondition(ri, ci, { op: e.target.value as AutoOp })
+                            }
+                          >
+                            {AUTO_OPS.map((o) => (
+                              <option key={o} value={o}>
+                                {AUTO_OP_LABEL[o]}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <div className="flex items-end gap-1">
+                          <div className="min-w-0 flex-1">
+                            <Field label="Value">
+                              <select
+                                className={inputClass}
+                                value={cond.value}
+                                onChange={(e) =>
+                                  updateCondition(ri, ci, { value: e.target.value })
+                                }
+                              >
+                                {valOptions.map((v) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label="Remove condition"
+                            disabled={rule.conditions.length <= 1}
+                            onClick={() =>
+                              updateRule(ri, {
+                                conditions: rule.conditions.filter((_, i) => i !== ci),
+                              })
+                            }
+                            className="mb-0.5 rounded p-1.5 text-mute hover:text-danger disabled:opacity-30"
+                          >
+                            <Trash2Icon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function LifecycleModal({
   open,
   onClose,
@@ -207,6 +541,9 @@ export function LifecycleModal({
     LIFECYCLE_TEMPLATES.delivery.storyStages
   );
   const [productIds, setProductIds] = useState<string[]>([]);
+  const [automationRules, setAutomationRules] = useState<AutomationRule[]>(
+    LIFECYCLE_TEMPLATES.delivery.automationRules
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -217,6 +554,7 @@ export function LifecycleModal({
       setStages(lifecycle.stages.map((s) => ({ ...s })));
       setStoryStages(lifecycle.storyStages.map((s) => ({ ...s })));
       setProductIds(lifecycle.productIds ?? []);
+      setAutomationRules((lifecycle.automationRules ?? []).map((r) => ({ ...r })));
     } else {
       const tpl = LIFECYCLE_TEMPLATES.delivery;
       setLabel('');
@@ -225,6 +563,7 @@ export function LifecycleModal({
       setStages(tpl.stages.map((s) => ({ ...s })));
       setStoryStages(tpl.storyStages.map((s) => ({ ...s })));
       setProductIds([]);
+      setAutomationRules(tpl.automationRules.map((r) => ({ ...r, id: newRuleId() })));
     }
   }, [open, lifecycle]);
 
@@ -241,6 +580,7 @@ export function LifecycleModal({
     setDecomposition(mode);
     setStages(tpl.stages.map((s) => ({ ...s })));
     setStoryStages(tpl.storyStages.map((s) => ({ ...s })));
+    setAutomationRules(tpl.automationRules.map((r) => ({ ...r, id: newRuleId() })));
     if (!label.trim()) setLabel(tpl.label);
     if (!summary.trim()) setSummary(tpl.summary);
   }
@@ -259,7 +599,6 @@ export function LifecycleModal({
     if (mode === 'none') {
       setStoryStages([]);
     }
-    // Clear requirements that don't apply to the new mode.
     const allowed = new Set(requirementsForMode(mode));
     setStages((prev) =>
       prev.map((s) => ({
@@ -289,6 +628,7 @@ export function LifecycleModal({
           ? storyStages.map((s) => ({ ...s, name: s.name.trim() }))
           : [],
       productIds,
+      automationRules,
     };
     if (lifecycle) {
       updateLifecycle(lifecycle.id, payload);
@@ -302,12 +642,12 @@ export function LifecycleModal({
     <Modal
       open={open}
       onClose={onClose}
-      width="max-w-2xl"
+      width="max-w-3xl"
       title={isEdit ? 'Edit lifecycle' : 'Add a lifecycle'}
       subtitle={
         isEdit
-          ? `${lifecycle?.id} · stages and decomposition apply wherever this lifecycle is used`
-          : 'Define the process track groups can follow — capability stages, story stages, and prerequisites.'
+          ? `${lifecycle?.id} · stages and automation apply wherever this lifecycle is used`
+          : undefined
       }
       footer={
         <>
@@ -391,6 +731,12 @@ export function LifecycleModal({
             onChange={setStoryStages}
           />
         )}
+
+        <AutomationRulesEditor
+          rules={automationRules}
+          lifecycleDraft={{ stages, storyStages }}
+          onChange={setAutomationRules}
+        />
       </div>
     </Modal>
   );

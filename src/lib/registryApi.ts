@@ -1,6 +1,12 @@
 import { supabase } from '../utils/supabase';
 import type {
   Actor,
+  AutomationCondition,
+  AutomationRule,
+  AutoAggregate,
+  AutoEntity,
+  AutoField,
+  AutoOp,
   Capability,
   CapabilityGroup,
   CapabilityStatus,
@@ -18,7 +24,14 @@ import type {
   Wave,
   WaveState,
 } from '../types/registry';
-import { FALLBACK_LIFECYCLE, LIFECYCLE_TEMPLATES, TRACKS } from '../types/registry';
+import {
+  AUTO_AGGREGATES,
+  AUTO_ENTITIES,
+  AUTO_OPS,
+  FALLBACK_LIFECYCLE,
+  LIFECYCLE_TEMPLATES,
+  TRACKS,
+} from '../types/registry';
 
 export interface RegistrySnapshot {
   products: Product[];
@@ -84,24 +97,78 @@ function mapStages(raw: unknown): StageDef[] {
   return raw.map(mapStageDef).filter((s): s is StageDef => s != null);
 }
 
+const AUTO_FIELDS: AutoField[] = ['status', 'progress', 'stage', 'state'];
+
+function mapAutomationCondition(raw: unknown): AutomationCondition | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const sourceEntity = String(row.sourceEntity ?? '') as AutoEntity;
+  const sourceField = String(row.sourceField ?? '') as AutoField;
+  const aggregate = String(row.aggregate ?? 'all') as AutoAggregate;
+  const op = String(row.op ?? 'eq') as AutoOp;
+  if (!AUTO_ENTITIES.includes(sourceEntity)) return null;
+  if (!AUTO_FIELDS.includes(sourceField)) return null;
+  if (!AUTO_AGGREGATES.includes(aggregate)) return null;
+  if (!AUTO_OPS.includes(op)) return null;
+  return {
+    sourceEntity,
+    sourceField,
+    aggregate,
+    op,
+    value: String(row.value ?? ''),
+  };
+}
+
+function mapAutomationRule(raw: unknown): AutomationRule | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = String(row.id ?? '').trim();
+  const targetEntity = String(row.targetEntity ?? '') as AutoEntity;
+  const targetField = String(row.targetField ?? '') as AutoField;
+  if (!id || !AUTO_ENTITIES.includes(targetEntity) || !AUTO_FIELDS.includes(targetField)) {
+    return null;
+  }
+  const conditions = Array.isArray(row.conditions)
+    ? row.conditions.map(mapAutomationCondition).filter((c): c is AutomationCondition => c != null)
+    : [];
+  return {
+    id,
+    enabled: row.enabled !== false,
+    targetEntity,
+    targetField,
+    setValue: String(row.setValue ?? ''),
+    conditions,
+  };
+}
+
+function mapAutomationRules(raw: unknown): AutomationRule[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(mapAutomationRule).filter((r): r is AutomationRule => r != null);
+}
+
 function mapLifecycle(row: Record<string, unknown>): Lifecycle {
   const decomposition: DecompositionMode =
     row.decomposition === 'none' ? 'none' : 'delivery';
   const stages = mapStages(row.stages);
   const storyStages = mapStages(row.story_stages);
+  const tpl = LIFECYCLE_TEMPLATES[decomposition];
   return {
     id: String(row.id),
     label: String(row.label ?? ''),
     summary: String(row.summary ?? ''),
     decomposition,
-    stages: stages.length > 0 ? stages : LIFECYCLE_TEMPLATES[decomposition].stages,
+    stages: stages.length > 0 ? stages : tpl.stages,
     storyStages:
       decomposition === 'delivery'
         ? storyStages.length > 0
           ? storyStages
-          : LIFECYCLE_TEMPLATES.delivery.storyStages
+          : tpl.storyStages
         : [],
     productIds: (row.product_ids as string[] | null) ?? [],
+    automationRules:
+      row.automation_rules === undefined || row.automation_rules === null
+        ? (tpl.automationRules ?? [])
+        : mapAutomationRules(row.automation_rules),
   };
 }
 
@@ -114,6 +181,7 @@ function lifecycleToRow(lc: Lifecycle) {
     stages: lc.stages,
     story_stages: lc.decomposition === 'delivery' ? lc.storyStages : [],
     product_ids: lc.productIds ?? [],
+    automation_rules: lc.automationRules ?? [],
   };
 }
 
@@ -184,6 +252,7 @@ function mapEquipment(row: Record<string, unknown>): Equipment {
     model: String(row.model ?? ''),
     type: String(row.type ?? ''),
     productIds: (row.product_ids as string[] | null) ?? [],
+    status: asStatus(row.status as string | null),
   };
 }
 
@@ -423,6 +492,7 @@ export async function upsertEquipment(item: Equipment): Promise<void> {
     model: item.model,
     type: item.type,
     product_ids: item.productIds,
+    status: item.status,
   });
   throwIfError(error, 'Upsert equipment');
 }
@@ -647,6 +717,7 @@ export async function upsertEquipmentMany(items: Equipment[]): Promise<void> {
       model: item.model,
       type: item.type,
       product_ids: item.productIds,
+      status: item.status,
     }))
   );
   throwIfError(error, 'Upsert equipment batch');

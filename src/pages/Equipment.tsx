@@ -10,10 +10,11 @@ import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { EquipmentModal } from '../components/EquipmentModal';
 import { Modal } from '../components/Modal';
-import { Button, PageHeader, StagePill } from '../components/Primitives';
+import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Equipment } from '../types/registry';
+import type { CapabilityStatus, Equipment } from '../types/registry';
+import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus } from '../types/registry';
 
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
@@ -26,6 +27,7 @@ export function EquipmentPage() {
     setEquipmentCapabilities,
     removeEquipment,
     removeEquipmentType,
+    updateEquipment,
   } = useRegistry();
   const { can, capabilityVisible, entityVisible } = useAuth();
   const canEdit = can('manage_equipment');
@@ -237,9 +239,12 @@ export function EquipmentPage() {
           <section className="min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-strong px-4 py-3">
               <div className="min-w-0">
-                <h2 className="truncate text-lg font-semibold tracking-tight text-strong">
-                  {active.name}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="truncate text-lg font-semibold tracking-tight text-strong">
+                    {active.name}
+                  </h2>
+                  <StatusTag status={active.status ?? null} />
+                </div>
                 <p className="mt-0.5 truncate text-xs text-mute">
                   <span className="font-mono text-ink-500">{active.id}</span> · {active.vendor} ·{' '}
                   {active.model} · {active.type}
@@ -247,6 +252,27 @@ export function EquipmentPage() {
               </div>
               {canEdit && (
                 <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
+                  <select
+                    className="rounded-md border border-line-strong bg-ink-800 px-2 py-1.5 text-xs text-soft"
+                    value={
+                      isAutoManagedStatus(active.status) ? '' : (active.status ?? '')
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateEquipment(active.id, {
+                        status: v === '' ? null : (v as CapabilityStatus),
+                      });
+                    }}
+                    aria-label="Equipment status flag"
+                    title="Status flag"
+                  >
+                    <option value="">Auto</option>
+                    {MANUAL_CAPABILITY_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
                   <Button
                     variant="quiet"
                     onClick={() => setEditing(active)}

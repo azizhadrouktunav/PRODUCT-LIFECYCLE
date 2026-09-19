@@ -76,7 +76,53 @@ export interface Lifecycle {
   stages: StageDef[];
   storyStages: StageDef[];
   productIds: string[];
+  /** Cross-table status automation rules for this lifecycle. */
+  automationRules: AutomationRule[];
 }
+
+/** Entities that can participate in lifecycle automation rules. */
+export type AutoEntity =
+  | 'capability'
+  | 'epic'
+  | 'feature'
+  | 'story'
+  | 'wave'
+  | 'equipment';
+
+/** Option fields that automation may read or write. */
+export type AutoField = 'status' | 'progress' | 'stage' | 'state';
+
+export type AutoAggregate = 'all' | 'any' | 'none';
+export type AutoOp = 'eq' | 'neq';
+
+export interface AutomationCondition {
+  sourceEntity: AutoEntity;
+  sourceField: AutoField;
+  aggregate: AutoAggregate;
+  op: AutoOp;
+  value: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  enabled: boolean;
+  targetEntity: AutoEntity;
+  targetField: AutoField;
+  setValue: string;
+  conditions: AutomationCondition[];
+}
+
+export const AUTO_ENTITIES: AutoEntity[] = [
+  'capability',
+  'epic',
+  'feature',
+  'story',
+  'wave',
+  'equipment',
+];
+
+export const AUTO_AGGREGATES: AutoAggregate[] = ['all', 'any', 'none'];
+export const AUTO_OPS: AutoOp[] = ['eq', 'neq'];
 
 /** @deprecated Use Lifecycle — kept as an alias for gradual migration. */
 export type Track = Lifecycle;
@@ -194,6 +240,24 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     stages: HARDWARE_STAGES,
     storyStages: [],
     productIds: [],
+    automationRules: [
+      {
+        id: 'tpl-hw-equip-completed',
+        enabled: true,
+        targetEntity: 'equipment',
+        targetField: 'status',
+        setValue: 'Completed',
+        conditions: [
+          {
+            sourceEntity: 'capability',
+            sourceField: 'status',
+            aggregate: 'all',
+            op: 'eq',
+            value: 'Completed',
+          },
+        ],
+      },
+    ],
   },
   delivery: {
     label: 'Delivery track',
@@ -203,6 +267,40 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     stages: DELIVERY_STAGES,
     storyStages: DEFAULT_STORY_STAGES,
     productIds: [],
+    automationRules: [
+      {
+        id: 'tpl-del-feature-completed',
+        enabled: true,
+        targetEntity: 'feature',
+        targetField: 'status',
+        setValue: 'Completed',
+        conditions: [
+          {
+            sourceEntity: 'story',
+            sourceField: 'status',
+            aggregate: 'all',
+            op: 'eq',
+            value: 'Completed',
+          },
+        ],
+      },
+      {
+        id: 'tpl-del-epic-completed',
+        enabled: true,
+        targetEntity: 'epic',
+        targetField: 'status',
+        setValue: 'Completed',
+        conditions: [
+          {
+            sourceEntity: 'feature',
+            sourceField: 'status',
+            aggregate: 'all',
+            op: 'eq',
+            value: 'Completed',
+          },
+        ],
+      },
+    ],
   },
 };
 
@@ -271,6 +369,7 @@ export interface Equipment {
   model: string;
   type: string;
   productIds: string[];
+  status: CapabilityStatus | null;
 }
 
 export interface RecordCounts {

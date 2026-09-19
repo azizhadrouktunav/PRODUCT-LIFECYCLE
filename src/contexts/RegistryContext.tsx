@@ -11,6 +11,7 @@ import { DATASETS, DELIVERY_PACK } from '../utils/datasets';
 import type { SheetRow } from '../utils/excel';
 import type {
   Actor,
+  AutomationRule,
   Capability,
   CapabilityGroup,
   CapabilityStatus,
@@ -37,6 +38,7 @@ import {
   usesEquipment,
 } from '../types/registry';
 import * as api from '../lib/registryApi';
+import { runAutomation } from '../lib/automationEngine';
 
 function countsForCapability(
   cap: Capability,
@@ -77,6 +79,7 @@ export type LifecycleInput = {
   stages: StageDef[];
   storyStages: StageDef[];
   productIds: string[];
+  automationRules: AutomationRule[];
 };
 
 export interface NewCapabilityInput {
@@ -108,7 +111,9 @@ export type StoryInput = Pick<
   | 'adrApproved'
 >;
 
-export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type' | 'productIds'>;
+export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type' | 'productIds'> & {
+  status?: CapabilityStatus | null;
+};
 export type WaveInput = Pick<
   Wave,
   'code' | 'name' | 'description' | 'state' | 'deliveryDate' | 'itemIds' | 'productIds'
@@ -318,6 +323,84 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [groups, resolveLifecycle]
   );
 
+  /** Progress sync + lifecycle automation rules; persists changed rows. */
+  const recomputeAutomation = useCallback(
+    (overrides: {
+      capabilities?: Capability[];
+      epics?: Epic[];
+      features?: Feature[];
+      stories?: UserStory[];
+      waves?: Wave[];
+      equipment?: Equipment[];
+      lifecycles?: Lifecycle[];
+    } = {}) => {
+      const nextLifecycles = overrides.lifecycles ?? lifecycles;
+      let nextCaps = overrides.capabilities ?? capabilities;
+      const nextEpics = overrides.epics ?? epics;
+      const nextFeatures = overrides.features ?? features;
+      const nextStories = overrides.stories ?? stories;
+      const nextWaves = overrides.waves ?? waves;
+      const nextEquipment = overrides.equipment ?? equipment;
+
+      nextCaps = nextCaps.map((cap) => {
+        const lc =
+          nextLifecycles.find((l) => l.id === trackOfGroup(cap.groupId)) ??
+          resolveLifecycle(trackOfGroup(cap.groupId));
+        return withAutoProgress(cap, nextEpics, nextFeatures, nextStories, lc);
+      });
+
+      const result = runAutomation(nextLifecycles, {
+        groups,
+        capabilities: nextCaps,
+        epics: nextEpics,
+        features: nextFeatures,
+        stories: nextStories,
+        waves: nextWaves,
+        equipment: nextEquipment,
+      });
+
+      setCapabilities(result.capabilities);
+      setEpics(result.epics);
+      setFeatures(result.features);
+      setStories(result.stories);
+      setWaves(result.waves);
+      setEquipment(result.equipment);
+
+      for (const c of result.changed.capabilities) {
+        void api.upsertCapability(c).catch((err) => persistError('automation capability', err));
+      }
+      for (const e of result.changed.epics) {
+        void api.upsertEpic(e).catch((err) => persistError('automation epic', err));
+      }
+      for (const f of result.changed.features) {
+        void api.upsertFeature(f).catch((err) => persistError('automation feature', err));
+      }
+      for (const s of result.changed.stories) {
+        void api.upsertStory(s).catch((err) => persistError('automation story', err));
+      }
+      for (const w of result.changed.waves) {
+        void api.upsertWave(w).catch((err) => persistError('automation wave', err));
+      }
+      for (const eq of result.changed.equipment) {
+        void api.upsertEquipment(eq).catch((err) => persistError('automation equipment', err));
+      }
+
+      return result;
+    },
+    [
+      lifecycles,
+      capabilities,
+      epics,
+      features,
+      stories,
+      waves,
+      equipment,
+      groups,
+      trackOfGroup,
+      resolveLifecycle,
+    ]
+  );
+
   const addEquipment = useCallback(
     (input: EquipmentInput) => {
       const created: Equipment = {
@@ -327,6 +410,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         model: input.model.trim(),
         type: input.type.trim(),
         productIds: input.productIds ?? [],
+        status: input.status ?? null,
       };
       setEquipment((prev) => [...prev, created]);
       void api.upsertEquipment(created).catch((err) => persistError('addEquipment', err));
@@ -335,24 +419,30 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [equipment]
   );
 
-  const updateEquipment = useCallback((id: string, patch: Partial<EquipmentInput>) => {
-    setEquipment((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        const updated = {
-          ...item,
-          ...patch,
-          name: patch.name !== undefined ? patch.name.trim() : item.name,
-          vendor: patch.vendor !== undefined ? patch.vendor.trim() : item.vendor,
-          model: patch.model !== undefined ? patch.model.trim() : item.model,
-          type: patch.type !== undefined ? patch.type.trim() : item.type,
-          productIds: patch.productIds !== undefined ? patch.productIds : item.productIds,
-        };
-        void api.upsertEquipment(updated).catch((err) => persistError('updateEquipment', err));
-        return updated;
-      })
-    );
-  }, []);
+  const updateEquipment = useCallback(
+    (id: string, patch: Partial<EquipmentInput>) => {
+      setEquipment((prev) => {
+        const next = prev.map((item) => {
+          if (item.id !== id) return item;
+          const updated = {
+            ...item,
+            ...patch,
+            name: patch.name !== undefined ? patch.name.trim() : item.name,
+            vendor: patch.vendor !== undefined ? patch.vendor.trim() : item.vendor,
+            model: patch.model !== undefined ? patch.model.trim() : item.model,
+            type: patch.type !== undefined ? patch.type.trim() : item.type,
+            productIds: patch.productIds !== undefined ? patch.productIds : item.productIds,
+            status: patch.status !== undefined ? patch.status : item.status,
+          };
+          void api.upsertEquipment(updated).catch((err) => persistError('updateEquipment', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ equipment: next }));
+        return next;
+      });
+    },
+    [recomputeAutomation]
+  );
 
   const removeEquipment = useCallback((id: string) => {
     setEquipment((prev) => prev.filter((e) => e.id !== id));
@@ -742,28 +832,24 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const shouldHave = capabilityIds.includes(cap.id);
           const has = cap.equipmentIds.includes(equipmentId);
           if (shouldHave === has) return cap;
-          const withEquip: Capability = {
+          return {
             ...cap,
             equipmentIds: shouldHave
               ? [...cap.equipmentIds, equipmentId]
               : cap.equipmentIds.filter((id) => id !== equipmentId),
           };
-          const lifecycle = resolveLifecycle(trackOfGroup(withEquip.groupId));
-          return withAutoProgress(withEquip, epics, features, stories, lifecycle);
         });
         const changed = next.filter((cap, i) => cap !== prev[i]);
         if (changed.length > 0) {
           void api
             .setEquipmentCapabilities(equipmentId, capabilityIds)
             .catch((err) => persistError('setEquipmentCapabilities', err));
-          for (const cap of changed) {
-            void api.upsertCapability(cap).catch((err) => persistError('setEquipmentCapabilities cap', err));
-          }
         }
+        queueMicrotask(() => recomputeAutomation({ capabilities: next }));
         return next;
       });
     },
-    [isEquipmentGroup, resolveLifecycle, trackOfGroup, epics, features, stories]
+    [isEquipmentGroup, recomputeAutomation]
   );
 
   const addLifecycle = useCallback(
@@ -776,6 +862,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         stages: input.stages,
         storyStages: input.decomposition === 'delivery' ? input.storyStages : [],
         productIds: input.productIds ?? [],
+        automationRules: input.automationRules ?? [],
       };
       setLifecycles((prev) => [...prev, created]);
       void api.upsertLifecycle(created).catch((err) => persistError('addLifecycle', err));
@@ -802,30 +889,25 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
                 ? (patch.storyStages ?? lc.storyStages)
                 : [],
             productIds: patch.productIds !== undefined ? patch.productIds : lc.productIds,
+            automationRules:
+              patch.automationRules !== undefined ? patch.automationRules : lc.automationRules,
           };
           updatedLc = updated;
           void api.upsertLifecycle(updated).catch((err) => persistError('updateLifecycle', err));
           return updated;
         });
-        if (updatedLc && (patch.stages !== undefined || patch.decomposition !== undefined)) {
-          const lc = updatedLc;
-          setCapabilities((caps) =>
-            caps.map((cap) => {
-              if (trackOfGroup(cap.groupId) !== id) return cap;
-              const synced = withAutoProgress(cap, epics, features, stories, lc);
-              if (synced !== cap) {
-                void api
-                  .upsertCapability(synced)
-                  .catch((err) => persistError('updateLifecycle recompute', err));
-              }
-              return synced;
-            })
-          );
+        if (
+          updatedLc &&
+          (patch.stages !== undefined ||
+            patch.decomposition !== undefined ||
+            patch.automationRules !== undefined)
+        ) {
+          queueMicrotask(() => recomputeAutomation({ lifecycles: next }));
         }
         return next;
       });
     },
-    [epics, features, stories, trackOfGroup]
+    [recomputeAutomation]
   );
 
   const removeLifecycle = useCallback(
@@ -861,36 +943,29 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const nextEpics = [...epics, created];
       setEpics(nextEpics);
       void api.upsertEpic(created).catch((err) => persistError('addEpic', err));
-      setCapabilities((prev) =>
-        prev.map((cap) => {
-          if (cap.id !== capabilityId) return cap;
-          const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-          const updated = withAutoProgress(cap, nextEpics, features, stories, lifecycle);
-          if (updated !== cap) {
-            void api.upsertCapability(updated).catch((err) => persistError('addEpic recompute', err));
-          }
-          return updated;
-        })
-      );
+      queueMicrotask(() => recomputeAutomation({ epics: nextEpics }));
     },
-    [epics, features, stories, resolveLifecycle, trackOfGroup]
+    [epics, recomputeAutomation]
   );
 
-  const updateEpic = useCallback((id: string, patch: Partial<EpicInput>) => {
-    setEpics((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
-        const updated = { ...e, ...patch };
-        void api.upsertEpic(updated).catch((err) => persistError('updateEpic', err));
-        return updated;
-      })
-    );
-  }, []);
+  const updateEpic = useCallback(
+    (id: string, patch: Partial<EpicInput>) => {
+      setEpics((prev) => {
+        const next = prev.map((e) => {
+          if (e.id !== id) return e;
+          const updated = { ...e, ...patch };
+          void api.upsertEpic(updated).catch((err) => persistError('updateEpic', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ epics: next }));
+        return next;
+      });
+    },
+    [recomputeAutomation]
+  );
 
   const removeEpic = useCallback(
     (id: string) => {
-      const epic = epics.find((e) => e.id === id);
-      const capabilityId = epic?.capabilityId;
       const doomedFeatureIds = features.filter((f) => f.epicId === id).map((f) => f.id);
       const nextFeatures = features.filter((f) => f.epicId !== id);
       const nextStories = stories.filter((s) => !doomedFeatureIds.includes(s.featureId));
@@ -899,23 +974,15 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setStories(nextStories);
       setEpics(nextEpics);
       void api.deleteEpic(id).catch((err) => persistError('removeEpic', err));
-      if (capabilityId) {
-        setCapabilities((prev) =>
-          prev.map((cap) => {
-            if (cap.id !== capabilityId) return cap;
-            const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-            const updated = withAutoProgress(cap, nextEpics, nextFeatures, nextStories, lifecycle);
-            if (updated !== cap) {
-              void api
-                .upsertCapability(updated)
-                .catch((err) => persistError('removeEpic recompute', err));
-            }
-            return updated;
-          })
-        );
-      }
+      queueMicrotask(() =>
+        recomputeAutomation({
+          epics: nextEpics,
+          features: nextFeatures,
+          stories: nextStories,
+        })
+      );
     },
-    [epics, features, stories, resolveLifecycle, trackOfGroup]
+    [epics, features, stories, recomputeAutomation]
   );
 
   const addFeature = useCallback(
@@ -930,65 +997,39 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const nextFeatures = [...features, created];
       setFeatures(nextFeatures);
       void api.upsertFeature(created).catch((err) => persistError('addFeature', err));
-      const capabilityId = epics.find((e) => e.id === epicId)?.capabilityId;
-      if (capabilityId) {
-        setCapabilities((prev) =>
-          prev.map((cap) => {
-            if (cap.id !== capabilityId) return cap;
-            const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-            const updated = withAutoProgress(cap, epics, nextFeatures, stories, lifecycle);
-            if (updated !== cap) {
-              void api
-                .upsertCapability(updated)
-                .catch((err) => persistError('addFeature recompute', err));
-            }
-            return updated;
-          })
-        );
-      }
+      queueMicrotask(() => recomputeAutomation({ features: nextFeatures }));
     },
-    [epics, features, stories, resolveLifecycle, trackOfGroup]
+    [features, recomputeAutomation]
   );
 
-  const updateFeature = useCallback((id: string, patch: Partial<FeatureInput>) => {
-    setFeatures((prev) =>
-      prev.map((f) => {
-        if (f.id !== id) return f;
-        const updated = { ...f, ...patch };
-        void api.upsertFeature(updated).catch((err) => persistError('updateFeature', err));
-        return updated;
-      })
-    );
-  }, []);
+  const updateFeature = useCallback(
+    (id: string, patch: Partial<FeatureInput>) => {
+      setFeatures((prev) => {
+        const next = prev.map((f) => {
+          if (f.id !== id) return f;
+          const updated = { ...f, ...patch };
+          void api.upsertFeature(updated).catch((err) => persistError('updateFeature', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ features: next }));
+        return next;
+      });
+    },
+    [recomputeAutomation]
+  );
 
   const removeFeature = useCallback(
     (id: string) => {
-      const feature = features.find((f) => f.id === id);
-      const capabilityId = feature
-        ? epics.find((e) => e.id === feature.epicId)?.capabilityId
-        : undefined;
       const nextStories = stories.filter((s) => s.featureId !== id);
       const nextFeatures = features.filter((f) => f.id !== id);
       setStories(nextStories);
       setFeatures(nextFeatures);
       void api.deleteFeature(id).catch((err) => persistError('removeFeature', err));
-      if (capabilityId) {
-        setCapabilities((prev) =>
-          prev.map((cap) => {
-            if (cap.id !== capabilityId) return cap;
-            const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-            const updated = withAutoProgress(cap, epics, nextFeatures, nextStories, lifecycle);
-            if (updated !== cap) {
-              void api
-                .upsertCapability(updated)
-                .catch((err) => persistError('removeFeature recompute', err));
-            }
-            return updated;
-          })
-        );
-      }
+      queueMicrotask(() =>
+        recomputeAutomation({ features: nextFeatures, stories: nextStories })
+      );
     },
-    [epics, features, stories, resolveLifecycle, trackOfGroup]
+    [features, stories, recomputeAutomation]
   );
 
   const addStory = useCallback(
@@ -1015,95 +1056,70 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const nextStories = [...stories, created];
       setStories(nextStories);
       void api.upsertStory(created).catch((err) => persistError('addStory', err));
-      const feature = features.find((f) => f.id === featureId);
-      const capabilityId = feature
-        ? epics.find((e) => e.id === feature.epicId)?.capabilityId
-        : undefined;
-      if (capabilityId) {
-        setCapabilities((prev) =>
-          prev.map((cap) => {
-            if (cap.id !== capabilityId) return cap;
-            const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-            const updated = withAutoProgress(cap, epics, features, nextStories, lifecycle);
-            if (updated !== cap) {
-              void api
-                .upsertCapability(updated)
-                .catch((err) => persistError('addStory recompute', err));
-            }
-            return updated;
-          })
-        );
-      }
+      queueMicrotask(() => recomputeAutomation({ stories: nextStories }));
     },
-    [actors, epics, features, stories, resolveLifecycle, trackOfGroup]
+    [actors, stories, recomputeAutomation]
   );
 
-  const updateStory = useCallback((id: string, patch: Partial<StoryInput>) => {
-    setStories((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const updated = { ...s, ...patch };
-        if (patch.actorIds) {
-          updated.role =
-            patch.role !== undefined
-              ? patch.role
-              : roleFromActorIds(patch.actorIds, actors);
-        }
-        void api.upsertStory(updated).catch((err) => persistError('updateStory', err));
-        return updated;
-      })
-    );
-  }, [actors]);
+  const updateStory = useCallback(
+    (id: string, patch: Partial<StoryInput>) => {
+      setStories((prev) => {
+        const next = prev.map((s) => {
+          if (s.id !== id) return s;
+          const updated = { ...s, ...patch };
+          if (patch.actorIds) {
+            updated.role =
+              patch.role !== undefined
+                ? patch.role
+                : roleFromActorIds(patch.actorIds, actors);
+          }
+          void api.upsertStory(updated).catch((err) => persistError('updateStory', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ stories: next }));
+        return next;
+      });
+    },
+    [actors, recomputeAutomation]
+  );
 
   const removeStory = useCallback(
     (id: string) => {
-      const story = stories.find((s) => s.id === id);
-      const feature = story ? features.find((f) => f.id === story.featureId) : undefined;
-      const capabilityId = feature
-        ? epics.find((e) => e.id === feature.epicId)?.capabilityId
-        : undefined;
       const nextStories = stories.filter((s) => s.id !== id);
       setStories(nextStories);
       void api.deleteStory(id).catch((err) => persistError('removeStory', err));
-      if (capabilityId) {
-        setCapabilities((prev) =>
-          prev.map((cap) => {
-            if (cap.id !== capabilityId) return cap;
-            const lifecycle = resolveLifecycle(trackOfGroup(cap.groupId));
-            const updated = withAutoProgress(cap, epics, features, nextStories, lifecycle);
-            if (updated !== cap) {
-              void api
-                .upsertCapability(updated)
-                .catch((err) => persistError('removeStory recompute', err));
-            }
-            return updated;
-          })
-        );
-      }
+      queueMicrotask(() => recomputeAutomation({ stories: nextStories }));
     },
-    [epics, features, stories, resolveLifecycle, trackOfGroup]
+    [stories, recomputeAutomation]
   );
 
   const addWave = useCallback(
     (input: WaveInput) => {
       const created: Wave = { id: nextId('WAVE', waves), ...input };
-      setWaves((prev) => [...prev, created]);
+      const nextWaves = [...waves, created];
+      setWaves(nextWaves);
       void api.upsertWave(created).catch((err) => persistError('addWave', err));
+      queueMicrotask(() => recomputeAutomation({ waves: nextWaves }));
       return created;
     },
-    [waves]
+    [waves, recomputeAutomation]
   );
 
-  const updateWave = useCallback((id: string, patch: Partial<WaveInput>) => {
-    setWaves((prev) =>
-      prev.map((w) => {
-        if (w.id !== id) return w;
-        const updated = { ...w, ...patch };
-        void api.upsertWave(updated).catch((err) => persistError('updateWave', err));
-        return updated;
-      })
-    );
-  }, []);
+  const updateWave = useCallback(
+    (id: string, patch: Partial<WaveInput>) => {
+      setWaves((prev) => {
+        const next = prev.map((w) => {
+          if (w.id !== id) return w;
+          const updated = { ...w, ...patch };
+          void api.upsertWave(updated).catch((err) => persistError('updateWave', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ waves: next }));
+        return next;
+      });
+    },
+    [recomputeAutomation]
+  );
 
   const removeWave = useCallback((id: string) => {
     setWaves((prev) => prev.filter((w) => w.id !== id));
@@ -1485,6 +1501,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             next.push({
               id: id || nextId('EQP', next, 2),
               ...patch,
+              status: null,
               productIds:
                 patch.productIds.length > 0 ? patch.productIds : products.map((p) => p.id),
             });
