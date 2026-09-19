@@ -16,6 +16,7 @@ import { LoginPage } from './pages/Login';
 import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
+import { ManageWorkItemsPage } from './pages/ManageWorkItems';
 import { ProductsPage } from './pages/Products';
 import { SetPasswordPage } from './pages/SetPassword';
 import { SettingsIndexRedirect, SettingsLayout } from './pages/settings/SettingsLayout';
@@ -47,6 +48,10 @@ function AuthenticatedApp() {
             <Route
               path="/capabilities/:capabilityId/epics/:epicId/features/:featureId/stories"
               element={<ManageStoriesPage />}
+            />
+            <Route
+              path="/capabilities/:capabilityId/items/:typeId"
+              element={<ManageWorkItemsPage />}
             />
             <Route path="/lifecycles" element={<LifecyclesPage />} />
             <Route path="/groups" element={<GroupsPage />} />

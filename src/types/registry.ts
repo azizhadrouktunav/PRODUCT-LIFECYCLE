@@ -9,16 +9,24 @@ export type StageTone =
   | 'pink'
   | 'gray';
 
-/** What must exist in the record before a stage is credible. */
-export type StageRequirement = 'none' | 'epics' | 'features' | 'stories' | 'equipment';
+/**
+ * What must exist before a stage is credible.
+ * Built-in keys kept for templates; any work-item type id is also valid.
+ */
+export type StageRequirement = string;
 
-export const REQUIREMENT_LABEL: Record<StageRequirement, string> = {
+export const BUILTIN_REQUIREMENTS = ['none', 'epics', 'features', 'stories', 'equipment'] as const;
+
+export const REQUIREMENT_LABEL: Record<string, string> = {
   none: 'no prerequisite',
   epics: 'needs at least one epic',
   features: 'needs at least one feature',
   stories: 'needs at least one user story',
   equipment: 'needs at least one linked equipment model',
 };
+
+/** How a capability/type stage relates to work items. */
+export type StageContentMode = 'inline' | 'table';
 
 export const STAGE_TONES: StageTone[] = [
   'blue',
@@ -56,11 +64,30 @@ export interface StageDef {
   requirement: StageRequirement;
   /** Status applied automatically when this stage is the capability's progress. */
   status?: CapabilityStatus | null;
+  /** inline = progress only; table = manage rows of opensTypeId. */
+  contentMode?: StageContentMode;
+  /** When contentMode === 'table', which work-item type this stage opens. */
+  opensTypeId?: string | null;
+}
+
+/** Configurable hierarchy level for a lifecycle. */
+export interface WorkItemTypeDef {
+  id: string;
+  label: string;
+  pluralLabel: string;
+  /** null = roots under the capability. */
+  parentTypeId: string | null;
+  statuses: string[];
+  /** Optional progress stages for items of this type (nested stages). */
+  stages: StageDef[];
+  /** builtin → epic/feature/story/equipment tables; custom → work_items. */
+  storage: 'builtin' | 'custom';
 }
 
 /** Lifecycle id stored on capability groups (`track` column). */
 export type TrackId = string;
 
+/** @deprecated Derived from workItemTypes — kept for UI labels and legacy reads. */
 export type DecompositionMode = 'none' | 'delivery';
 
 export const DECOMPOSITION_LABEL: Record<DecompositionMode, string> = {
@@ -68,32 +95,48 @@ export const DECOMPOSITION_LABEL: Record<DecompositionMode, string> = {
   delivery: 'epics → features → stories',
 };
 
+export const DEFAULT_WORK_ITEM_STATUSES: string[] = [
+  'On Hold',
+  'In Progress',
+  'Needs Review',
+  'Completed',
+];
+
 export interface Lifecycle {
   id: TrackId;
   label: string;
   summary: string;
+  /** @deprecated Prefer workItemTypes; synced for templates / legacy. */
   decomposition: DecompositionMode;
   stages: StageDef[];
+  /** @deprecated Prefer workItemTypes[id=story].stages */
   storyStages: StageDef[];
+  /** Ordered hierarchy levels (customizable). */
+  workItemTypes: WorkItemTypeDef[];
   productIds: string[];
   /** Cross-table status automation rules for this lifecycle. */
   automationRules: AutomationRule[];
 }
 
-/** Entities that can participate in lifecycle automation rules. */
+/**
+ * Entities that can participate in lifecycle automation rules.
+ * Custom work-item types use `work_item:<typeId>`.
+ */
 export type AutoEntity =
   | 'capability'
   | 'epic'
   | 'feature'
   | 'story'
   | 'wave'
-  | 'equipment';
+  | 'equipment'
+  | `work_item:${string}`;
 
 /** Option fields that automation may read or write. */
 export type AutoField = 'status' | 'progress' | 'stage' | 'state';
 
 export type AutoAggregate = 'all' | 'any' | 'none';
 export type AutoOp = 'eq' | 'neq';
+export type ConditionCombineOp = 'and' | 'or';
 
 export interface AutomationCondition {
   sourceEntity: AutoEntity;
@@ -103,13 +146,24 @@ export interface AutomationCondition {
   value: string;
 }
 
+/** Boolean tree for rule conditions (AND / OR / NOT). */
+export type ConditionNode =
+  | { kind: 'leaf'; not?: boolean; condition: AutomationCondition }
+  | { kind: 'group'; op: ConditionCombineOp; not?: boolean; children: ConditionNode[] };
+
 export interface AutomationRule {
   id: string;
   enabled: boolean;
   targetEntity: AutoEntity;
   targetField: AutoField;
   setValue: string;
-  conditions: AutomationCondition[];
+  /** Boolean condition tree. */
+  when: ConditionNode;
+  /**
+   * @deprecated Flat AND list — migrated into `when` on load.
+   * Kept optional so older jsonb rows still parse.
+   */
+  conditions?: AutomationCondition[];
 }
 
 export const AUTO_ENTITIES: AutoEntity[] = [
@@ -124,6 +178,44 @@ export const AUTO_ENTITIES: AutoEntity[] = [
 export const AUTO_AGGREGATES: AutoAggregate[] = ['all', 'any', 'none'];
 export const AUTO_OPS: AutoOp[] = ['eq', 'neq'];
 
+export function isWorkItemAutoEntity(entity: AutoEntity): entity is `work_item:${string}` {
+  return typeof entity === 'string' && entity.startsWith('work_item:');
+}
+
+export function workItemTypeIdFromAuto(entity: AutoEntity): string | null {
+  if (!isWorkItemAutoEntity(entity)) return null;
+  return entity.slice('work_item:'.length) || null;
+}
+
+export function autoEntityForType(typeId: string): AutoEntity {
+  if (typeId === 'epic' || typeId === 'feature' || typeId === 'story' || typeId === 'equipment') {
+    return typeId;
+  }
+  if (typeId === 'capability' || typeId === 'wave') return typeId;
+  return `work_item:${typeId}`;
+}
+
+export function conditionsToWhen(conditions: AutomationCondition[]): ConditionNode {
+  return {
+    kind: 'group',
+    op: 'and',
+    children: conditions.map((condition) => ({ kind: 'leaf' as const, condition })),
+  };
+}
+
+export function normalizeRuleWhen(rule: Partial<AutomationRule> & { conditions?: AutomationCondition[] }): ConditionNode {
+  if (rule.when && typeof rule.when === 'object') return rule.when;
+  if (Array.isArray(rule.conditions) && rule.conditions.length > 0) {
+    return conditionsToWhen(rule.conditions);
+  }
+  return { kind: 'group', op: 'and', children: [] };
+}
+
+export function flattenWhenLeaves(node: ConditionNode): AutomationCondition[] {
+  if (node.kind === 'leaf') return [node.condition];
+  return node.children.flatMap(flattenWhenLeaves);
+}
+
 /** @deprecated Use Lifecycle — kept as an alias for gradual migration. */
 export type Track = Lifecycle;
 
@@ -134,6 +226,7 @@ const HARDWARE_STAGES: StageDef[] = [
     tone: 'blue',
     requirement: 'none',
     status: 'In Progress',
+    contentMode: 'inline',
   },
   {
     name: 'Ready for Assignment',
@@ -141,6 +234,7 @@ const HARDWARE_STAGES: StageDef[] = [
     tone: 'violet',
     requirement: 'none',
     status: 'In Progress',
+    contentMode: 'inline',
   },
   {
     name: 'Assigned to Equipment',
@@ -148,6 +242,7 @@ const HARDWARE_STAGES: StageDef[] = [
     tone: 'blue',
     requirement: 'equipment',
     status: 'In Progress',
+    contentMode: 'inline',
   },
   {
     name: 'Active',
@@ -155,6 +250,7 @@ const HARDWARE_STAGES: StageDef[] = [
     tone: 'green',
     requirement: 'equipment',
     status: 'Completed',
+    contentMode: 'inline',
   },
 ];
 
@@ -165,6 +261,7 @@ const DELIVERY_STAGES: StageDef[] = [
     tone: 'blue',
     requirement: 'none',
     status: 'In Progress',
+    contentMode: 'inline',
   },
   {
     name: 'Epic Definition',
@@ -172,6 +269,8 @@ const DELIVERY_STAGES: StageDef[] = [
     tone: 'violet',
     requirement: 'none',
     status: 'In Progress',
+    contentMode: 'table',
+    opensTypeId: 'epic',
   },
   {
     name: 'Feature Definition',
@@ -179,6 +278,8 @@ const DELIVERY_STAGES: StageDef[] = [
     tone: 'violet',
     requirement: 'epics',
     status: 'In Progress',
+    contentMode: 'table',
+    opensTypeId: 'feature',
   },
   {
     name: 'User Story Definition',
@@ -186,6 +287,8 @@ const DELIVERY_STAGES: StageDef[] = [
     tone: 'violet',
     requirement: 'features',
     status: 'Completed',
+    contentMode: 'table',
+    opensTypeId: 'story',
   },
 ];
 
@@ -196,6 +299,7 @@ export const DEFAULT_STORY_STAGES: StageDef[] = [
     description: 'UI/UX design is in progress.',
     tone: 'pink',
     requirement: 'none',
+    contentMode: 'inline',
   },
   {
     name: 'In Architecture',
@@ -203,32 +307,85 @@ export const DEFAULT_STORY_STAGES: StageDef[] = [
       'The story is analysed for feasibility and given a technical approval, recorded as an ADR with the technical information needed to build it.',
     tone: 'orange',
     requirement: 'none',
+    contentMode: 'inline',
   },
   {
     name: 'In Development',
     description: 'Development is in progress.',
     tone: 'cyan',
     requirement: 'none',
+    contentMode: 'inline',
   },
   {
     name: 'In Testing',
     description: 'The functionality is being tested.',
     tone: 'violet',
     requirement: 'none',
+    contentMode: 'inline',
   },
   {
     name: 'Ready for Deploy',
     description: 'The work is finished and being deployed.',
     tone: 'green',
     requirement: 'none',
+    contentMode: 'inline',
   },
   {
     name: 'Released',
     description: 'The story is released and available.',
     tone: 'blue',
     requirement: 'none',
+    contentMode: 'inline',
   },
 ];
+
+export const DELIVERY_WORK_ITEM_TYPES: WorkItemTypeDef[] = [
+  {
+    id: 'epic',
+    label: 'Epic',
+    pluralLabel: 'Epics',
+    parentTypeId: null,
+    statuses: [...DEFAULT_WORK_ITEM_STATUSES],
+    stages: [],
+    storage: 'builtin',
+  },
+  {
+    id: 'feature',
+    label: 'Feature',
+    pluralLabel: 'Features',
+    parentTypeId: 'epic',
+    statuses: [...DEFAULT_WORK_ITEM_STATUSES],
+    stages: [],
+    storage: 'builtin',
+  },
+  {
+    id: 'story',
+    label: 'User story',
+    pluralLabel: 'User stories',
+    parentTypeId: 'feature',
+    statuses: [...DEFAULT_WORK_ITEM_STATUSES],
+    stages: DEFAULT_STORY_STAGES,
+    storage: 'builtin',
+  },
+];
+
+function leafWhen(
+  sourceEntity: AutoEntity,
+  sourceField: AutoField,
+  value: string,
+  aggregate: AutoAggregate = 'all'
+): ConditionNode {
+  return {
+    kind: 'group',
+    op: 'and',
+    children: [
+      {
+        kind: 'leaf',
+        condition: { sourceEntity, sourceField, aggregate, op: 'eq', value },
+      },
+    ],
+  };
+}
 
 /** Seed / editor templates for the two built-in lifecycle styles. */
 export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'>> = {
@@ -239,6 +396,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     decomposition: 'none',
     stages: HARDWARE_STAGES,
     storyStages: [],
+    workItemTypes: [],
     productIds: [],
     automationRules: [
       {
@@ -247,15 +405,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
         targetEntity: 'equipment',
         targetField: 'status',
         setValue: 'Completed',
-        conditions: [
-          {
-            sourceEntity: 'capability',
-            sourceField: 'status',
-            aggregate: 'all',
-            op: 'eq',
-            value: 'Completed',
-          },
-        ],
+        when: leafWhen('capability', 'status', 'Completed'),
       },
     ],
   },
@@ -266,6 +416,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     decomposition: 'delivery',
     stages: DELIVERY_STAGES,
     storyStages: DEFAULT_STORY_STAGES,
+    workItemTypes: DELIVERY_WORK_ITEM_TYPES,
     productIds: [],
     automationRules: [
       {
@@ -274,15 +425,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
         targetEntity: 'feature',
         targetField: 'status',
         setValue: 'Completed',
-        conditions: [
-          {
-            sourceEntity: 'story',
-            sourceField: 'status',
-            aggregate: 'all',
-            op: 'eq',
-            value: 'Completed',
-          },
-        ],
+        when: leafWhen('story', 'status', 'Completed'),
       },
       {
         id: 'tpl-del-epic-completed',
@@ -290,15 +433,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
         targetEntity: 'epic',
         targetField: 'status',
         setValue: 'Completed',
-        conditions: [
-          {
-            sourceEntity: 'feature',
-            sourceField: 'status',
-            aggregate: 'all',
-            op: 'eq',
-            value: 'Completed',
-          },
-        ],
+        when: leafWhen('feature', 'status', 'Completed'),
       },
     ],
   },
@@ -329,11 +464,59 @@ export const ALL_STAGE_NAMES: string[] = Array.from(
 );
 
 export function usesEquipment(lifecycle: Lifecycle): boolean {
-  return lifecycle.decomposition === 'none';
+  return (
+    lifecycle.decomposition === 'none' ||
+    (lifecycle.workItemTypes?.length ?? 0) === 0
+  );
 }
 
 export function usesDecomposition(lifecycle: Lifecycle): boolean {
-  return lifecycle.decomposition === 'delivery';
+  return (
+    lifecycle.decomposition === 'delivery' ||
+    (lifecycle.workItemTypes?.some((t) => t.id === 'epic' || t.storage === 'custom') ?? false)
+  );
+}
+
+export function rootWorkItemTypes(lifecycle: Lifecycle): WorkItemTypeDef[] {
+  return (lifecycle.workItemTypes ?? []).filter((t) => t.parentTypeId == null);
+}
+
+export function childWorkItemTypes(
+  lifecycle: Lifecycle,
+  parentTypeId: string
+): WorkItemTypeDef[] {
+  return (lifecycle.workItemTypes ?? []).filter((t) => t.parentTypeId === parentTypeId);
+}
+
+export function workItemTypeDef(
+  lifecycle: Lifecycle,
+  typeId: string
+): WorkItemTypeDef | undefined {
+  return (lifecycle.workItemTypes ?? []).find((t) => t.id === typeId);
+}
+
+export function storyStagesOf(lifecycle: Lifecycle): StageDef[] {
+  const fromType = workItemTypeDef(lifecycle, 'story')?.stages;
+  if (fromType && fromType.length > 0) return fromType;
+  return lifecycle.storyStages ?? [];
+}
+
+export function decompositionFromTypes(types: WorkItemTypeDef[]): DecompositionMode {
+  if (types.some((t) => t.id === 'epic' || t.id === 'feature' || t.id === 'story')) {
+    return 'delivery';
+  }
+  return types.length > 0 ? 'delivery' : 'none';
+}
+
+export function syncLegacyFromTypes(lifecycle: Pick<Lifecycle, 'workItemTypes' | 'stages'>): {
+  decomposition: DecompositionMode;
+  storyStages: StageDef[];
+} {
+  const types = lifecycle.workItemTypes ?? [];
+  return {
+    decomposition: decompositionFromTypes(types),
+    storyStages: types.find((t) => t.id === 'story')?.stages ?? [],
+  };
 }
 
 export function stageDef(lifecycle: Lifecycle, name: string): StageDef | undefined {
@@ -345,11 +528,18 @@ export function stageIndex(lifecycle: Lifecycle, name: string): number {
 }
 
 export function storyStageDef(lifecycle: Lifecycle, name: string): StageDef | undefined {
-  return lifecycle.storyStages.find((s) => s.name === name);
+  return storyStagesOf(lifecycle).find((s) => s.name === name);
 }
 
 export function storyStageIndex(lifecycle: Lifecycle, name: string): number {
-  return lifecycle.storyStages.findIndex((s) => s.name === name);
+  return storyStagesOf(lifecycle).findIndex((s) => s.name === name);
+}
+
+export function requirementsForLifecycle(lifecycle: Lifecycle): StageRequirement[] {
+  const fromTypes = (lifecycle.workItemTypes ?? []).map((t) =>
+    t.id === 'epic' ? 'epics' : t.id === 'feature' ? 'features' : t.id === 'story' ? 'stories' : t.id
+  );
+  return ['none', 'equipment', ...fromTypes];
 }
 
 export function requirementsForMode(mode: DecompositionMode): StageRequirement[] {
@@ -372,18 +562,34 @@ export interface Equipment {
   status: CapabilityStatus | null;
 }
 
+/** Generic custom work item (name + description + status). */
+export interface WorkItem {
+  id: string;
+  typeId: string;
+  capabilityId: string;
+  parentId: string | null;
+  name: string;
+  description: string;
+  status: string;
+  sortOrder: number;
+}
+
 export interface RecordCounts {
   epics: number;
   features: number;
   stories: number;
   equipment: number;
+  /** Counts keyed by work-item type id (builtin + custom). */
+  byType?: Record<string, number>;
 }
 
 export function meetsRequirement(req: StageRequirement, counts: RecordCounts): boolean {
+  if (!req || req === 'none') return true;
   if (req === 'epics') return counts.epics > 0;
   if (req === 'features') return counts.features > 0;
   if (req === 'stories') return counts.stories > 0;
   if (req === 'equipment') return counts.equipment > 0;
+  if (counts.byType && req in counts.byType) return (counts.byType[req] ?? 0) > 0;
   return true;
 }
 
@@ -512,8 +718,9 @@ export interface UserStory {
 }
 
 export function isStoryDone(story: UserStory, lifecycle?: Lifecycle): boolean {
-  if (lifecycle && lifecycle.storyStages.length > 0) {
-    const last = lifecycle.storyStages[lifecycle.storyStages.length - 1];
+  const stages = lifecycle ? storyStagesOf(lifecycle) : [];
+  if (stages.length > 0) {
+    const last = stages[stages.length - 1];
     return story.stage === last.name;
   }
   return story.stage === 'Released';

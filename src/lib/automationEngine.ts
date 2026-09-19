@@ -6,14 +6,21 @@ import type {
   Capability,
   CapabilityGroup,
   CapabilityStatus,
+  ConditionNode,
   Epic,
   Equipment,
   Feature,
   Lifecycle,
   UserStory,
   Wave,
+  WorkItem,
 } from '../types/registry';
-import { isAutoManagedStatus } from '../types/registry';
+import {
+  isAutoManagedStatus,
+  isWorkItemAutoEntity,
+  normalizeRuleWhen,
+  workItemTypeIdFromAuto,
+} from '../types/registry';
 import { waveStories } from '../utils/scope';
 
 export interface AutomationRegistry {
@@ -24,6 +31,7 @@ export interface AutomationRegistry {
   stories: UserStory[];
   waves: Wave[];
   equipment: Equipment[];
+  workItems: WorkItem[];
 }
 
 type TargetRef =
@@ -32,7 +40,8 @@ type TargetRef =
   | { entity: 'feature'; id: string }
   | { entity: 'story'; id: string }
   | { entity: 'wave'; id: string }
-  | { entity: 'equipment'; id: string };
+  | { entity: 'equipment'; id: string }
+  | { entity: `work_item:${string}`; id: string };
 
 function trackOfCapability(cap: Capability, groups: CapabilityGroup[]): string {
   return groups.find((g) => g.id === cap.groupId)?.track ?? '';
@@ -107,6 +116,12 @@ function fieldValue(
     if (!row || field !== 'status') return null;
     return row.status;
   }
+  if (isWorkItemAutoEntity(entity)) {
+    const typeId = workItemTypeIdFromAuto(entity);
+    const row = reg.workItems.find((w) => w.id === id && w.typeId === typeId);
+    if (!row || field !== 'status') return null;
+    return row.status;
+  }
   return null;
 }
 
@@ -172,6 +187,26 @@ function relatedSourceIds(
       const cap = capabilities.find((c) => c.id === target.id);
       return cap?.equipmentIds ?? [];
     }
+    if (isWorkItemAutoEntity(sourceEntity)) {
+      const typeId = workItemTypeIdFromAuto(sourceEntity);
+      return reg.workItems
+        .filter((w) => w.capabilityId === target.id && w.typeId === typeId)
+        .map((w) => w.id);
+    }
+  }
+
+  if (isWorkItemAutoEntity(target.entity)) {
+    const targetType = workItemTypeIdFromAuto(target.entity);
+    const item = reg.workItems.find((w) => w.id === target.id && w.typeId === targetType);
+    if (!item) return [];
+    if (sourceEntity === 'capability') return [item.capabilityId];
+    if (isWorkItemAutoEntity(sourceEntity)) {
+      const sourceType = workItemTypeIdFromAuto(sourceEntity);
+      // Children of this item
+      return reg.workItems
+        .filter((w) => w.parentId === target.id && w.typeId === sourceType)
+        .map((w) => w.id);
+    }
   }
 
   if (target.entity === 'equipment') {
@@ -230,6 +265,26 @@ function conditionHolds(
   return hits.every((h) => !h); // none: no row matches the predicate
 }
 
+function evaluateNode(
+  target: TargetRef,
+  node: ConditionNode,
+  reg: AutomationRegistry
+): boolean {
+  let result: boolean;
+  if (node.kind === 'leaf') {
+    result = conditionHolds(target, node.condition, reg);
+  } else {
+    if (node.children.length === 0) {
+      result = true;
+    } else if (node.op === 'and') {
+      result = node.children.every((c) => evaluateNode(target, c, reg));
+    } else {
+      result = node.children.some((c) => evaluateNode(target, c, reg));
+    }
+  }
+  return node.not ? !result : result;
+}
+
 function targetLinkedToLifecycle(
   target: TargetRef,
   lifecycle: Lifecycle,
@@ -275,6 +330,12 @@ function targetLinkedToLifecycle(
       return !!cap && trackOfCapability(cap, groups) === lifecycle.id;
     });
   }
+  if (isWorkItemAutoEntity(target.entity)) {
+    const typeId = workItemTypeIdFromAuto(target.entity);
+    const item = reg.workItems.find((w) => w.id === target.id && w.typeId === typeId);
+    const cap = item ? capabilities.find((c) => c.id === item.capabilityId) : undefined;
+    return !!cap && trackOfCapability(cap, groups) === lifecycle.id;
+  }
   return false;
 }
 
@@ -293,6 +354,11 @@ function currentStatus(target: TargetRef, reg: AutomationRegistry): CapabilitySt
   }
   if (target.entity === 'equipment') {
     return reg.equipment.find((e) => e.id === target.id)?.status ?? null;
+  }
+  if (isWorkItemAutoEntity(target.entity)) {
+    const typeId = workItemTypeIdFromAuto(target.entity);
+    const status = reg.workItems.find((w) => w.id === target.id && w.typeId === typeId)?.status;
+    return (status as CapabilityStatus) ?? null;
   }
   return null;
 }
@@ -380,6 +446,16 @@ function applyField(
     return true;
   }
 
+  if (isWorkItemAutoEntity(target.entity) && field === 'status') {
+    const typeId = workItemTypeIdFromAuto(target.entity);
+    const i = reg.workItems.findIndex((w) => w.id === target.id && w.typeId === typeId);
+    if (i < 0) return false;
+    const row = reg.workItems[i];
+    if (row.status === value) return false;
+    reg.workItems[i] = { ...row, status: value };
+    return true;
+  }
+
   return false;
 }
 
@@ -429,6 +505,19 @@ function targetsForEntity(
       )
       .map((e) => ({ entity: 'equipment' as const, id: e.id }));
   }
+  if (isWorkItemAutoEntity(entity)) {
+    const typeId = workItemTypeIdFromAuto(entity);
+    return reg.workItems
+      .filter((w) => {
+        if (w.typeId !== typeId) return false;
+        return targetLinkedToLifecycle(
+          { entity: `work_item:${typeId}`, id: w.id },
+          lifecycle,
+          reg
+        );
+      })
+      .map((w) => ({ entity: `work_item:${typeId}` as const, id: w.id }));
+  }
   return [];
 }
 
@@ -439,6 +528,7 @@ export interface AutomationChanges {
   stories: UserStory[];
   waves: Wave[];
   equipment: Equipment[];
+  workItems: WorkItem[];
   changed: {
     capabilities: Capability[];
     epics: Epic[];
@@ -446,6 +536,7 @@ export interface AutomationChanges {
     stories: UserStory[];
     waves: Wave[];
     equipment: Equipment[];
+    workItems: WorkItem[];
   };
 }
 
@@ -465,6 +556,7 @@ export function runAutomation(
     stories: [...input.stories],
     waves: [...input.waves],
     equipment: [...input.equipment],
+    workItems: [...(input.workItems ?? [])],
   };
 
   const changedIds = {
@@ -474,6 +566,7 @@ export function runAutomation(
     stories: new Set<string>(),
     waves: new Set<string>(),
     equipment: new Set<string>(),
+    workItems: new Set<string>(),
   };
 
   // Multiple passes so parent rollups settle (story → feature → epic).
@@ -493,6 +586,7 @@ export function runAutomation(
     stories: reg.stories,
     waves: reg.waves,
     equipment: reg.equipment,
+    workItems: reg.workItems,
     changed: {
       capabilities: reg.capabilities.filter((c) => changedIds.capabilities.has(c.id)),
       epics: reg.epics.filter((e) => changedIds.epics.has(e.id)),
@@ -500,6 +594,7 @@ export function runAutomation(
       stories: reg.stories.filter((s) => changedIds.stories.has(s.id)),
       waves: reg.waves.filter((w) => changedIds.waves.has(w.id)),
       equipment: reg.equipment.filter((e) => changedIds.equipment.has(e.id)),
+      workItems: reg.workItems.filter((w) => changedIds.workItems.has(w.id)),
     },
   };
 }
@@ -510,26 +605,31 @@ function applyRule(
   reg: AutomationRegistry,
   changedIds: Record<keyof AutomationChanges['changed'], Set<string>>
 ): void {
+  const when = normalizeRuleWhen(rule);
   const targets = targetsForEntity(rule.targetEntity, lifecycle, reg);
   for (const target of targets) {
     if (!targetLinkedToLifecycle(target, lifecycle, reg)) continue;
-    const ok = rule.conditions.every((c) => conditionHolds(target, c, reg));
+    const ok = evaluateNode(target, when, reg);
     if (!ok) continue;
     const did = applyField(target, rule.targetField, rule.setValue, reg);
     if (did) {
-      const bucket =
-        target.entity === 'capability'
-          ? 'capabilities'
-          : target.entity === 'epic'
-            ? 'epics'
-            : target.entity === 'feature'
-              ? 'features'
-              : target.entity === 'story'
-                ? 'stories'
-                : target.entity === 'wave'
-                  ? 'waves'
-                  : 'equipment';
-      changedIds[bucket].add(target.id);
+      if (isWorkItemAutoEntity(target.entity)) {
+        changedIds.workItems.add(target.id);
+      } else {
+        const bucket =
+          target.entity === 'capability'
+            ? 'capabilities'
+            : target.entity === 'epic'
+              ? 'epics'
+              : target.entity === 'feature'
+                ? 'features'
+                : target.entity === 'story'
+                  ? 'stories'
+                  : target.entity === 'wave'
+                    ? 'waves'
+                    : 'equipment';
+        changedIds[bucket].add(target.id);
+      }
     }
   }
 }

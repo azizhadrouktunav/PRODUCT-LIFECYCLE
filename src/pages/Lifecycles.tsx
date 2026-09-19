@@ -5,7 +5,7 @@ import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Lifecycle } from '../types/registry';
-import { DECOMPOSITION_LABEL, REQUIREMENT_LABEL, usesDecomposition } from '../types/registry';
+import { DECOMPOSITION_LABEL, REQUIREMENT_LABEL, storyStagesOf, usesDecomposition } from '../types/registry';
 
 export function LifecyclesPage() {
   const { lifecycles, groups, removeLifecycle, getProduct } = useRegistry();
@@ -19,7 +19,7 @@ export function LifecyclesPage() {
     <div>
       <PageHeader
         title="Lifecycles"
-        count={`${visible.length} lifecycles`}
+        count={`${visible.length} lifecycles`}
         action={
           canManage ? (
             <Button variant="primary" onClick={() => setAdding(true)}>
@@ -61,7 +61,10 @@ export function LifecyclesPage() {
                 )}
                 <span className="font-mono text-2xs text-ink-500">{lc.id}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
-                  {lc.stages.length} stages · {DECOMPOSITION_LABEL[lc.decomposition]}
+                  {lc.stages.length} stages
+                  {(lc.workItemTypes?.length ?? 0) > 0
+                    ? ` · ${(lc.workItemTypes ?? []).map((t) => t.label).join(' → ')}`
+                    : ` · ${DECOMPOSITION_LABEL[lc.decomposition]}`}
                 </span>
                 <span className="ml-auto font-mono text-2xs text-mute">
                   {usedBy} group{usedBy === 1 ? '' : 's'}
@@ -108,7 +111,13 @@ export function LifecyclesPage() {
                       )}
                       {s.requirement !== 'none' && (
                         <span className="mt-1 inline-block rounded border border-line-strong px-1.5 py-0.5 text-2xs text-mute">
-                          {REQUIREMENT_LABEL[s.requirement]}
+                          {REQUIREMENT_LABEL[s.requirement] ??
+                            (s.contentMode === 'table' && s.opensTypeId
+                              ? `opens ${s.opensTypeId}`
+                              : `needs ${s.requirement}`)}
+                          {s.contentMode === 'table' && s.opensTypeId
+                            ? ` · table: ${s.opensTypeId}`
+                            : ''}
                         </span>
                       )}
                     </span>
@@ -116,13 +125,44 @@ export function LifecyclesPage() {
                 ))}
               </ol>
 
-              {usesDecomposition(lc) && lc.storyStages.length > 0 && (
+              {(lc.workItemTypes?.length ?? 0) > 0 && (
+                <>
+                  <h3 className="mt-4 text-2xs uppercase tracking-[0.14em] text-ink-500">
+                    Work item types
+                  </h3>
+                  <ol className="mt-2">
+                    {(lc.workItemTypes ?? []).map((t, i) => (
+                      <li
+                        key={t.id}
+                        className="flex gap-3 border-b border-line-soft py-2 last:border-0"
+                      >
+                        <span className="w-5 shrink-0 pt-0.5 font-mono text-2xs text-ink-500">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-xs font-medium text-strong">
+                            {t.label}{' '}
+                            <span className="font-mono text-2xs text-mute">({t.id})</span>
+                          </span>
+                          <span className="mt-0.5 block text-2xs text-mute">
+                            {t.parentTypeId ? `under ${t.parentTypeId}` : 'root under capability'} ·{' '}
+                            {t.storage} · {t.statuses.length} statuses
+                            {t.stages.length > 0 ? ` · ${t.stages.length} stages` : ''}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
+
+              {usesDecomposition(lc) && storyStagesOf(lc).length > 0 && (
                 <>
                   <h3 className="mt-4 text-2xs uppercase tracking-[0.14em] text-ink-500">
                     User story stages
                   </h3>
                   <ol className="mt-2">
-                    {lc.storyStages.map((s, i) => (
+                    {storyStagesOf(lc).map((s, i) => (
                       <li
                         key={`${s.name}-${i}`}
                         className="flex gap-3 border-b border-line-soft py-2 last:border-0"

@@ -27,6 +27,8 @@ import type {
   TrackId,
   UserStory,
   Wave,
+  WorkItem,
+  WorkItemTypeDef,
 } from '../types/registry';
 import {
   CAPABILITY_STATUSES,
@@ -35,6 +37,7 @@ import {
   computeCapabilityProgress,
   isAutoManagedStatus,
   statusForStage,
+  storyStagesOf,
   usesEquipment,
 } from '../types/registry';
 import * as api from '../lib/registryApi';
@@ -44,15 +47,25 @@ function countsForCapability(
   cap: Capability,
   epics: Epic[],
   features: Feature[],
-  stories: UserStory[]
+  stories: UserStory[],
+  workItems: WorkItem[] = []
 ): RecordCounts {
   const epicIds = epics.filter((e) => e.capabilityId === cap.id).map((e) => e.id);
   const featureIds = features.filter((f) => epicIds.includes(f.epicId)).map((f) => f.id);
+  const byType: Record<string, number> = {
+    epic: epicIds.length,
+    feature: featureIds.length,
+    story: stories.filter((s) => featureIds.includes(s.featureId)).length,
+  };
+  for (const wi of workItems.filter((w) => w.capabilityId === cap.id)) {
+    byType[wi.typeId] = (byType[wi.typeId] ?? 0) + 1;
+  }
   return {
     epics: epicIds.length,
     features: featureIds.length,
     stories: stories.filter((s) => featureIds.includes(s.featureId)).length,
     equipment: cap.equipmentIds.length,
+    byType,
   };
 }
 
@@ -61,9 +74,10 @@ function withAutoProgress(
   epics: Epic[],
   features: Feature[],
   stories: UserStory[],
-  lifecycle: Lifecycle
+  lifecycle: Lifecycle,
+  workItems: WorkItem[] = []
 ): Capability {
-  const counts = countsForCapability(cap, epics, features, stories);
+  const counts = countsForCapability(cap, epics, features, stories, workItems);
   const progress = computeCapabilityProgress(lifecycle, counts);
   const status = isAutoManagedStatus(cap.status)
     ? statusForStage(lifecycle, progress)
@@ -78,9 +92,15 @@ export type LifecycleInput = {
   decomposition: DecompositionMode;
   stages: StageDef[];
   storyStages: StageDef[];
+  workItemTypes: WorkItemTypeDef[];
   productIds: string[];
   automationRules: AutomationRule[];
 };
+
+export type WorkItemInput = Pick<
+  WorkItem,
+  'name' | 'description' | 'status' | 'parentId' | 'typeId'
+>;
 
 export interface NewCapabilityInput {
   name: string;
@@ -140,6 +160,7 @@ interface RegistryValue {
   features: Feature[];
   stories: UserStory[];
   waves: Wave[];
+  workItems: WorkItem[];
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
   removeCapability: (id: string) => void;
@@ -169,6 +190,11 @@ interface RegistryValue {
   addStory: (featureId: string, input: StoryInput) => void;
   updateStory: (id: string, patch: Partial<StoryInput>) => void;
   removeStory: (id: string) => void;
+  addWorkItem: (capabilityId: string, input: WorkItemInput) => WorkItem;
+  updateWorkItem: (id: string, patch: Partial<WorkItemInput>) => void;
+  removeWorkItem: (id: string) => void;
+  workItemsOf: (capabilityId: string, typeId?: string, parentId?: string | null) => WorkItem[];
+  getWorkItem: (id: string) => WorkItem | undefined;
   addEquipment: (input: EquipmentInput) => Equipment;
   updateEquipment: (id: string, patch: Partial<EquipmentInput>) => void;
   removeEquipment: (id: string) => void;
@@ -268,6 +294,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [stories, setStories] = useState<UserStory[]>([]);
   const [waves, setWaves] = useState<Wave[]>([]);
+  const [workItems, setWorkItems] = useState<WorkItem[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
@@ -290,6 +317,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setFeatures(snap.features);
       setStories(snap.stories);
       setWaves(snap.waves);
+      setWorkItems(snap.workItems ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load registry from Supabase');
     } finally {
@@ -332,6 +360,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       stories?: UserStory[];
       waves?: Wave[];
       equipment?: Equipment[];
+      workItems?: WorkItem[];
       lifecycles?: Lifecycle[];
     } = {}) => {
       const nextLifecycles = overrides.lifecycles ?? lifecycles;
@@ -341,12 +370,20 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const nextStories = overrides.stories ?? stories;
       const nextWaves = overrides.waves ?? waves;
       const nextEquipment = overrides.equipment ?? equipment;
+      const nextWorkItems = overrides.workItems ?? workItems;
 
       nextCaps = nextCaps.map((cap) => {
         const lc =
           nextLifecycles.find((l) => l.id === trackOfGroup(cap.groupId)) ??
           resolveLifecycle(trackOfGroup(cap.groupId));
-        return withAutoProgress(cap, nextEpics, nextFeatures, nextStories, lc);
+        return withAutoProgress(
+          cap,
+          nextEpics,
+          nextFeatures,
+          nextStories,
+          lc,
+          nextWorkItems
+        );
       });
 
       const result = runAutomation(nextLifecycles, {
@@ -357,6 +394,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         stories: nextStories,
         waves: nextWaves,
         equipment: nextEquipment,
+        workItems: nextWorkItems,
       });
 
       setCapabilities(result.capabilities);
@@ -365,6 +403,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setStories(result.stories);
       setWaves(result.waves);
       setEquipment(result.equipment);
+      setWorkItems(result.workItems);
 
       for (const c of result.changed.capabilities) {
         void api.upsertCapability(c).catch((err) => persistError('automation capability', err));
@@ -384,6 +423,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       for (const eq of result.changed.equipment) {
         void api.upsertEquipment(eq).catch((err) => persistError('automation equipment', err));
       }
+      for (const wi of result.changed.workItems) {
+        void api.upsertWorkItem(wi).catch((err) => persistError('automation work_item', err));
+      }
 
       return result;
     },
@@ -395,6 +437,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       stories,
       waves,
       equipment,
+      workItems,
       groups,
       trackOfGroup,
       resolveLifecycle,
@@ -860,7 +903,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         summary: input.summary.trim(),
         decomposition: input.decomposition,
         stages: input.stages,
-        storyStages: input.decomposition === 'delivery' ? input.storyStages : [],
+        storyStages: input.storyStages ?? [],
+        workItemTypes: input.workItemTypes ?? [],
         productIds: input.productIds ?? [],
         automationRules: input.automationRules ?? [],
       };
@@ -884,10 +928,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             summary: patch.summary !== undefined ? patch.summary.trim() : lc.summary,
             decomposition,
             stages: patch.stages ?? lc.stages,
-            storyStages:
-              decomposition === 'delivery'
-                ? (patch.storyStages ?? lc.storyStages)
-                : [],
+            storyStages: patch.storyStages ?? lc.storyStages,
+            workItemTypes: patch.workItemTypes ?? lc.workItemTypes ?? [],
             productIds: patch.productIds !== undefined ? patch.productIds : lc.productIds,
             automationRules:
               patch.automationRules !== undefined ? patch.automationRules : lc.automationRules,
@@ -900,6 +942,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           updatedLc &&
           (patch.stages !== undefined ||
             patch.decomposition !== undefined ||
+            patch.workItemTypes !== undefined ||
             patch.automationRules !== undefined)
         ) {
           queueMicrotask(() => recomputeAutomation({ lifecycles: next }));
@@ -1093,6 +1136,72 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [stories, recomputeAutomation]
   );
 
+  const addWorkItem = useCallback(
+    (capabilityId: string, input: WorkItemInput) => {
+      const created: WorkItem = {
+        id: nextId('WI', workItems),
+        typeId: input.typeId,
+        capabilityId,
+        parentId: input.parentId ?? null,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        status: input.status || 'In Progress',
+        sortOrder: workItems.filter((w) => w.capabilityId === capabilityId).length,
+      };
+      const next = [...workItems, created];
+      setWorkItems(next);
+      void api.upsertWorkItem(created).catch((err) => persistError('addWorkItem', err));
+      queueMicrotask(() => recomputeAutomation({ workItems: next }));
+      return created;
+    },
+    [workItems, recomputeAutomation]
+  );
+
+  const updateWorkItem = useCallback(
+    (id: string, patch: Partial<WorkItemInput>) => {
+      setWorkItems((prev) => {
+        const next = prev.map((w) => {
+          if (w.id !== id) return w;
+          const updated = {
+            ...w,
+            ...patch,
+            name: patch.name !== undefined ? patch.name.trim() : w.name,
+            description:
+              patch.description !== undefined ? patch.description.trim() : w.description,
+          };
+          void api.upsertWorkItem(updated).catch((err) => persistError('updateWorkItem', err));
+          return updated;
+        });
+        queueMicrotask(() => recomputeAutomation({ workItems: next }));
+        return next;
+      });
+    },
+    [recomputeAutomation]
+  );
+
+  const removeWorkItem = useCallback(
+    (id: string) => {
+      const doomed = new Set<string>([id]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const w of workItems) {
+          if (w.parentId && doomed.has(w.parentId) && !doomed.has(w.id)) {
+            doomed.add(w.id);
+            changed = true;
+          }
+        }
+      }
+      const next = workItems.filter((w) => !doomed.has(w.id));
+      setWorkItems(next);
+      for (const wid of doomed) {
+        void api.deleteWorkItem(wid).catch((err) => persistError('removeWorkItem', err));
+      }
+      queueMicrotask(() => recomputeAutomation({ workItems: next }));
+    },
+    [workItems, recomputeAutomation]
+  );
+
   const addWave = useCallback(
     (input: WaveInput) => {
       const created: Wave = { id: nextId('WAVE', waves), ...input };
@@ -1134,6 +1243,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     const epicMap = new Map(epics.map((e) => [e.id, e]));
     const featureMap = new Map(features.map((f) => [f.id, f]));
     const storyMap = new Map(stories.map((s) => [s.id, s]));
+    const workItemMap = new Map(workItems.map((w) => [w.id, w]));
 
     const epicsOf = (capabilityId: string) => epics.filter((e) => e.capabilityId === capabilityId);
     const featuresOf = (epicId: string) => features.filter((f) => f.epicId === epicId);
@@ -1142,16 +1252,42 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const ids = featuresOf(epicId).map((f) => f.id);
       return stories.filter((s) => ids.includes(s.featureId));
     };
+    const workItemsOf = (
+      capabilityId: string,
+      typeId?: string,
+      parentId?: string | null
+    ) =>
+      workItems.filter((w) => {
+        if (w.capabilityId !== capabilityId) return false;
+        if (typeId && w.typeId !== typeId) return false;
+        if (parentId !== undefined) {
+          if (parentId === null) return w.parentId == null;
+          return w.parentId === parentId;
+        }
+        return true;
+      });
 
     const countsOf = (capabilityId: string): RecordCounts => {
       const capEpics = epicsOf(capabilityId);
       const capFeatures = features.filter((f) => capEpics.some((e) => e.id === f.epicId));
       const capStories = stories.filter((s) => capFeatures.some((f) => f.id === s.featureId));
+      const byType: Record<string, number> = {
+        epic: capEpics.length,
+        feature: capFeatures.length,
+        story: capStories.length,
+        epics: capEpics.length,
+        features: capFeatures.length,
+        stories: capStories.length,
+      };
+      for (const wi of workItems.filter((w) => w.capabilityId === capabilityId)) {
+        byType[wi.typeId] = (byType[wi.typeId] ?? 0) + 1;
+      }
       return {
         epics: capEpics.length,
         features: capFeatures.length,
         stories: capStories.length,
         equipment: capabilityMap.get(capabilityId)?.equipmentIds.length ?? 0,
+        byType,
       };
     };
 
@@ -1425,7 +1561,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           const stageRaw = (r['Progress Stage'] ?? '').trim();
           const points = Number((r['Points'] ?? '').trim());
           const id = (r['Story ID'] ?? '').trim();
-          const storyStages = lifecycleByFeature(featureId).storyStages;
+          const storyStages = storyStagesOf(lifecycleByFeature(featureId));
           const stages = storyStages.length > 0 ? storyStages : DEFAULT_STORY_STAGES;
           const actorIds = list(r['Actor IDs'] ?? '').filter((aid) => actorMap.has(aid));
           const roleFromActors = roleFromActorIds(actorIds, actors);
@@ -1687,6 +1823,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       features,
       stories,
       waves,
+      workItems,
       addCapability,
       updateCapability,
       removeCapability,
@@ -1717,6 +1854,11 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addStory,
       updateStory,
       removeStory,
+      addWorkItem,
+      updateWorkItem,
+      removeWorkItem,
+      workItemsOf,
+      getWorkItem: (id) => workItemMap.get(id),
       addEquipment,
       updateEquipment,
       removeEquipment,
@@ -1760,6 +1902,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     features,
     stories,
     waves,
+    workItems,
     equipment,
     equipmentTypes,
     lifecycles,
@@ -1789,6 +1932,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addStory,
     updateStory,
     removeStory,
+    addWorkItem,
+    updateWorkItem,
+    removeWorkItem,
     addEquipment,
     updateEquipment,
     removeEquipment,

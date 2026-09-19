@@ -12,46 +12,54 @@ import type {
   AutomationCondition,
   AutomationRule,
   CapabilityStatus,
+  ConditionCombineOp,
+  ConditionNode,
   DecompositionMode,
   Lifecycle,
+  StageContentMode,
   StageDef,
   StageRequirement,
   StageTone,
+  WorkItemTypeDef,
 } from '../types/registry';
 import {
   AUTO_AGGREGATES,
-  AUTO_ENTITIES,
   AUTO_OPS,
   CAPABILITY_STATUSES,
-  DECOMPOSITION_LABEL,
+  DEFAULT_WORK_ITEM_STATUSES,
   LIFECYCLE_TEMPLATES,
-  REQUIREMENT_LABEL,
   STAGE_TONES,
-  requirementsForMode,
+  normalizeRuleWhen,
+  requirementsForLifecycle,
+  syncLegacyFromTypes,
 } from '../types/registry';
 import {
   AUTO_AGGREGATE_LABEL,
-  AUTO_ENTITY_LABEL,
   AUTO_FIELD_LABEL,
   AUTO_OP_LABEL,
+  autoEntitiesForLifecycle,
+  entityLabel,
   fieldsForEntity,
   newRuleId,
   optionsForField,
   relatedSourceEntities,
+  summarizeWhen,
 } from '../lib/automationCatalog';
 
-function blankStage(_mode: DecompositionMode): StageDef {
+function blankStage(): StageDef {
   return {
     name: '',
     description: '',
     tone: 'blue',
     requirement: 'none',
     status: 'In Progress',
+    contentMode: 'inline',
+    opensTypeId: null,
   };
 }
 
-function blankCondition(target: AutoEntity): AutomationCondition {
-  const sources = relatedSourceEntities(target);
+function blankCondition(target: AutoEntity, lifecycle?: Lifecycle): AutomationCondition {
+  const sources = relatedSourceEntities(target, lifecycle);
   const sourceEntity = sources[0] ?? 'story';
   const sourceField = fieldsForEntity(sourceEntity)[0] ?? 'status';
   return {
@@ -63,32 +71,64 @@ function blankCondition(target: AutoEntity): AutomationCondition {
   };
 }
 
-function blankRule(): AutomationRule {
+function blankLeaf(target: AutoEntity, lifecycle?: Lifecycle): ConditionNode {
+  return { kind: 'leaf', condition: blankCondition(target, lifecycle) };
+}
+
+function blankWhen(target: AutoEntity, lifecycle?: Lifecycle): ConditionNode {
+  return { kind: 'group', op: 'and', children: [blankLeaf(target, lifecycle)] };
+}
+
+function blankRule(lifecycle?: Lifecycle): AutomationRule {
   return {
     id: newRuleId(),
     enabled: true,
     targetEntity: 'feature',
     targetField: 'status',
     setValue: 'Completed',
-    conditions: [blankCondition('feature')],
+    when: blankWhen('feature', lifecycle),
   };
+}
+
+function blankWorkItemType(parentTypeId: string | null = null): WorkItemTypeDef {
+  const id = `type-${Date.now().toString(36).slice(-4)}`;
+  return {
+    id,
+    label: 'New type',
+    pluralLabel: 'New types',
+    parentTypeId,
+    statuses: [...DEFAULT_WORK_ITEM_STATUSES],
+    stages: [],
+    storage: 'custom',
+  };
+}
+
+function slugifyTypeId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32);
 }
 
 function StageListEditor({
   title,
   stages,
-  mode,
+  requirementOptions,
+  typeOptions,
   onChange,
   withAutoStatus = false,
+  allowTableLink = false,
 }: {
   title: string;
   stages: StageDef[];
-  mode: DecompositionMode;
+  requirementOptions: StageRequirement[];
+  typeOptions: WorkItemTypeDef[];
   onChange: (next: StageDef[]) => void;
   withAutoStatus?: boolean;
+  allowTableLink?: boolean;
 }) {
-  const allowedReqs = requirementsForMode(mode);
-
   function updateAt(index: number, patch: Partial<StageDef>) {
     onChange(stages.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
@@ -114,21 +154,21 @@ function StageListEditor({
         <span className="text-xs font-medium text-soft">{title}</span>
         <Button
           variant="quiet"
-          onClick={() => onChange([...stages, blankStage(mode)])}
           type="button"
+          onClick={() => onChange([...stages, blankStage()])}
         >
           <PlusIcon className="h-3.5 w-3.5" />
           Add stage
         </Button>
       </div>
-      <ol className="space-y-3">
+      <ul className="space-y-2">
         {stages.map((s, i) => (
           <li key={i} className="rounded-md border border-line-strong p-3">
             <div className="mb-2 flex items-center gap-1">
-              <span className="mr-auto font-mono text-2xs text-ink-500">{i + 1}</span>
+              <span className="font-mono text-2xs text-mute">{i + 1}</span>
               <button
                 type="button"
-                aria-label="Move stage up"
+                aria-label="Move up"
                 disabled={i === 0}
                 onClick={() => move(i, -1)}
                 className="rounded p-0.5 text-mute hover:text-strong disabled:opacity-30"
@@ -137,7 +177,7 @@ function StageListEditor({
               </button>
               <button
                 type="button"
-                aria-label="Move stage down"
+                aria-label="Move down"
                 disabled={i === stages.length - 1}
                 onClick={() => move(i, 1)}
                 className="rounded p-0.5 text-mute hover:text-strong disabled:opacity-30"
@@ -149,18 +189,17 @@ function StageListEditor({
                 aria-label="Remove stage"
                 disabled={stages.length <= 1}
                 onClick={() => remove(i)}
-                className="rounded p-0.5 text-mute hover:text-danger disabled:opacity-30"
+                className="ml-auto rounded p-0.5 text-mute hover:text-danger disabled:opacity-30"
               >
                 <Trash2Icon className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <Field label="Name" required>
+              <Field label="Name">
                 <input
                   className={inputClass}
                   value={s.name}
                   onChange={(e) => updateAt(i, { name: e.target.value })}
-                  placeholder="Stage name"
                 />
               </Field>
               <Field label="Tone">
@@ -176,45 +215,35 @@ function StageListEditor({
                   ))}
                 </select>
               </Field>
-              <Field label="Description">
-                <input
-                  className={inputClass}
-                  value={s.description}
-                  onChange={(e) => updateAt(i, { description: e.target.value })}
-                  placeholder="What this stage means"
-                />
-              </Field>
-              <Field label="Requirement">
+              <Field label="Prerequisite">
                 <select
                   className={inputClass}
-                  value={allowedReqs.includes(s.requirement) ? s.requirement : 'none'}
-                  onChange={(e) =>
-                    updateAt(i, { requirement: e.target.value as StageRequirement })
-                  }
+                  value={s.requirement}
+                  onChange={(e) => updateAt(i, { requirement: e.target.value })}
                 >
-                  {allowedReqs.map((req) => (
-                    <option key={req} value={req}>
-                      {REQUIREMENT_LABEL[req]}
+                  {requirementOptions.map((r) => (
+                    <option key={r} value={r}>
+                      {r === 'none'
+                        ? 'no prerequisite'
+                        : r === 'equipment'
+                          ? 'needs equipment'
+                          : `needs ${r}`}
                     </option>
                   ))}
                 </select>
               </Field>
               {withAutoStatus && (
-                <Field
-                  label="Maps to status"
-                  hint="applied automatically when progress reaches this stage"
-                >
+                <Field label="Auto status">
                   <select
                     className={inputClass}
-                    value={s.status === null || s.status === undefined ? '' : s.status}
-                    onChange={(e) => {
-                      const v = e.target.value;
+                    value={s.status ?? ''}
+                    onChange={(e) =>
                       updateAt(i, {
-                        status: v === '' ? null : (v as CapabilityStatus),
-                      });
-                    }}
+                        status: (e.target.value || null) as CapabilityStatus | null,
+                      })
+                    }
                   >
-                    <option value="">No flag (default In Progress / Completed)</option>
+                    <option value="">(default)</option>
                     {CAPABILITY_STATUSES.map((st) => (
                       <option key={st} value={st}>
                         {st}
@@ -223,10 +252,459 @@ function StageListEditor({
                   </select>
                 </Field>
               )}
+              {allowTableLink && (
+                <>
+                  <Field label="Stage content">
+                    <select
+                      className={inputClass}
+                      value={s.contentMode ?? 'inline'}
+                      onChange={(e) => {
+                        const contentMode = e.target.value as StageContentMode;
+                        updateAt(i, {
+                          contentMode,
+                          opensTypeId:
+                            contentMode === 'table'
+                              ? s.opensTypeId ?? typeOptions[0]?.id ?? null
+                              : null,
+                        });
+                      }}
+                    >
+                      <option value="inline">Stay on capability (inline)</option>
+                      <option value="table">Open a table</option>
+                    </select>
+                  </Field>
+                  {(s.contentMode ?? 'inline') === 'table' && (
+                    <Field label="Table type">
+                      <select
+                        className={inputClass}
+                        value={s.opensTypeId ?? ''}
+                        onChange={(e) =>
+                          updateAt(i, { opensTypeId: e.target.value || null })
+                        }
+                      >
+                        <option value="">Select type…</option>
+                        {typeOptions.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.pluralLabel}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
+                </>
+              )}
             </div>
+            <Field label="Description" hint="optional">
+              <textarea
+                className={`${inputClass} mt-2 min-h-[48px] resize-y`}
+                value={s.description}
+                onChange={(e) => updateAt(i, { description: e.target.value })}
+              />
+            </Field>
           </li>
         ))}
-      </ol>
+      </ul>
+    </div>
+  );
+}
+
+function WorkItemTypesEditor({
+  types,
+  onChange,
+}: {
+  types: WorkItemTypeDef[];
+  onChange: (next: WorkItemTypeDef[]) => void;
+}) {
+  function updateAt(index: number, patch: Partial<WorkItemTypeDef>) {
+    onChange(types.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+  }
+
+  function remove(index: number) {
+    const doomed = types[index]?.id;
+    onChange(
+      types
+        .filter((_, i) => i !== index)
+        .map((t) =>
+          t.parentTypeId === doomed ? { ...t, parentTypeId: null } : t
+        )
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-soft">Work item types</span>
+        <Button
+          variant="quiet"
+          type="button"
+          onClick={() => onChange([...types, blankWorkItemType(null)])}
+        >
+          <PlusIcon className="h-3.5 w-3.5" />
+          Add type
+        </Button>
+      </div>
+      <p className="mb-2 text-2xs text-mute">
+        Define the hierarchy (e.g. Epic → Feature → Story). Custom types store
+        name, description and status in a dynamic table.
+      </p>
+      {types.length === 0 ? (
+        <p className="rounded-md border border-line-strong px-3 py-3 text-xs text-mute">
+          No hierarchy — capability stages stay inline (hardware-style).
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {types.map((t, i) => (
+            <li key={t.id} className="rounded-md border border-line-strong p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-2xs text-mute">{t.id}</span>
+                <button
+                  type="button"
+                  aria-label="Remove type"
+                  onClick={() => remove(i)}
+                  className="rounded p-0.5 text-mute hover:text-danger"
+                >
+                  <Trash2Icon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Field label="Id (slug)">
+                  <input
+                    className={inputClass}
+                    value={t.id}
+                    disabled={t.storage === 'builtin'}
+                    onChange={(e) => {
+                      const id = slugifyTypeId(e.target.value) || t.id;
+                      updateAt(i, {
+                        id,
+                        storage:
+                          id === 'epic' ||
+                          id === 'feature' ||
+                          id === 'story' ||
+                          id === 'equipment'
+                            ? 'builtin'
+                            : 'custom',
+                      });
+                    }}
+                  />
+                </Field>
+                <Field label="Parent">
+                  <select
+                    className={inputClass}
+                    value={t.parentTypeId ?? ''}
+                    onChange={(e) =>
+                      updateAt(i, {
+                        parentTypeId: e.target.value || null,
+                      })
+                    }
+                  >
+                    <option value="">Capability (root)</option>
+                    {types
+                      .filter((o) => o.id !== t.id)
+                      .map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Label">
+                  <input
+                    className={inputClass}
+                    value={t.label}
+                    onChange={(e) => updateAt(i, { label: e.target.value })}
+                  />
+                </Field>
+                <Field label="Plural">
+                  <input
+                    className={inputClass}
+                    value={t.pluralLabel}
+                    onChange={(e) => updateAt(i, { pluralLabel: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <Field label="Statuses" hint="comma-separated">
+                <input
+                  className={`${inputClass} mt-2`}
+                  value={t.statuses.join(', ')}
+                  onChange={(e) =>
+                    updateAt(i, {
+                      statuses: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </Field>
+              <div className="mt-3">
+                <StageListEditor
+                  title={`Stages for ${t.label || t.id}`}
+                  stages={t.stages}
+                  requirementOptions={['none']}
+                  typeOptions={types}
+                  onChange={(stages) => updateAt(i, { stages })}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ConditionNodeEditor({
+  node,
+  targetEntity,
+  draftLifecycle,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  node: ConditionNode;
+  targetEntity: AutoEntity;
+  draftLifecycle: Lifecycle;
+  onChange: (next: ConditionNode) => void;
+  onRemove?: () => void;
+  canRemove: boolean;
+}) {
+  const sources = relatedSourceEntities(targetEntity, draftLifecycle);
+
+  if (node.kind === 'leaf') {
+    const cond = node.condition;
+    const srcFields = fieldsForEntity(cond.sourceEntity);
+    const valOptions = optionsForField(
+      cond.sourceEntity,
+      cond.sourceField,
+      draftLifecycle
+    );
+    return (
+      <div className="rounded border border-line-soft p-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-1 text-2xs text-soft">
+            <input
+              type="checkbox"
+              checked={!!node.not}
+              onChange={(e) => onChange({ ...node, not: e.target.checked })}
+            />
+            NOT
+          </label>
+          <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-2xs text-mute">
+            leaf
+          </span>
+          {onRemove && (
+            <button
+              type="button"
+              aria-label="Remove condition"
+              disabled={!canRemove}
+              onClick={onRemove}
+              className="ml-auto rounded p-0.5 text-mute hover:text-danger disabled:opacity-30"
+            >
+              <Trash2Icon className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-5">
+          <Field label="Related">
+            <select
+              className={inputClass}
+              value={cond.sourceEntity}
+              onChange={(e) => {
+                const sourceEntity = e.target.value as AutoEntity;
+                const sourceField = fieldsForEntity(sourceEntity)[0] ?? 'status';
+                const value =
+                  optionsForField(sourceEntity, sourceField, draftLifecycle)[0] ?? '';
+                onChange({
+                  ...node,
+                  condition: { ...cond, sourceEntity, sourceField, value },
+                });
+              }}
+            >
+              {(sources.length ? sources : autoEntitiesForLifecycle(draftLifecycle)).map(
+                (ent) => (
+                  <option key={ent} value={ent}>
+                    {entityLabel(ent, draftLifecycle)}
+                  </option>
+                )
+              )}
+            </select>
+          </Field>
+          <Field label="Field">
+            <select
+              className={inputClass}
+              value={cond.sourceField}
+              onChange={(e) => {
+                const sourceField = e.target.value as AutoField;
+                const value =
+                  optionsForField(cond.sourceEntity, sourceField, draftLifecycle)[0] ??
+                  '';
+                onChange({
+                  ...node,
+                  condition: { ...cond, sourceField, value },
+                });
+              }}
+            >
+              {srcFields.map((f) => (
+                <option key={f} value={f}>
+                  {AUTO_FIELD_LABEL[f]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Match">
+            <select
+              className={inputClass}
+              value={cond.aggregate}
+              onChange={(e) =>
+                onChange({
+                  ...node,
+                  condition: {
+                    ...cond,
+                    aggregate: e.target.value as AutoAggregate,
+                  },
+                })
+              }
+            >
+              {AUTO_AGGREGATES.map((a) => (
+                <option key={a} value={a}>
+                  {AUTO_AGGREGATE_LABEL[a]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Op">
+            <select
+              className={inputClass}
+              value={cond.op}
+              onChange={(e) =>
+                onChange({
+                  ...node,
+                  condition: { ...cond, op: e.target.value as AutoOp },
+                })
+              }
+            >
+              {AUTO_OPS.map((o) => (
+                <option key={o} value={o}>
+                  {AUTO_OP_LABEL[o]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Value">
+            <select
+              className={inputClass}
+              value={cond.value}
+              onChange={(e) =>
+                onChange({
+                  ...node,
+                  condition: { ...cond, value: e.target.value },
+                })
+              }
+            >
+              {valOptions.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded border border-line-strong p-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <label className="inline-flex items-center gap-1 text-2xs text-soft">
+          <input
+            type="checkbox"
+            checked={!!node.not}
+            onChange={(e) => onChange({ ...node, not: e.target.checked })}
+          />
+          NOT
+        </label>
+        <select
+          className={`${inputClass} w-auto py-1`}
+          value={node.op}
+          onChange={(e) =>
+            onChange({ ...node, op: e.target.value as ConditionCombineOp })
+          }
+        >
+          <option value="and">AND</option>
+          <option value="or">OR</option>
+        </select>
+        <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-2xs text-brand-bright">
+          {node.op.toUpperCase()}
+        </span>
+        <Button
+          variant="quiet"
+          type="button"
+          onClick={() =>
+            onChange({
+              ...node,
+              children: [...node.children, blankLeaf(targetEntity, draftLifecycle)],
+            })
+          }
+        >
+          <PlusIcon className="h-3 w-3" />
+          Condition
+        </Button>
+        <Button
+          variant="quiet"
+          type="button"
+          onClick={() =>
+            onChange({
+              ...node,
+              children: [
+                ...node.children,
+                {
+                  kind: 'group',
+                  op: 'and',
+                  children: [blankLeaf(targetEntity, draftLifecycle)],
+                },
+              ],
+            })
+          }
+        >
+          <PlusIcon className="h-3 w-3" />
+          Group
+        </Button>
+        {onRemove && (
+          <button
+            type="button"
+            aria-label="Remove group"
+            disabled={!canRemove}
+            onClick={onRemove}
+            className="ml-auto rounded p-0.5 text-mute hover:text-danger disabled:opacity-30"
+          >
+            <Trash2Icon className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <div className="space-y-2 pl-2 border-l border-line-soft">
+        {node.children.map((child, ci) => (
+          <ConditionNodeEditor
+            key={ci}
+            node={child}
+            targetEntity={targetEntity}
+            draftLifecycle={draftLifecycle}
+            canRemove={node.children.length > 1}
+            onChange={(next) =>
+              onChange({
+                ...node,
+                children: node.children.map((c, i) => (i === ci ? next : c)),
+              })
+            }
+            onRemove={() =>
+              onChange({
+                ...node,
+                children: node.children.filter((_, i) => i !== ci),
+              })
+            }
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -237,7 +715,7 @@ function AutomationRulesEditor({
   onChange,
 }: {
   rules: AutomationRule[];
-  lifecycleDraft: Pick<Lifecycle, 'stages' | 'storyStages'>;
+  lifecycleDraft: Pick<Lifecycle, 'stages' | 'storyStages' | 'workItemTypes'>;
   onChange: (next: AutomationRule[]) => void;
 }) {
   const draftLifecycle = useMemo(
@@ -249,33 +727,28 @@ function AutomationRulesEditor({
         decomposition: 'delivery' as const,
         stages: lifecycleDraft.stages,
         storyStages: lifecycleDraft.storyStages,
+        workItemTypes: lifecycleDraft.workItemTypes,
         productIds: [],
         automationRules: rules,
       }) satisfies Lifecycle,
-    [lifecycleDraft.stages, lifecycleDraft.storyStages, rules]
+    [lifecycleDraft.stages, lifecycleDraft.storyStages, lifecycleDraft.workItemTypes, rules]
   );
+
+  const entities = autoEntitiesForLifecycle(draftLifecycle);
 
   function updateRule(index: number, patch: Partial<AutomationRule>) {
     onChange(rules.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
-
-  function updateCondition(
-    ruleIndex: number,
-    condIndex: number,
-    patch: Partial<AutomationCondition>
-  ) {
-    const rule = rules[ruleIndex];
-    const conditions = rule.conditions.map((c, i) =>
-      i === condIndex ? { ...c, ...patch } : c
-    );
-    updateRule(ruleIndex, { conditions });
   }
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-soft">Status automation</span>
-        <Button variant="quiet" type="button" onClick={() => onChange([...rules, blankRule()])}>
+        <Button
+          variant="quiet"
+          type="button"
+          onClick={() => onChange([...rules, blankRule(draftLifecycle)])}
+        >
           <PlusIcon className="h-3.5 w-3.5" />
           Add rule
         </Button>
@@ -287,13 +760,13 @@ function AutomationRulesEditor({
       ) : (
         <ul className="space-y-3">
           {rules.map((rule, ri) => {
+            const when = normalizeRuleWhen(rule);
             const targetFields = fieldsForEntity(rule.targetEntity);
             const setOptions = optionsForField(
               rule.targetEntity,
               rule.targetField,
               draftLifecycle
             );
-            const sources = relatedSourceEntities(rule.targetEntity);
             return (
               <li key={rule.id} className="rounded-md border border-line-strong p-3">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -323,18 +796,19 @@ function AutomationRulesEditor({
                         const targetEntity = e.target.value as AutoEntity;
                         const targetField = fieldsForEntity(targetEntity)[0] ?? 'status';
                         const setValue =
-                          optionsForField(targetEntity, targetField, draftLifecycle)[0] ?? '';
+                          optionsForField(targetEntity, targetField, draftLifecycle)[0] ??
+                          '';
                         updateRule(ri, {
                           targetEntity,
                           targetField,
                           setValue,
-                          conditions: [blankCondition(targetEntity)],
+                          when: blankWhen(targetEntity, draftLifecycle),
                         });
                       }}
                     >
-                      {AUTO_ENTITIES.map((ent) => (
+                      {entities.map((ent) => (
                         <option key={ent} value={ent}>
-                          {AUTO_ENTITY_LABEL[ent]}
+                          {entityLabel(ent, draftLifecycle)}
                         </option>
                       ))}
                     </select>
@@ -346,8 +820,11 @@ function AutomationRulesEditor({
                       onChange={(e) => {
                         const targetField = e.target.value as AutoField;
                         const setValue =
-                          optionsForField(rule.targetEntity, targetField, draftLifecycle)[0] ??
-                          '';
+                          optionsForField(
+                            rule.targetEntity,
+                            targetField,
+                            draftLifecycle
+                          )[0] ?? '';
                         updateRule(ri, { targetField, setValue });
                       }}
                     >
@@ -374,144 +851,24 @@ function AutomationRulesEditor({
                 </div>
 
                 <div className="mt-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-2xs uppercase tracking-[0.12em] text-ink-500">
-                      When (all conditions)
+                      When
                     </span>
-                    <Button
-                      variant="quiet"
-                      type="button"
-                      onClick={() =>
-                        updateRule(ri, {
-                          conditions: [...rule.conditions, blankCondition(rule.targetEntity)],
-                        })
-                      }
+                    <span
+                      className="max-w-full truncate rounded bg-surface-2 px-2 py-0.5 font-mono text-2xs text-soft"
+                      title={summarizeWhen(when, draftLifecycle)}
                     >
-                      <PlusIcon className="h-3 w-3" />
-                      Condition
-                    </Button>
+                      {summarizeWhen(when, draftLifecycle)}
+                    </span>
                   </div>
-                  {rule.conditions.map((cond, ci) => {
-                    const srcFields = fieldsForEntity(cond.sourceEntity);
-                    const valOptions = optionsForField(
-                      cond.sourceEntity,
-                      cond.sourceField,
-                      draftLifecycle
-                    );
-                    return (
-                      <div
-                        key={ci}
-                        className="grid gap-2 rounded border border-line-soft p-2 sm:grid-cols-5"
-                      >
-                        <Field label="Related">
-                          <select
-                            className={inputClass}
-                            value={cond.sourceEntity}
-                            onChange={(e) => {
-                              const sourceEntity = e.target.value as AutoEntity;
-                              const sourceField = fieldsForEntity(sourceEntity)[0] ?? 'status';
-                              const value =
-                                optionsForField(sourceEntity, sourceField, draftLifecycle)[0] ??
-                                '';
-                              updateCondition(ri, ci, { sourceEntity, sourceField, value });
-                            }}
-                          >
-                            {(sources.length ? sources : AUTO_ENTITIES).map((ent) => (
-                              <option key={ent} value={ent}>
-                                {AUTO_ENTITY_LABEL[ent]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Field">
-                          <select
-                            className={inputClass}
-                            value={cond.sourceField}
-                            onChange={(e) => {
-                              const sourceField = e.target.value as AutoField;
-                              const value =
-                                optionsForField(
-                                  cond.sourceEntity,
-                                  sourceField,
-                                  draftLifecycle
-                                )[0] ?? '';
-                              updateCondition(ri, ci, { sourceField, value });
-                            }}
-                          >
-                            {srcFields.map((f) => (
-                              <option key={f} value={f}>
-                                {AUTO_FIELD_LABEL[f]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Match">
-                          <select
-                            className={inputClass}
-                            value={cond.aggregate}
-                            onChange={(e) =>
-                              updateCondition(ri, ci, {
-                                aggregate: e.target.value as AutoAggregate,
-                              })
-                            }
-                          >
-                            {AUTO_AGGREGATES.map((a) => (
-                              <option key={a} value={a}>
-                                {AUTO_AGGREGATE_LABEL[a]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Op">
-                          <select
-                            className={inputClass}
-                            value={cond.op}
-                            onChange={(e) =>
-                              updateCondition(ri, ci, { op: e.target.value as AutoOp })
-                            }
-                          >
-                            {AUTO_OPS.map((o) => (
-                              <option key={o} value={o}>
-                                {AUTO_OP_LABEL[o]}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <div className="flex items-end gap-1">
-                          <div className="min-w-0 flex-1">
-                            <Field label="Value">
-                              <select
-                                className={inputClass}
-                                value={cond.value}
-                                onChange={(e) =>
-                                  updateCondition(ri, ci, { value: e.target.value })
-                                }
-                              >
-                                {valOptions.map((v) => (
-                                  <option key={v} value={v}>
-                                    {v}
-                                  </option>
-                                ))}
-                              </select>
-                            </Field>
-                          </div>
-                          <button
-                            type="button"
-                            aria-label="Remove condition"
-                            disabled={rule.conditions.length <= 1}
-                            onClick={() =>
-                              updateRule(ri, {
-                                conditions: rule.conditions.filter((_, i) => i !== ci),
-                              })
-                            }
-                            className="mb-0.5 rounded p-1.5 text-mute hover:text-danger disabled:opacity-30"
-                          >
-                            <Trash2Icon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <ConditionNodeEditor
+                    node={when}
+                    targetEntity={rule.targetEntity}
+                    draftLifecycle={draftLifecycle}
+                    canRemove={false}
+                    onChange={(next) => updateRule(ri, { when: next })}
+                  />
                 </div>
               </li>
             );
@@ -535,10 +892,9 @@ export function LifecycleModal({
   const isEdit = !!lifecycle;
   const [label, setLabel] = useState('');
   const [summary, setSummary] = useState('');
-  const [decomposition, setDecomposition] = useState<DecompositionMode>('delivery');
   const [stages, setStages] = useState<StageDef[]>(LIFECYCLE_TEMPLATES.delivery.stages);
-  const [storyStages, setStoryStages] = useState<StageDef[]>(
-    LIFECYCLE_TEMPLATES.delivery.storyStages
+  const [workItemTypes, setWorkItemTypes] = useState<WorkItemTypeDef[]>(
+    LIFECYCLE_TEMPLATES.delivery.workItemTypes
   );
   const [productIds, setProductIds] = useState<string[]>([]);
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>(
@@ -550,20 +906,38 @@ export function LifecycleModal({
     if (lifecycle) {
       setLabel(lifecycle.label);
       setSummary(lifecycle.summary);
-      setDecomposition(lifecycle.decomposition);
       setStages(lifecycle.stages.map((s) => ({ ...s })));
-      setStoryStages(lifecycle.storyStages.map((s) => ({ ...s })));
+      setWorkItemTypes(
+        (lifecycle.workItemTypes?.length
+          ? lifecycle.workItemTypes
+          : lifecycle.decomposition === 'delivery'
+            ? LIFECYCLE_TEMPLATES.delivery.workItemTypes
+            : []
+        ).map((t) => ({ ...t, stages: t.stages.map((s) => ({ ...s })) }))
+      );
       setProductIds(lifecycle.productIds ?? []);
-      setAutomationRules((lifecycle.automationRules ?? []).map((r) => ({ ...r })));
+      setAutomationRules(
+        (lifecycle.automationRules ?? []).map((r) => ({
+          ...r,
+          when: normalizeRuleWhen(r),
+        }))
+      );
     } else {
       const tpl = LIFECYCLE_TEMPLATES.delivery;
       setLabel('');
       setSummary(tpl.summary);
-      setDecomposition('delivery');
       setStages(tpl.stages.map((s) => ({ ...s })));
-      setStoryStages(tpl.storyStages.map((s) => ({ ...s })));
+      setWorkItemTypes(
+        tpl.workItemTypes.map((t) => ({ ...t, stages: t.stages.map((s) => ({ ...s })) }))
+      );
       setProductIds([]);
-      setAutomationRules(tpl.automationRules.map((r) => ({ ...r, id: newRuleId() })));
+      setAutomationRules(
+        tpl.automationRules.map((r) => ({
+          ...r,
+          id: newRuleId(),
+          when: normalizeRuleWhen(r),
+        }))
+      );
     }
   }, [open, lifecycle]);
 
@@ -573,62 +947,79 @@ export function LifecycleModal({
     if (
       !force &&
       !stagesEmpty &&
-      !window.confirm('Replace the current stage lists with the selected template?')
+      !window.confirm('Replace the current configuration with the selected template?')
     ) {
       return;
     }
-    setDecomposition(mode);
     setStages(tpl.stages.map((s) => ({ ...s })));
-    setStoryStages(tpl.storyStages.map((s) => ({ ...s })));
-    setAutomationRules(tpl.automationRules.map((r) => ({ ...r, id: newRuleId() })));
+    setWorkItemTypes(
+      tpl.workItemTypes.map((t) => ({ ...t, stages: t.stages.map((s) => ({ ...s })) }))
+    );
+    setAutomationRules(
+      tpl.automationRules.map((r) => ({
+        ...r,
+        id: newRuleId(),
+        when: normalizeRuleWhen(r),
+      }))
+    );
     if (!label.trim()) setLabel(tpl.label);
     if (!summary.trim()) setSummary(tpl.summary);
   }
 
-  function setMode(mode: DecompositionMode) {
-    if (mode === decomposition) return;
-    const stagesEmpty = stages.every((s) => !s.name.trim());
-    if (stagesEmpty) {
-      applyTemplate(mode, true);
-      return;
-    }
-    setDecomposition(mode);
-    if (mode === 'delivery' && storyStages.length === 0) {
-      setStoryStages(LIFECYCLE_TEMPLATES.delivery.storyStages.map((s) => ({ ...s })));
-    }
-    if (mode === 'none') {
-      setStoryStages([]);
-    }
-    const allowed = new Set(requirementsForMode(mode));
-    setStages((prev) =>
-      prev.map((s) => ({
-        ...s,
-        requirement: allowed.has(s.requirement) ? s.requirement : 'none',
-      }))
-    );
-  }
+  const draftForReqs = useMemo(
+    () =>
+      ({
+        id: '_',
+        label: '',
+        summary: '',
+        decomposition: 'delivery' as const,
+        stages,
+        storyStages: workItemTypes.find((t) => t.id === 'story')?.stages ?? [],
+        workItemTypes,
+        productIds: [],
+        automationRules: [],
+      }) satisfies Lifecycle,
+    [stages, workItemTypes]
+  );
+
+  const requirementOptions = requirementsForLifecycle(draftForReqs);
+  const storyStages =
+    workItemTypes.find((t) => t.id === 'story')?.stages ??
+    workItemTypes.flatMap((t) => t.stages);
 
   const valid =
     label.trim().length > 1 &&
     productIds.length > 0 &&
     stages.length > 0 &&
     stages.every((s) => s.name.trim().length > 0) &&
-    (decomposition === 'none' ||
-      (storyStages.length > 0 && storyStages.every((s) => s.name.trim().length > 0)));
+    workItemTypes.every((t) => t.id.trim().length > 0 && t.label.trim().length > 0);
 
   function submit() {
     if (!valid) return;
+    const legacy = syncLegacyFromTypes({ workItemTypes, stages });
     const payload = {
       label: label.trim(),
       summary: summary.trim(),
-      decomposition,
-      stages: stages.map((s) => ({ ...s, name: s.name.trim() })),
-      storyStages:
-        decomposition === 'delivery'
-          ? storyStages.map((s) => ({ ...s, name: s.name.trim() }))
-          : [],
+      decomposition: legacy.decomposition,
+      stages: stages.map((s) => ({
+        ...s,
+        name: s.name.trim(),
+        contentMode: s.contentMode ?? 'inline',
+        opensTypeId: (s.contentMode ?? 'inline') === 'table' ? s.opensTypeId ?? null : null,
+      })),
+      storyStages: legacy.storyStages.map((s) => ({ ...s, name: s.name.trim() })),
+      workItemTypes: workItemTypes.map((t) => ({
+        ...t,
+        id: slugifyTypeId(t.id) || t.id,
+        label: t.label.trim(),
+        pluralLabel: t.pluralLabel.trim() || `${t.label.trim()}s`,
+        stages: t.stages.map((s) => ({ ...s, name: s.name.trim() })),
+      })),
       productIds,
-      automationRules,
+      automationRules: automationRules.map((r) => ({
+        ...r,
+        when: normalizeRuleWhen(r),
+      })),
     };
     if (lifecycle) {
       updateLifecycle(lifecycle.id, payload);
@@ -679,62 +1070,34 @@ export function LifecycleModal({
           />
         </Field>
 
-        {isEdit && (
-          <div>
-            <span className="mb-1.5 block text-xs font-medium text-soft">Decomposition</span>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(['none', 'delivery'] as DecompositionMode[]).map((mode) => {
-                const active = decomposition === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setMode(mode)}
-                    className={`rounded-md border px-3 py-2.5 text-left transition-colors duration-150 ease-out ${
-                      active ? 'border-brand bg-brand/5' : 'border-line-strong hover:border-brand'
-                    }`}
-                  >
-                    <span className="block text-xs font-medium text-strong">
-                      {DECOMPOSITION_LABEL[mode]}
-                    </span>
-                    <span className="mt-1 block text-2xs leading-relaxed text-mute">
-                      {mode === 'none'
-                        ? 'Equipment-linked capabilities, no epics / features / stories'
-                        : 'Break work into epics, then features, then user stories'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button variant="quiet" type="button" onClick={() => applyTemplate(decomposition)}>
-                Reset stages from template
-              </Button>
-            </div>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="quiet" type="button" onClick={() => applyTemplate('delivery')}>
+            Apply delivery template
+          </Button>
+          <Button variant="quiet" type="button" onClick={() => applyTemplate('none')}>
+            Apply hardware template
+          </Button>
+        </div>
+
+        <WorkItemTypesEditor types={workItemTypes} onChange={setWorkItemTypes} />
 
         <StageListEditor
           title="Capability stages"
           stages={stages}
-          mode={decomposition}
+          requirementOptions={requirementOptions}
+          typeOptions={workItemTypes}
           onChange={setStages}
           withAutoStatus
+          allowTableLink
         />
-
-        {decomposition === 'delivery' && (
-          <StageListEditor
-            title="User story stages"
-            stages={storyStages}
-            mode={decomposition}
-            onChange={setStoryStages}
-          />
-        )}
 
         <AutomationRulesEditor
           rules={automationRules}
-          lifecycleDraft={{ stages, storyStages }}
+          lifecycleDraft={{
+            stages,
+            storyStages,
+            workItemTypes,
+          }}
           onChange={setAutomationRules}
         />
       </div>

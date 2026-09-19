@@ -7,7 +7,7 @@ import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup } from '../types/registry';
-import { REQUIREMENT_LABEL, usesEquipment } from '../types/registry';
+import { REQUIREMENT_LABEL, storyStagesOf, usesEquipment } from '../types/registry';
 
 function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClose: () => void }) {
   const { getLifecycle } = useRegistry();
@@ -47,7 +47,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
         ))}
       </ol>
 
-      {track.decomposition === 'delivery' && track.storyStages.length > 0 && (
+      {storyStagesOf(track).length > 0 && (
         <>
           <h3 className="mt-6 text-2xs uppercase tracking-[0.14em] text-ink-500">
             User story status progression
@@ -57,7 +57,7 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
             stages.
           </p>
           <ol className="mt-2">
-            {track.storyStages.map((s, i) => (
+            {storyStagesOf(track).map((s, i) => (
               <li key={s.name} className="flex gap-3 border-b border-line-soft py-2.5 last:border-0">
                 <span className="w-5 shrink-0 pt-0.5 font-mono text-2xs text-ink-500">{i + 1}</span>
                 <span

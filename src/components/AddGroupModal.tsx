@@ -197,7 +197,10 @@ export function AddGroupModal({
                   >
                     <span className="block text-xs font-medium text-strong">{t.label}</span>
                     <span className="mt-1 block text-2xs leading-relaxed text-mute">
-                      {t.stages.length} stages · {DECOMPOSITION_LABEL[t.decomposition]}
+                      {t.stages.length} stages
+                      {(t.workItemTypes?.length ?? 0) > 0
+                        ? ` · ${(t.workItemTypes ?? []).map((w) => w.label).join(' → ')}`
+                        : ` · ${DECOMPOSITION_LABEL[t.decomposition]}`}
                     </span>
                   </button>
                 );

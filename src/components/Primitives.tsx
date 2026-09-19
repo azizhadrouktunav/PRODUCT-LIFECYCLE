@@ -49,7 +49,7 @@ const STATUS_TONE: Record<CapabilityStatus, string> = {
   Completed: 'border-ok/40 text-ok',
 };
 
-export function StatusTag({ status }: { status: CapabilityStatus | null }) {
+export function StatusTag({ status }: { status: CapabilityStatus | string | null }) {
   if (!status) {
     return (
       <span className="inline-flex whitespace-nowrap rounded border border-line-strong px-1.5 py-0.5 text-2xs font-medium text-mute">
@@ -57,9 +57,12 @@ export function StatusTag({ status }: { status: CapabilityStatus | null }) {
       </span>
     );
   }
+  const known = STATUS_TONE[status as CapabilityStatus];
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded border px-1.5 py-0.5 text-2xs font-medium ${STATUS_TONE[status]}`}
+      className={`inline-flex whitespace-nowrap rounded border px-1.5 py-0.5 text-2xs font-medium ${
+        known ?? 'border-line-strong text-soft'
+      }`}
     >
       {status}
     </span>
@@ -76,7 +79,7 @@ export function StoryStagePill({
   const { lifecycles } = useRegistry();
   const def =
     (lifecycle ? storyStageDef(lifecycle, stage) : undefined) ??
-    lifecycles.flatMap((l) => l.storyStages).find((s) => s.name === stage) ??
+    lifecycles.flatMap((l) => (l.storyStages?.length ? l.storyStages : [])).find((s) => s.name === stage) ??
     DEFAULT_STORY_STAGES.find((s) => s.name === stage);
   const tone: StageTone = def?.tone ?? 'gray';
   return (

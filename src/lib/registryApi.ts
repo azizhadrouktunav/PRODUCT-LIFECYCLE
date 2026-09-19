@@ -10,6 +10,8 @@ import type {
   Capability,
   CapabilityGroup,
   CapabilityStatus,
+  ConditionCombineOp,
+  ConditionNode,
   DecompositionMode,
   Epic,
   Equipment,
@@ -17,20 +19,28 @@ import type {
   Feature,
   Lifecycle,
   Product,
+  StageContentMode,
   StageDef,
   StageRequirement,
   StageTone,
   UserStory,
   Wave,
   WaveState,
+  WorkItem,
+  WorkItemTypeDef,
 } from '../types/registry';
 import {
   AUTO_AGGREGATES,
   AUTO_ENTITIES,
   AUTO_OPS,
+  DEFAULT_WORK_ITEM_STATUSES,
+  DELIVERY_WORK_ITEM_TYPES,
   FALLBACK_LIFECYCLE,
   LIFECYCLE_TEMPLATES,
   TRACKS,
+  conditionsToWhen,
+  normalizeRuleWhen,
+  syncLegacyFromTypes,
 } from '../types/registry';
 
 export interface RegistrySnapshot {
@@ -45,6 +55,7 @@ export interface RegistrySnapshot {
   features: Feature[];
   stories: UserStory[];
   waves: Wave[];
+  workItems: WorkItem[];
 }
 
 const VALID_TONES = new Set<StageTone>([
@@ -59,21 +70,13 @@ const VALID_TONES = new Set<StageTone>([
   'gray',
 ]);
 
-const VALID_REQUIREMENTS = new Set<StageRequirement>([
-  'none',
-  'epics',
-  'features',
-  'stories',
-  'equipment',
-]);
-
 function mapStageDef(raw: unknown): StageDef | null {
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
   const name = String(row.name ?? '').trim();
   if (!name) return null;
   const toneRaw = String(row.tone ?? 'blue') as StageTone;
-  const reqRaw = String(row.requirement ?? 'none') as StageRequirement;
+  const reqRaw = String(row.requirement ?? 'none');
   const statusRaw = row.status;
   let status: CapabilityStatus | null | undefined;
   if (statusRaw === null || statusRaw === '') status = null;
@@ -83,12 +86,17 @@ function mapStageDef(raw: unknown): StageDef | null {
     );
     status = hit;
   }
+  const contentMode: StageContentMode =
+    row.contentMode === 'table' || row.content_mode === 'table' ? 'table' : 'inline';
+  const opensRaw = row.opensTypeId ?? row.opens_type_id;
   return {
     name,
     description: String(row.description ?? ''),
     tone: VALID_TONES.has(toneRaw) ? toneRaw : 'blue',
-    requirement: VALID_REQUIREMENTS.has(reqRaw) ? reqRaw : 'none',
+    requirement: (reqRaw || 'none') as StageRequirement,
     ...(status !== undefined ? { status } : {}),
+    contentMode,
+    opensTypeId: opensRaw == null || opensRaw === '' ? null : String(opensRaw),
   };
 }
 
@@ -97,7 +105,49 @@ function mapStages(raw: unknown): StageDef[] {
   return raw.map(mapStageDef).filter((s): s is StageDef => s != null);
 }
 
+function mapWorkItemType(raw: unknown): WorkItemTypeDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  const id = String(row.id ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-');
+  if (!id) return null;
+  const statuses = Array.isArray(row.statuses)
+    ? row.statuses.map((s) => String(s).trim()).filter(Boolean)
+    : [...DEFAULT_WORK_ITEM_STATUSES];
+  const parentRaw = row.parentTypeId ?? row.parent_type_id;
+  const storage = row.storage === 'custom' ? 'custom' : 'builtin';
+  const builtin = id === 'epic' || id === 'feature' || id === 'story' || id === 'equipment';
+  return {
+    id,
+    label: String(row.label ?? id),
+    pluralLabel: String(row.pluralLabel ?? row.plural_label ?? `${row.label ?? id}s`),
+    parentTypeId: parentRaw == null || parentRaw === '' ? null : String(parentRaw),
+    statuses: statuses.length > 0 ? statuses : [...DEFAULT_WORK_ITEM_STATUSES],
+    stages: mapStages(row.stages),
+    storage: builtin ? 'builtin' : storage,
+  };
+}
+
+function mapWorkItemTypes(raw: unknown, decomposition: DecompositionMode, storyStages: StageDef[]): WorkItemTypeDef[] {
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map(mapWorkItemType).filter((t): t is WorkItemTypeDef => t != null);
+  }
+  if (decomposition === 'delivery') {
+    return DELIVERY_WORK_ITEM_TYPES.map((t) =>
+      t.id === 'story' ? { ...t, stages: storyStages.length > 0 ? storyStages : t.stages } : { ...t }
+    );
+  }
+  return [];
+}
+
 const AUTO_FIELDS: AutoField[] = ['status', 'progress', 'stage', 'state'];
+
+function isValidAutoEntity(entity: string): entity is AutoEntity {
+  if ((AUTO_ENTITIES as string[]).includes(entity)) return true;
+  return entity.startsWith('work_item:') && entity.length > 'work_item:'.length;
+}
 
 function mapAutomationCondition(raw: unknown): AutomationCondition | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -106,7 +156,7 @@ function mapAutomationCondition(raw: unknown): AutomationCondition | null {
   const sourceField = String(row.sourceField ?? '') as AutoField;
   const aggregate = String(row.aggregate ?? 'all') as AutoAggregate;
   const op = String(row.op ?? 'eq') as AutoOp;
-  if (!AUTO_ENTITIES.includes(sourceEntity)) return null;
+  if (!isValidAutoEntity(sourceEntity)) return null;
   if (!AUTO_FIELDS.includes(sourceField)) return null;
   if (!AUTO_AGGREGATES.includes(aggregate)) return null;
   if (!AUTO_OPS.includes(op)) return null;
@@ -119,25 +169,50 @@ function mapAutomationCondition(raw: unknown): AutomationCondition | null {
   };
 }
 
+function mapConditionNode(raw: unknown): ConditionNode | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (row.kind === 'leaf' || row.condition) {
+    const condition = mapAutomationCondition(row.condition ?? row);
+    if (!condition) return null;
+    return {
+      kind: 'leaf',
+      not: row.not === true,
+      condition,
+    };
+  }
+  if (row.kind === 'group' || Array.isArray(row.children)) {
+    const op: ConditionCombineOp = row.op === 'or' ? 'or' : 'and';
+    const children = Array.isArray(row.children)
+      ? row.children.map(mapConditionNode).filter((n): n is ConditionNode => n != null)
+      : [];
+    return { kind: 'group', op, not: row.not === true, children };
+  }
+  return null;
+}
+
 function mapAutomationRule(raw: unknown): AutomationRule | null {
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
   const id = String(row.id ?? '').trim();
   const targetEntity = String(row.targetEntity ?? '') as AutoEntity;
   const targetField = String(row.targetField ?? '') as AutoField;
-  if (!id || !AUTO_ENTITIES.includes(targetEntity) || !AUTO_FIELDS.includes(targetField)) {
+  if (!id || !isValidAutoEntity(targetEntity) || !AUTO_FIELDS.includes(targetField)) {
     return null;
   }
   const conditions = Array.isArray(row.conditions)
     ? row.conditions.map(mapAutomationCondition).filter((c): c is AutomationCondition => c != null)
     : [];
+  const when =
+    mapConditionNode(row.when) ??
+    (conditions.length > 0 ? conditionsToWhen(conditions) : { kind: 'group', op: 'and', children: [] });
   return {
     id,
     enabled: row.enabled !== false,
     targetEntity,
     targetField,
     setValue: String(row.setValue ?? ''),
-    conditions,
+    when: normalizeRuleWhen({ when, conditions }),
   };
 }
 
@@ -152,18 +227,23 @@ function mapLifecycle(row: Record<string, unknown>): Lifecycle {
   const stages = mapStages(row.stages);
   const storyStages = mapStages(row.story_stages);
   const tpl = LIFECYCLE_TEMPLATES[decomposition];
+  const workItemTypes = mapWorkItemTypes(row.work_item_types, decomposition, storyStages);
+  const legacy = syncLegacyFromTypes({ workItemTypes, stages });
   return {
     id: String(row.id),
     label: String(row.label ?? ''),
     summary: String(row.summary ?? ''),
-    decomposition,
+    decomposition: workItemTypes.length > 0 ? legacy.decomposition : decomposition,
     stages: stages.length > 0 ? stages : tpl.stages,
     storyStages:
-      decomposition === 'delivery'
-        ? storyStages.length > 0
-          ? storyStages
-          : tpl.storyStages
-        : [],
+      legacy.storyStages.length > 0
+        ? legacy.storyStages
+        : decomposition === 'delivery'
+          ? storyStages.length > 0
+            ? storyStages
+            : tpl.storyStages
+          : [],
+    workItemTypes,
     productIds: (row.product_ids as string[] | null) ?? [],
     automationRules:
       row.automation_rules === undefined || row.automation_rules === null
@@ -173,15 +253,25 @@ function mapLifecycle(row: Record<string, unknown>): Lifecycle {
 }
 
 function lifecycleToRow(lc: Lifecycle) {
+  const legacy = syncLegacyFromTypes(lc);
   return {
     id: lc.id,
     label: lc.label,
     summary: lc.summary,
-    decomposition: lc.decomposition,
+    decomposition: lc.workItemTypes?.length ? legacy.decomposition : lc.decomposition,
     stages: lc.stages,
-    story_stages: lc.decomposition === 'delivery' ? lc.storyStages : [],
+    story_stages:
+      (lc.workItemTypes?.length ? legacy.storyStages : lc.storyStages) ?? [],
+    work_item_types: lc.workItemTypes ?? [],
     product_ids: lc.productIds ?? [],
-    automation_rules: lc.automationRules ?? [],
+    automation_rules: (lc.automationRules ?? []).map((r) => ({
+      id: r.id,
+      enabled: r.enabled,
+      targetEntity: r.targetEntity,
+      targetField: r.targetField,
+      setValue: r.setValue,
+      when: normalizeRuleWhen(r),
+    })),
   };
 }
 
@@ -332,6 +422,19 @@ function mapWave(row: Record<string, unknown>): Wave {
   };
 }
 
+function mapWorkItem(row: Record<string, unknown>): WorkItem {
+  return {
+    id: String(row.id),
+    typeId: String(row.type_id),
+    capabilityId: String(row.capability_id),
+    parentId: row.parent_id == null || row.parent_id === '' ? null : String(row.parent_id),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    status: String(row.status ?? 'In Progress'),
+    sortOrder: Number(row.sort_order ?? 0),
+  };
+}
+
 function throwIfError(error: { message: string } | null, action: string): void {
   if (error) throw new Error(`${action}: ${error.message}`);
 }
@@ -349,6 +452,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     featuresRes,
     storiesRes,
     wavesRes,
+    workItemsRes,
   ] = await Promise.all([
     supabase.from('products').select('*'),
     supabase.from('actors').select('*'),
@@ -361,6 +465,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     supabase.from('features').select('*'),
     supabase.from('user_stories').select('*'),
     supabase.from('waves').select('*'),
+    supabase.from('work_items').select('*'),
   ]);
 
   throwIfError(productsRes.error, 'Load products');
@@ -374,6 +479,16 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
   throwIfError(featuresRes.error, 'Load features');
   throwIfError(storiesRes.error, 'Load user_stories');
   throwIfError(wavesRes.error, 'Load waves');
+  // work_items may not exist until migration — treat missing table as empty
+  const workItemsError = workItemsRes.error;
+  const workItemsMissing =
+    !!workItemsError &&
+    /relation .*work_items.* does not exist|Could not find the table/i.test(
+      workItemsError.message
+    );
+  if (workItemsError && !workItemsMissing) {
+    throwIfError(workItemsError, 'Load work_items');
+  }
 
   let lifecycles = (lifecyclesRes.data ?? []).map((r) => mapLifecycle(r as Record<string, unknown>));
   if (lifecycles.length === 0) {
@@ -429,6 +544,9 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     features: (featuresRes.data ?? []).map((r) => mapFeature(r as Record<string, unknown>)),
     stories: (storiesRes.data ?? []).map((r) => mapStory(r as Record<string, unknown>)),
     waves: (wavesRes.data ?? []).map((r) => mapWave(r as Record<string, unknown>)),
+    workItems: workItemsMissing
+      ? []
+      : (workItemsRes.data ?? []).map((r) => mapWorkItem(r as Record<string, unknown>)),
   };
 }
 
@@ -762,4 +880,40 @@ export async function upsertGroups(items: CapabilityGroup[]): Promise<void> {
     }))
   );
   throwIfError(error, 'Upsert groups');
+}
+
+export async function upsertWorkItem(item: WorkItem): Promise<void> {
+  const { error } = await supabase.from('work_items').upsert({
+    id: item.id,
+    type_id: item.typeId,
+    capability_id: item.capabilityId,
+    parent_id: item.parentId,
+    name: item.name,
+    description: item.description,
+    status: item.status,
+    sort_order: item.sortOrder,
+  });
+  throwIfError(error, 'Upsert work_item');
+}
+
+export async function upsertWorkItems(items: WorkItem[]): Promise<void> {
+  if (items.length === 0) return;
+  const { error } = await supabase.from('work_items').upsert(
+    items.map((item) => ({
+      id: item.id,
+      type_id: item.typeId,
+      capability_id: item.capabilityId,
+      parent_id: item.parentId,
+      name: item.name,
+      description: item.description,
+      status: item.status,
+      sort_order: item.sortOrder,
+    }))
+  );
+  throwIfError(error, 'Upsert work_items');
+}
+
+export async function deleteWorkItem(id: string): Promise<void> {
+  const { error } = await supabase.from('work_items').delete().eq('id', id);
+  throwIfError(error, 'Delete work_item');
 }
