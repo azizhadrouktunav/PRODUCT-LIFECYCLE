@@ -439,6 +439,103 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
   },
 };
 
+/** Persisted reusable lifecycle configuration (system or user-defined). */
+export interface LifecycleTemplate {
+  id: string;
+  label: string;
+  summary: string;
+  decomposition: DecompositionMode;
+  stages: StageDef[];
+  storyStages: StageDef[];
+  workItemTypes: WorkItemTypeDef[];
+  automationRules: AutomationRule[];
+  productIds: string[];
+  isSystem: boolean;
+}
+
+export const SYSTEM_TEMPLATE_IDS = {
+  hardware: 'tpl-hardware',
+  delivery: 'tpl-delivery',
+} as const;
+
+/** Built-in templates as LifecycleTemplate rows (used for seed + offline fallback). */
+export function builtInLifecycleTemplates(): LifecycleTemplate[] {
+  return [
+    {
+      id: SYSTEM_TEMPLATE_IDS.hardware,
+      ...LIFECYCLE_TEMPLATES.none,
+      isSystem: true,
+    },
+    {
+      id: SYSTEM_TEMPLATE_IDS.delivery,
+      ...LIFECYCLE_TEMPLATES.delivery,
+      isSystem: true,
+    },
+  ];
+}
+
+export function templateToLifecycleDraft(
+  t: Pick<
+    LifecycleTemplate,
+    | 'label'
+    | 'summary'
+    | 'decomposition'
+    | 'stages'
+    | 'storyStages'
+    | 'workItemTypes'
+    | 'automationRules'
+  >
+): Omit<Lifecycle, 'id' | 'productIds'> & { productIds?: string[] } {
+  return {
+    label: t.label,
+    summary: t.summary,
+    decomposition: t.decomposition,
+    stages: t.stages.map((s) => ({ ...s })),
+    storyStages: (t.storyStages ?? []).map((s) => ({ ...s })),
+    workItemTypes: (t.workItemTypes ?? []).map((w) => ({
+      ...w,
+      stages: (w.stages ?? []).map((s) => ({ ...s })),
+      statuses: [...(w.statuses ?? [])],
+    })),
+    automationRules: (t.automationRules ?? []).map((r) => ({
+      ...r,
+      when: normalizeRuleWhen(r),
+    })),
+  };
+}
+
+export function lifecycleToTemplateFields(
+  lc: Pick<
+    Lifecycle,
+    | 'label'
+    | 'summary'
+    | 'decomposition'
+    | 'stages'
+    | 'storyStages'
+    | 'workItemTypes'
+    | 'automationRules'
+    | 'productIds'
+  >
+): Omit<LifecycleTemplate, 'id' | 'isSystem'> {
+  return {
+    label: lc.label,
+    summary: lc.summary,
+    decomposition: lc.decomposition,
+    stages: lc.stages.map((s) => ({ ...s })),
+    storyStages: (lc.storyStages ?? []).map((s) => ({ ...s })),
+    workItemTypes: (lc.workItemTypes ?? []).map((w) => ({
+      ...w,
+      stages: (w.stages ?? []).map((s) => ({ ...s })),
+      statuses: [...(w.statuses ?? [])],
+    })),
+    automationRules: (lc.automationRules ?? []).map((r) => ({
+      ...r,
+      when: normalizeRuleWhen(r),
+    })),
+    productIds: lc.productIds ?? [],
+  };
+}
+
 /** Fallback when a group references a missing lifecycle id. */
 export const FALLBACK_LIFECYCLE: Lifecycle = {
   id: 'delivery',

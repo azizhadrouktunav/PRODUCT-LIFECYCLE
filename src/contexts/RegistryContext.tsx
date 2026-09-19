@@ -29,6 +29,7 @@ import type {
   Wave,
   WorkItem,
   WorkItemTypeDef,
+  LifecycleTemplate,
 } from '../types/registry';
 import {
   CAPABILITY_STATUSES,
@@ -97,6 +98,17 @@ export type LifecycleInput = {
   automationRules: AutomationRule[];
 };
 
+export type LifecycleTemplateInput = {
+  label: string;
+  summary: string;
+  decomposition: DecompositionMode;
+  stages: StageDef[];
+  storyStages: StageDef[];
+  workItemTypes: WorkItemTypeDef[];
+  automationRules: AutomationRule[];
+  productIds: string[];
+};
+
 export type WorkItemInput = Pick<
   WorkItem,
   'name' | 'description' | 'status' | 'parentId' | 'typeId'
@@ -156,6 +168,7 @@ interface RegistryValue {
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
   lifecycles: Lifecycle[];
+  lifecycleTemplates: LifecycleTemplate[];
   epics: Epic[];
   features: Feature[];
   stories: UserStory[];
@@ -170,6 +183,10 @@ interface RegistryValue {
   addLifecycle: (input: LifecycleInput) => Lifecycle;
   updateLifecycle: (id: string, patch: Partial<LifecycleInput>) => void;
   removeLifecycle: (id: string) => boolean;
+  addLifecycleTemplate: (input: LifecycleTemplateInput) => LifecycleTemplate;
+  updateLifecycleTemplate: (id: string, patch: Partial<LifecycleTemplateInput>) => void;
+  removeLifecycleTemplate: (id: string) => boolean;
+  getLifecycleTemplate: (id: string) => LifecycleTemplate | undefined;
   getLifecycle: (id: string) => Lifecycle;
   lifecycleOf: (capability: Capability) => Lifecycle;
   lifecycleOfGroup: (groupId: string) => Lifecycle;
@@ -298,6 +315,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [equipmentTypes, setEquipmentTypes] = useState<EquipmentType[]>([]);
   const [lifecycles, setLifecycles] = useState<Lifecycle[]>([]);
+  const [lifecycleTemplates, setLifecycleTemplates] = useState<LifecycleTemplate[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [actors, setActors] = useState<Actor[]>([]);
 
@@ -312,6 +330,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setEquipment(snap.equipment);
       setEquipmentTypes(snap.equipmentTypes);
       setLifecycles(snap.lifecycles);
+      setLifecycleTemplates(snap.lifecycleTemplates ?? []);
       setCapabilities(snap.capabilities);
       setEpics(snap.epics);
       setFeatures(snap.features);
@@ -971,6 +990,72 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       return true;
     },
     [groups, lifecycles.length]
+  );
+
+  const addLifecycleTemplate = useCallback(
+    (input: LifecycleTemplateInput) => {
+      const created: LifecycleTemplate = {
+        id: nextId('TPL', lifecycleTemplates),
+        label: input.label.trim(),
+        summary: input.summary.trim(),
+        decomposition: input.decomposition,
+        stages: input.stages,
+        storyStages: input.storyStages ?? [],
+        workItemTypes: input.workItemTypes ?? [],
+        automationRules: input.automationRules ?? [],
+        productIds: input.productIds ?? [],
+        isSystem: false,
+      };
+      setLifecycleTemplates((prev) => [...prev, created]);
+      void api
+        .upsertLifecycleTemplate(created)
+        .catch((err) => persistError('addLifecycleTemplate', err));
+      return created;
+    },
+    [lifecycleTemplates]
+  );
+
+  const updateLifecycleTemplate = useCallback(
+    (id: string, patch: Partial<LifecycleTemplateInput>) => {
+      setLifecycleTemplates((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t;
+          const updated: LifecycleTemplate = {
+            ...t,
+            label: patch.label !== undefined ? patch.label.trim() : t.label,
+            summary: patch.summary !== undefined ? patch.summary.trim() : t.summary,
+            decomposition: patch.decomposition ?? t.decomposition,
+            stages: patch.stages ?? t.stages,
+            storyStages: patch.storyStages ?? t.storyStages,
+            workItemTypes: patch.workItemTypes ?? t.workItemTypes,
+            automationRules: patch.automationRules ?? t.automationRules,
+            productIds: patch.productIds !== undefined ? patch.productIds : t.productIds,
+          };
+          void api
+            .upsertLifecycleTemplate(updated)
+            .catch((err) => persistError('updateLifecycleTemplate', err));
+          return updated;
+        })
+      );
+    },
+    []
+  );
+
+  const removeLifecycleTemplate = useCallback(
+    (id: string) => {
+      const t = lifecycleTemplates.find((x) => x.id === id);
+      if (!t) return false;
+      if (t.isSystem) {
+        window.alert('System templates cannot be deleted.');
+        return false;
+      }
+      setLifecycleTemplates((prev) => prev.filter((x) => x.id !== id));
+      void api
+        .deleteLifecycleTemplate(id)
+        .catch((err) => persistError('removeLifecycleTemplate', err));
+      return true;
+    },
+    [lifecycleTemplates]
   );
 
   const addEpic = useCallback(
@@ -1819,6 +1904,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       equipment,
       equipmentTypes,
       lifecycles,
+      lifecycleTemplates,
       epics,
       features,
       stories,
@@ -1833,6 +1919,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addLifecycle,
       updateLifecycle,
       removeLifecycle,
+      addLifecycleTemplate,
+      updateLifecycleTemplate,
+      removeLifecycleTemplate,
+      getLifecycleTemplate: (id) => lifecycleTemplates.find((t) => t.id === id),
       getLifecycle: (id) => resolveLifecycle(id),
       lifecycleOf: (capability) =>
         resolveLifecycle(groupMap.get(capability.groupId)?.track),
@@ -1906,6 +1996,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     equipment,
     equipmentTypes,
     lifecycles,
+    lifecycleTemplates,
     resolveLifecycle,
     addCapability,
     updateCapability,
@@ -1916,6 +2007,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addLifecycle,
     updateLifecycle,
     removeLifecycle,
+    addLifecycleTemplate,
+    updateLifecycleTemplate,
+    removeLifecycleTemplate,
     addProduct,
     updateProduct,
     removeProduct,

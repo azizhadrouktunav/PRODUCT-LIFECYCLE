@@ -18,6 +18,7 @@ import type {
   EquipmentType,
   Feature,
   Lifecycle,
+  LifecycleTemplate,
   Product,
   StageContentMode,
   StageDef,
@@ -37,7 +38,9 @@ import {
   DELIVERY_WORK_ITEM_TYPES,
   FALLBACK_LIFECYCLE,
   LIFECYCLE_TEMPLATES,
+  SYSTEM_TEMPLATE_IDS,
   TRACKS,
+  builtInLifecycleTemplates,
   conditionsToWhen,
   normalizeRuleWhen,
   syncLegacyFromTypes,
@@ -50,6 +53,7 @@ export interface RegistrySnapshot {
   equipment: Equipment[];
   equipmentTypes: EquipmentType[];
   lifecycles: Lifecycle[];
+  lifecycleTemplates: LifecycleTemplate[];
   capabilities: Capability[];
   epics: Epic[];
   features: Feature[];
@@ -275,6 +279,97 @@ function lifecycleToRow(lc: Lifecycle) {
   };
 }
 
+function mapLifecycleTemplate(row: Record<string, unknown>): LifecycleTemplate {
+  const decomposition: DecompositionMode =
+    row.decomposition === 'none' ? 'none' : 'delivery';
+  const stages = mapStages(row.stages);
+  const storyStages = mapStages(row.story_stages);
+  const builtin = builtInLifecycleTemplates().find((t) => t.id === String(row.id));
+  const tpl = LIFECYCLE_TEMPLATES[decomposition];
+  const workItemTypes = mapWorkItemTypes(row.work_item_types, decomposition, storyStages);
+  const legacy = syncLegacyFromTypes({ workItemTypes, stages });
+  return {
+    id: String(row.id),
+    label: String(row.label ?? builtin?.label ?? ''),
+    summary: String(row.summary ?? builtin?.summary ?? ''),
+    decomposition: workItemTypes.length > 0 ? legacy.decomposition : decomposition,
+    stages: stages.length > 0 ? stages : (builtin?.stages ?? tpl.stages),
+    storyStages:
+      legacy.storyStages.length > 0
+        ? legacy.storyStages
+        : storyStages.length > 0
+          ? storyStages
+          : (builtin?.storyStages ?? tpl.storyStages),
+    workItemTypes:
+      workItemTypes.length > 0 ? workItemTypes : (builtin?.workItemTypes ?? tpl.workItemTypes),
+    productIds: (row.product_ids as string[] | null) ?? [],
+    automationRules:
+      row.automation_rules === undefined ||
+      row.automation_rules === null ||
+      (Array.isArray(row.automation_rules) && row.automation_rules.length === 0)
+        ? (builtin?.automationRules ?? tpl.automationRules ?? [])
+        : mapAutomationRules(row.automation_rules),
+    isSystem: row.is_system === true || Object.values(SYSTEM_TEMPLATE_IDS).includes(String(row.id) as never),
+  };
+}
+
+function lifecycleTemplateToRow(t: LifecycleTemplate) {
+  const legacy = syncLegacyFromTypes(t);
+  return {
+    id: t.id,
+    label: t.label,
+    summary: t.summary,
+    decomposition: t.workItemTypes?.length ? legacy.decomposition : t.decomposition,
+    stages: t.stages,
+    story_stages: (t.workItemTypes?.length ? legacy.storyStages : t.storyStages) ?? [],
+    work_item_types: t.workItemTypes ?? [],
+    automation_rules: (t.automationRules ?? []).map((r) => ({
+      id: r.id,
+      enabled: r.enabled,
+      targetEntity: r.targetEntity,
+      targetField: r.targetField,
+      setValue: r.setValue,
+      when: normalizeRuleWhen(r),
+    })),
+    product_ids: t.productIds ?? [],
+    is_system: t.isSystem,
+  };
+}
+
+async function ensureDefaultLifecycleTemplates(
+  existing: LifecycleTemplate[]
+): Promise<LifecycleTemplate[]> {
+  const builtins = builtInLifecycleTemplates();
+  const byId = new Map(existing.map((t) => [t.id, t]));
+  const toUpsert: LifecycleTemplate[] = [];
+
+  for (const b of builtins) {
+    const cur = byId.get(b.id);
+    // Seed or refresh empty system rows (migration placeholders).
+    if (!cur || cur.stages.length === 0) {
+      toUpsert.push(b);
+      byId.set(b.id, b);
+    } else if (!cur.isSystem) {
+      byId.set(b.id, { ...cur, isSystem: true });
+    }
+  }
+
+  if (toUpsert.length > 0) {
+    const { error } = await supabase
+      .from('lifecycle_templates')
+      .upsert(toUpsert.map(lifecycleTemplateToRow));
+    if (error) {
+      // Table may not exist yet — fall back to in-memory builtins.
+      if (/relation .*lifecycle_templates.* does not exist|Could not find the table/i.test(error.message)) {
+        return builtins;
+      }
+      throwIfError(error, 'Seed lifecycle templates');
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
 async function ensureDefaultLifecycles(): Promise<Lifecycle[]> {
   const { data: productRows } = await supabase.from('products').select('id');
   const productIds = (productRows ?? []).map((r) => String((r as { id: string }).id));
@@ -447,6 +542,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     equipmentRes,
     equipmentTypesRes,
     lifecyclesRes,
+    lifecycleTemplatesRes,
     capabilitiesRes,
     epicsRes,
     featuresRes,
@@ -460,6 +556,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     supabase.from('equipment').select('*'),
     supabase.from('equipment_types').select('*'),
     supabase.from('lifecycles').select('*'),
+    supabase.from('lifecycle_templates').select('*'),
     supabase.from('capabilities').select('*'),
     supabase.from('epics').select('*'),
     supabase.from('features').select('*'),
@@ -490,6 +587,16 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     throwIfError(workItemsError, 'Load work_items');
   }
 
+  const templatesError = lifecycleTemplatesRes.error;
+  const templatesMissing =
+    !!templatesError &&
+    /relation .*lifecycle_templates.* does not exist|Could not find the table/i.test(
+      templatesError.message
+    );
+  if (templatesError && !templatesMissing) {
+    throwIfError(templatesError, 'Load lifecycle_templates');
+  }
+
   let lifecycles = (lifecyclesRes.data ?? []).map((r) => mapLifecycle(r as Record<string, unknown>));
   if (lifecycles.length === 0) {
     lifecycles = await ensureDefaultLifecycles();
@@ -505,6 +612,14 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
       lifecycles = [...lifecycles, ...missingDefaults];
     }
   }
+
+  let lifecycleTemplates = templatesMissing
+    ? builtInLifecycleTemplates()
+    : await ensureDefaultLifecycleTemplates(
+        (lifecycleTemplatesRes.data ?? []).map((r) =>
+          mapLifecycleTemplate(r as Record<string, unknown>)
+        )
+      );
 
   const equipment = (equipmentRes.data ?? []).map((r) => mapEquipment(r as Record<string, unknown>));
   let equipmentTypes = (equipmentTypesRes.data ?? []).map((r) =>
@@ -539,6 +654,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     equipment,
     equipmentTypes,
     lifecycles,
+    lifecycleTemplates,
     capabilities: (capabilitiesRes.data ?? []).map((r) => mapCapability(r as Record<string, unknown>)),
     epics: (epicsRes.data ?? []).map((r) => mapEpic(r as Record<string, unknown>)),
     features: (featuresRes.data ?? []).map((r) => mapFeature(r as Record<string, unknown>)),
@@ -553,6 +669,18 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
 export async function upsertLifecycle(lifecycle: Lifecycle): Promise<void> {
   const { error } = await supabase.from('lifecycles').upsert(lifecycleToRow(lifecycle));
   throwIfError(error, 'Upsert lifecycle');
+}
+
+export async function upsertLifecycleTemplate(template: LifecycleTemplate): Promise<void> {
+  const { error } = await supabase
+    .from('lifecycle_templates')
+    .upsert(lifecycleTemplateToRow(template));
+  throwIfError(error, 'Upsert lifecycle_template');
+}
+
+export async function deleteLifecycleTemplate(id: string): Promise<void> {
+  const { error } = await supabase.from('lifecycle_templates').delete().eq('id', id);
+  throwIfError(error, 'Delete lifecycle_template');
 }
 
 export async function deleteLifecycle(id: string): Promise<void> {

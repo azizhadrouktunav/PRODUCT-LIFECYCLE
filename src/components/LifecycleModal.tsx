@@ -14,8 +14,8 @@ import type {
   CapabilityStatus,
   ConditionCombineOp,
   ConditionNode,
-  DecompositionMode,
   Lifecycle,
+  LifecycleTemplate,
   StageContentMode,
   StageDef,
   StageRequirement,
@@ -29,9 +29,12 @@ import {
   DEFAULT_WORK_ITEM_STATUSES,
   LIFECYCLE_TEMPLATES,
   STAGE_TONES,
+  builtInLifecycleTemplates,
+  lifecycleToTemplateFields,
   normalizeRuleWhen,
   requirementsForLifecycle,
   syncLegacyFromTypes,
+  templateToLifecycleDraft,
 } from '../types/registry';
 import {
   AUTO_AGGREGATE_LABEL,
@@ -46,7 +49,7 @@ import {
   summarizeWhen,
 } from '../lib/automationCatalog';
 
-function blankStage(): StageDef {
+export function blankStage(): StageDef {
   return {
     name: '',
     description: '',
@@ -79,7 +82,7 @@ function blankWhen(target: AutoEntity, lifecycle?: Lifecycle): ConditionNode {
   return { kind: 'group', op: 'and', children: [blankLeaf(target, lifecycle)] };
 }
 
-function blankRule(lifecycle?: Lifecycle): AutomationRule {
+export function blankRule(lifecycle?: Lifecycle): AutomationRule {
   return {
     id: newRuleId(),
     enabled: true,
@@ -90,7 +93,7 @@ function blankRule(lifecycle?: Lifecycle): AutomationRule {
   };
 }
 
-function blankWorkItemType(parentTypeId: string | null = null): WorkItemTypeDef {
+export function blankWorkItemType(parentTypeId: string | null = null): WorkItemTypeDef {
   const id = `type-${Date.now().toString(36).slice(-4)}`;
   return {
     id,
@@ -103,7 +106,7 @@ function blankWorkItemType(parentTypeId: string | null = null): WorkItemTypeDef 
   };
 }
 
-function slugifyTypeId(raw: string): string {
+export function slugifyTypeId(raw: string): string {
   return raw
     .trim()
     .toLowerCase()
@@ -112,7 +115,7 @@ function slugifyTypeId(raw: string): string {
     .slice(0, 32);
 }
 
-function StageListEditor({
+export function StageListEditor({
   title,
   stages,
   requirementOptions,
@@ -308,7 +311,7 @@ function StageListEditor({
   );
 }
 
-function WorkItemTypesEditor({
+export function WorkItemTypesEditor({
   types,
   onChange,
 }: {
@@ -709,7 +712,7 @@ function ConditionNodeEditor({
   );
 }
 
-function AutomationRulesEditor({
+export function AutomationRulesEditor({
   rules,
   lifecycleDraft,
   onChange,
@@ -888,7 +891,8 @@ export function LifecycleModal({
   onClose: () => void;
   lifecycle?: Lifecycle | null;
 }) {
-  const { addLifecycle, updateLifecycle } = useRegistry();
+  const { addLifecycle, updateLifecycle, lifecycleTemplates, addLifecycleTemplate } =
+    useRegistry();
   const isEdit = !!lifecycle;
   const [label, setLabel] = useState('');
   const [summary, setSummary] = useState('');
@@ -900,6 +904,13 @@ export function LifecycleModal({
   const [automationRules, setAutomationRules] = useState<AutomationRule[]>(
     LIFECYCLE_TEMPLATES.delivery.automationRules
   );
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [viewTemplate, setViewTemplate] = useState<LifecycleTemplate | null>(null);
+
+  const templates = useMemo(() => {
+    if (lifecycleTemplates.length > 0) return lifecycleTemplates;
+    return builtInLifecycleTemplates();
+  }, [lifecycleTemplates]);
 
   useEffect(() => {
     if (!open) return;
@@ -922,27 +933,37 @@ export function LifecycleModal({
           when: normalizeRuleWhen(r),
         }))
       );
+      setSelectedTemplateId('');
     } else {
-      const tpl = LIFECYCLE_TEMPLATES.delivery;
+      const defaultTpl =
+        templates.find((t) => t.id === 'tpl-delivery') ??
+        templates[0] ??
+        builtInLifecycleTemplates()[1];
+      const draft = templateToLifecycleDraft(defaultTpl);
       setLabel('');
-      setSummary(tpl.summary);
-      setStages(tpl.stages.map((s) => ({ ...s })));
+      setSummary(draft.summary);
+      setStages(draft.stages.map((s) => ({ ...s })));
       setWorkItemTypes(
-        tpl.workItemTypes.map((t) => ({ ...t, stages: t.stages.map((s) => ({ ...s })) }))
+        (draft.workItemTypes ?? []).map((t) => ({
+          ...t,
+          stages: t.stages.map((s) => ({ ...s })),
+        }))
       );
       setProductIds([]);
       setAutomationRules(
-        tpl.automationRules.map((r) => ({
+        (draft.automationRules ?? []).map((r) => ({
           ...r,
           id: newRuleId(),
           when: normalizeRuleWhen(r),
         }))
       );
+      setSelectedTemplateId(defaultTpl.id);
     }
-  }, [open, lifecycle]);
+  }, [open, lifecycle, templates]);
 
-  function applyTemplate(mode: DecompositionMode, force = false) {
-    const tpl = LIFECYCLE_TEMPLATES[mode];
+  function applyTemplateById(templateId: string, force = false) {
+    const t = templates.find((x) => x.id === templateId);
+    if (!t) return;
     const stagesEmpty = stages.every((s) => !s.name.trim());
     if (
       !force &&
@@ -951,19 +972,42 @@ export function LifecycleModal({
     ) {
       return;
     }
-    setStages(tpl.stages.map((s) => ({ ...s })));
+    const draft = templateToLifecycleDraft(t);
+    setStages(draft.stages.map((s) => ({ ...s })));
     setWorkItemTypes(
-      tpl.workItemTypes.map((t) => ({ ...t, stages: t.stages.map((s) => ({ ...s })) }))
+      (draft.workItemTypes ?? []).map((w) => ({
+        ...w,
+        stages: w.stages.map((s) => ({ ...s })),
+      }))
     );
     setAutomationRules(
-      tpl.automationRules.map((r) => ({
+      (draft.automationRules ?? []).map((r) => ({
         ...r,
         id: newRuleId(),
         when: normalizeRuleWhen(r),
       }))
     );
-    if (!label.trim()) setLabel(tpl.label);
-    if (!summary.trim()) setSummary(tpl.summary);
+    if (!label.trim()) setLabel(draft.label);
+    if (!summary.trim()) setSummary(draft.summary);
+    setSelectedTemplateId(templateId);
+  }
+
+  function saveAsTemplate() {
+    const name = window.prompt('Template name', label.trim() || 'My template');
+    if (!name?.trim()) return;
+    const legacy = syncLegacyFromTypes({ workItemTypes, stages });
+    const fields = lifecycleToTemplateFields({
+      label: name.trim(),
+      summary: summary.trim() || `Saved from ${label || 'lifecycle'}`,
+      decomposition: legacy.decomposition,
+      stages,
+      storyStages: legacy.storyStages,
+      workItemTypes,
+      automationRules,
+      productIds: [],
+    });
+    addLifecycleTemplate(fields);
+    window.alert(`Template “${name.trim()}” saved.`);
   }
 
   const draftForReqs = useMemo(
@@ -1029,7 +1073,10 @@ export function LifecycleModal({
     onClose();
   }
 
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
+
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -1070,13 +1117,44 @@ export function LifecycleModal({
           />
         </Field>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="quiet" type="button" onClick={() => applyTemplate('delivery')}>
-            Apply delivery template
-          </Button>
-          <Button variant="quiet" type="button" onClick={() => applyTemplate('none')}>
-            Apply hardware template
-          </Button>
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-soft">Template</span>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[200px] flex-1">
+              <select
+                className={inputClass}
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+              >
+                <option value="">Select a template…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                    {t.isSystem ? ' (system)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              variant="quiet"
+              type="button"
+              disabled={!selectedTemplateId}
+              onClick={() => applyTemplateById(selectedTemplateId)}
+            >
+              Apply
+            </Button>
+            <Button
+              variant="quiet"
+              type="button"
+              disabled={!selectedTemplate}
+              onClick={() => selectedTemplate && setViewTemplate(selectedTemplate)}
+            >
+              View
+            </Button>
+            <Button variant="quiet" type="button" onClick={saveAsTemplate}>
+              Save as template
+            </Button>
+          </div>
         </div>
 
         <WorkItemTypesEditor types={workItemTypes} onChange={setWorkItemTypes} />
@@ -1102,5 +1180,53 @@ export function LifecycleModal({
         />
       </div>
     </Modal>
+    <Modal
+      open={!!viewTemplate}
+      onClose={() => setViewTemplate(null)}
+      width="max-w-lg"
+      title={viewTemplate?.label ?? 'Template'}
+      subtitle={
+        viewTemplate
+          ? `${viewTemplate.id}${viewTemplate.isSystem ? ' · system' : ''}`
+          : undefined
+      }
+      footer={
+        <Button variant="primary" onClick={() => setViewTemplate(null)}>
+          Close
+        </Button>
+      }
+    >
+      {viewTemplate && (
+        <div className="space-y-3 text-xs text-soft">
+          {viewTemplate.summary && (
+            <p className="leading-relaxed text-mute">{viewTemplate.summary}</p>
+          )}
+          <p>
+            <span className="text-mute">Stages: </span>
+            {viewTemplate.stages.map((s) => s.name).join(' → ') || '—'}
+          </p>
+          <p>
+            <span className="text-mute">Work item types: </span>
+            {(viewTemplate.workItemTypes ?? []).map((t) => t.label).join(' → ') ||
+              'none'}
+          </p>
+          <p>
+            <span className="text-mute">Automation rules: </span>
+            {(viewTemplate.automationRules ?? []).length}
+          </p>
+          <Button
+            variant="quiet"
+            type="button"
+            onClick={() => {
+              applyTemplateById(viewTemplate.id, true);
+              setViewTemplate(null);
+            }}
+          >
+            Apply this template
+          </Button>
+        </div>
+      )}
+    </Modal>
+    </>
   );
 }

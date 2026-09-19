@@ -1,36 +1,146 @@
-import React, { useState } from 'react';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { useState } from 'react';
+import { EyeIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { LifecycleModal } from '../components/LifecycleModal';
+import {
+  LifecycleTemplateModal,
+  type TemplateModalMode,
+} from '../components/LifecycleTemplateModal';
 import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Lifecycle } from '../types/registry';
-import { DECOMPOSITION_LABEL, REQUIREMENT_LABEL, storyStagesOf, usesDecomposition } from '../types/registry';
+import type { Lifecycle, LifecycleTemplate } from '../types/registry';
+import {
+  DECOMPOSITION_LABEL,
+  REQUIREMENT_LABEL,
+  storyStagesOf,
+  usesDecomposition,
+} from '../types/registry';
 
 export function LifecyclesPage() {
-  const { lifecycles, groups, removeLifecycle, getProduct } = useRegistry();
+  const {
+    lifecycles,
+    lifecycleTemplates,
+    groups,
+    removeLifecycle,
+    removeLifecycleTemplate,
+    getProduct,
+  } = useRegistry();
   const { can, entityVisible } = useAuth();
   const canManage = can('manage_lifecycles');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Lifecycle | null>(null);
+
+  const [templateMode, setTemplateMode] = useState<TemplateModalMode>('create');
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState<LifecycleTemplate | null>(null);
+
   const visible = lifecycles.filter((lc) => entityVisible(lc.productIds));
+  const visibleTemplates = lifecycleTemplates.filter(
+    (t) => t.productIds.length === 0 || entityVisible(t.productIds)
+  );
+
+  function openTemplate(mode: TemplateModalMode, t: LifecycleTemplate | null = null) {
+    setTemplateMode(mode);
+    setActiveTemplate(t);
+    setTemplateOpen(true);
+  }
 
   return (
     <div>
       <PageHeader
         title="Lifecycles"
-        count={`${visible.length} lifecycles`}
+        count={`${visible.length} lifecycles · ${visibleTemplates.length} templates`}
         action={
           canManage ? (
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add lifecycle
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="quiet" onClick={() => openTemplate('create')}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add template
+              </Button>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <PlusIcon className="h-3.5 w-3.5" />
+                Add lifecycle
+              </Button>
+            </div>
           ) : undefined
         }
       />
 
-      <div className="mt-4 space-y-6">
+      <h2 className="mt-6 text-2xs uppercase tracking-[0.14em] text-ink-500">Templates</h2>
+      <p className="mt-1 text-xs text-mute">
+        Reusable configurations you can apply when creating or editing a lifecycle.
+      </p>
+      <div className="mt-3 space-y-3">
+        {visibleTemplates.length === 0 ? (
+          <p className="rounded-md border border-line-strong px-3 py-3 text-xs text-mute">
+            No templates yet.
+          </p>
+        ) : (
+          visibleTemplates.map((t) => (
+            <section
+              key={t.id}
+              className="rounded-md border border-line-strong px-4 py-3"
+            >
+              <div className="flex flex-wrap items-baseline gap-3">
+                <h3 className="text-sm font-semibold text-strong">{t.label}</h3>
+                {t.isSystem && (
+                  <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-mute">
+                    system
+                  </span>
+                )}
+                <span className="font-mono text-2xs text-ink-500">{t.id}</span>
+                <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
+                  {t.stages.length} stages
+                  {(t.workItemTypes?.length ?? 0) > 0
+                    ? ` · ${(t.workItemTypes ?? []).map((w) => w.label).join(' → ')}`
+                    : ` · ${DECOMPOSITION_LABEL[t.decomposition]}`}
+                </span>
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openTemplate('view', t)}
+                    aria-label={`View ${t.label}`}
+                    title="View template"
+                    className="rounded p-0.5 text-mute hover:text-brand-bright"
+                  >
+                    <EyeIcon className="h-3.5 w-3.5" />
+                  </button>
+                  {canManage && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openTemplate('edit', t)}
+                        aria-label={`Edit ${t.label}`}
+                        title="Edit template"
+                        className="rounded p-0.5 text-mute hover:text-brand-bright"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      {!t.isSystem && (
+                        <button
+                          type="button"
+                          onClick={() => removeLifecycleTemplate(t.id)}
+                          aria-label={`Delete ${t.label}`}
+                          title="Delete template"
+                          className="rounded p-0.5 text-mute hover:text-danger"
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+              {t.summary && (
+                <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-mute">{t.summary}</p>
+              )}
+            </section>
+          ))
+        )}
+      </div>
+
+      <h2 className="mt-8 text-2xs uppercase tracking-[0.14em] text-ink-500">Lifecycles</h2>
+      <div className="mt-3 space-y-6">
         {visible.map((lc) => {
           const usedBy = groups.filter((g) => g.track === lc.id).length;
           return (
@@ -194,6 +304,15 @@ export function LifecyclesPage() {
 
       <LifecycleModal open={adding} onClose={() => setAdding(false)} />
       <LifecycleModal open={!!editing} onClose={() => setEditing(null)} lifecycle={editing} />
+      <LifecycleTemplateModal
+        open={templateOpen}
+        onClose={() => {
+          setTemplateOpen(false);
+          setActiveTemplate(null);
+        }}
+        mode={templateMode}
+        template={activeTemplate}
+      />
     </div>
   );
 }
