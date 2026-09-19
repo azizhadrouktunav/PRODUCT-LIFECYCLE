@@ -135,10 +135,10 @@ export function CapabilityRegister({
 
   const columns = useMemo(
     () =>
-      hideGroupFilter || groupId
+      groupId
         ? SORTABLE_COLUMNS.filter((c) => c.key !== 'group')
         : SORTABLE_COLUMNS,
-    [hideGroupFilter, groupId]
+    [groupId]
   );
 
   function sortValue(c: Capability, key: SortKey): string | number {
@@ -253,15 +253,6 @@ export function CapabilityRegister({
             </div>
           }
         />
-      )}
-
-      {hideHeader && can('add_capability') && (
-        <div className={`flex justify-end ${compact ? 'pb-2' : 'py-2'}`}>
-          <Button variant="primary" onClick={handleAdd}>
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add capability
-          </Button>
-        </div>
       )}
 
       <div className={`flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}>
@@ -396,7 +387,7 @@ export function CapabilityRegister({
                     </div>
                     <p className="mt-0.5 line-clamp-1 max-w-xl text-xs text-mute">{c.description}</p>
                   </td>
-                  {!hideGroupFilter && !groupId && (
+                  {!groupId && (
                     <td className="py-3 pr-4 text-xs text-soft">
                       {getGroup(c.groupId)?.name ?? '—'}
                     </td>

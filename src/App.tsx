@@ -29,11 +29,18 @@ interface AppProps {
 /** Reachable without a session (invite / reset links). */
 const PUBLIC_PATHS = new Set(['/set-password']);
 
-function StructureRedirect({ panel }: { panel: 'lifecycles' | 'groups' | 'capabilities' }) {
+function StructureRedirect({
+  manage,
+}: {
+  manage?: 'lifecycles' | 'groups' | 'templates';
+}) {
   const [params] = useSearchParams();
   const next = new URLSearchParams(params);
-  next.set('panel', panel);
-  return <Navigate to={`/structure?${next.toString()}`} replace />;
+  next.delete('panel');
+  if (manage) next.set('manage', manage);
+  else next.delete('manage');
+  const qs = next.toString();
+  return <Navigate to={qs ? `/structure?${qs}` : '/structure'} replace />;
 }
 
 function AuthenticatedApp() {
@@ -44,7 +51,7 @@ function AuthenticatedApp() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/structure" element={<StructurePage />} />
-            <Route path="/capabilities" element={<StructureRedirect panel="capabilities" />} />
+            <Route path="/capabilities" element={<StructureRedirect />} />
             <Route path="/capabilities/:capabilityId" element={<CapabilityDetailRoute />} />
             <Route path="/capabilities/:capabilityId/epics" element={<ManageEpicsPage />} />
             <Route
@@ -59,8 +66,8 @@ function AuthenticatedApp() {
               path="/capabilities/:capabilityId/items/:typeId"
               element={<ManageWorkItemsPage />}
             />
-            <Route path="/lifecycles" element={<StructureRedirect panel="lifecycles" />} />
-            <Route path="/groups" element={<StructureRedirect panel="groups" />} />
+            <Route path="/lifecycles" element={<StructureRedirect manage="lifecycles" />} />
+            <Route path="/groups" element={<StructureRedirect manage="groups" />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/actors" element={<ActorsPage />} />
             <Route path="/equipment" element={<EquipmentPage />} />
