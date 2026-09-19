@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
 import { DataTransfer } from '../components/DataTransfer';
@@ -88,29 +88,25 @@ export function EquipmentPage() {
         count={`${visibleEquipment.length} models`}
         description="What each device model can actually do. Hardware capabilities are assigned here, and the assignment is the same record the register reads from."
         action={
-          <div className="flex flex-wrap items-center gap-1.5">
-            {canEdit && <DataTransfer dataset="equipment" />}
-            {canEdit && (
-              <Button variant="quiet" onClick={() => setAddingType(true)}>
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add type
-              </Button>
-            )}
-            {canEdit && (
-              <Button variant="primary" onClick={() => setAddingEquipment(true)}>
-                <PlusIcon className="h-3.5 w-3.5" />
-                Add equipment
-              </Button>
-            )}
-          </div>
+          canEdit ? (
+            <div className="flex flex-nowrap items-center gap-1.5">
+              <DataTransfer dataset="equipment" />
+            </div>
+          ) : undefined
         }
       />
 
-      <section className="mt-4 border-t border-line pt-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <section className="mt-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
             Equipment types · {sortedTypes.length}
           </h2>
+          {canEdit && (
+            <Button variant="quiet" onClick={() => setAddingType(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add type
+            </Button>
+          )}
         </div>
         {sortedTypes.length === 0 ? (
           <p className="mt-3 text-sm text-mute">
@@ -147,99 +143,121 @@ export function EquipmentPage() {
       </section>
 
       {visibleEquipment.length === 0 || !active ? (
-        <p className="mt-8 border-t border-line pt-8 text-sm text-mute">
-          No equipment models yet. Use <span className="text-soft">Add equipment</span> or import an
-          Equipment sheet to get started.
-        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong px-4 py-4">
+          <p className="text-sm text-mute">
+            No equipment models yet. Add a model or import an Equipment sheet to get started.
+          </p>
+          {canEdit && (
+            <Button variant="primary" onClick={() => setAddingEquipment(true)}>
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add equipment
+            </Button>
+          )}
+        </div>
       ) : (
-        <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <nav aria-label="Equipment models" className="border-t border-line">
-            {visibleEquipment.map((e) => {
-              const isActive = e.id === active.id;
-              const count = visibleHardware.filter((c) =>
-                c.equipmentIds.includes(e.id)
-              ).length;
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => setActiveId(e.id)}
-                  aria-current={isActive}
-                  className={`flex w-full items-center gap-3 border-b border-line-soft px-2 py-2.5 text-left transition-colors duration-150 ease-out ${
-                    isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
-                  }`}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
-                    >
-                      {e.name}
+        <div className="mt-6 overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="border-b border-line-strong lg:border-b-0 lg:border-r lg:border-line-strong">
+            <div className="flex h-12 items-center justify-between gap-2 border-b border-line-strong px-3">
+              <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+                Models · {visibleEquipment.length}
+              </h2>
+              {canEdit && (
+                <Button variant="primary" onClick={() => setAddingEquipment(true)}>
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add equipment
+                </Button>
+              )}
+            </div>
+            <nav aria-label="Equipment models">
+              {visibleEquipment.map((e) => {
+                const isActive = e.id === active.id;
+                const count = visibleHardware.filter((c) =>
+                  c.equipmentIds.includes(e.id)
+                ).length;
+                return (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => setActiveId(e.id)}
+                    aria-current={isActive}
+                    className={`flex w-full items-center gap-3 border-b border-line-soft px-3 py-2.5 text-left transition-colors duration-150 ease-out last:border-b-0 ${
+                      isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
+                      >
+                        {e.name}
+                      </span>
+                      <span className="block truncate text-2xs text-mute">{e.type}</span>
                     </span>
-                    <span className="block truncate text-2xs text-mute">{e.type}</span>
-                  </span>
-                  <span className="font-mono text-2xs text-ink-500">{count}</span>
-                </button>
-              );
-            })}
-          </nav>
+                    <span className="font-mono text-2xs text-ink-500">{count}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
 
-          <section>
-            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-4">
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight text-strong">{active.name}</h2>
-                <p className="mt-1 text-xs text-mute">
+          <section className="min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-strong px-4 py-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-semibold tracking-tight text-strong">
+                  {active.name}
+                </h2>
+                <p className="mt-0.5 truncate text-xs text-mute">
                   <span className="font-mono text-ink-500">{active.id}</span> · {active.vendor} ·{' '}
                   {active.model} · {active.type}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {canEdit && (
-                  <>
-                    <Button variant="quiet" onClick={() => setEditing(active)}>
-                      <PencilIcon className="h-3.5 w-3.5" />
-                      Edit
-                    </Button>
-                    <Button variant="quiet" onClick={handleDelete}>
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                      Delete
-                    </Button>
-                    <Button variant="primary" onClick={openAssign}>
-                      <PlusIcon className="h-3.5 w-3.5" />
-                      Assign capabilities
-                    </Button>
-                  </>
-                )}
-              </div>
+              {canEdit && (
+                <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
+                  <Button variant="quiet" onClick={() => setEditing(active)}>
+                    <PencilIcon className="h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button variant="quiet" onClick={handleDelete}>
+                    <Trash2Icon className="h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                  <Button variant="primary" onClick={openAssign}>
+                    <PlusIcon className="h-3.5 w-3.5" />
+                    Assign capabilities
+                  </Button>
+                </div>
+              )}
             </div>
 
-            <h3 className="mt-6 text-2xs uppercase tracking-[0.14em] text-ink-500">
-              Hardware capabilities · {supported.length}
-            </h3>
+            <div className="px-4 py-4">
+              <h3 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+                Hardware capabilities · {supported.length}
+              </h3>
 
-            {supported.length ? (
-              <ul className="mt-3 border-t border-line">
-                {supported.map((c) => (
-                  <li key={c.id} className="border-b border-line-soft py-3">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="font-mono text-2xs text-ink-500">{c.id}</span>
-                      <span className="text-sm font-medium text-strong">{c.name}</span>
-                      <span className="ml-auto">
-                        <StagePill track="hardware" stage={c.progress} />
-                      </span>
-                    </div>
-                    <p className="mt-1 max-w-3xl text-xs leading-relaxed text-mute">
-                      {c.description}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 border-t border-line pt-6 text-sm text-mute">
-                Nothing assigned yet. Use{' '}
-                <span className="text-soft">Assign capabilities</span> to declare what this device
-                supports.
-              </p>
-            )}
+              {supported.length ? (
+                <ul className="mt-3 border-t border-line">
+                  {supported.map((c) => (
+                    <li key={c.id} className="border-b border-line-soft py-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="font-mono text-2xs text-ink-500">{c.id}</span>
+                        <span className="text-sm font-medium text-strong">{c.name}</span>
+                        <span className="ml-auto">
+                          <StagePill track="hardware" stage={c.progress} />
+                        </span>
+                      </div>
+                      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-mute">
+                        {c.description}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 border-t border-line pt-4 text-sm text-mute">
+                  Nothing assigned yet. Use{' '}
+                  <span className="text-soft">Assign capabilities</span> to declare what this device
+                  supports.
+                </p>
+              )}
+            </div>
           </section>
         </div>
       )}
