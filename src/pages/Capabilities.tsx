@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangleIcon,
   ChevronDownIcon,
@@ -69,12 +69,20 @@ export function CapabilitiesPage() {
   const getEquipment = (id: string) => equipment.find((e) => e.id === id);
   const { openCreate, openEdit } = useCapabilityEditor();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('id');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status && (CAPABILITY_STATUSES as string[]).includes(status)) {
+      setStatusFilter(status);
+    }
+  }, [searchParams]);
 
   const visibleProducts = useMemo(
     () => products.filter((p) => productVisible(p.id)),

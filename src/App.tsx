@@ -8,6 +8,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { ActorsPage } from './pages/Actors';
 import { CapabilitiesPage } from './pages/Capabilities';
 import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
+import { DashboardPage } from './pages/Dashboard';
 import { EquipmentPage } from './pages/Equipment';
 import { GroupsPage } from './pages/Groups';
 import { LifecyclesPage } from './pages/Lifecycles';
@@ -35,7 +36,8 @@ function AuthenticatedApp() {
       <CapabilityEditorProvider>
         <AppShell>
           <Routes>
-            <Route path="/" element={<CapabilitiesPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/capabilities" element={<CapabilitiesPage />} />
             <Route path="/capabilities/:capabilityId" element={<CapabilityDetailRoute />} />
             <Route path="/capabilities/:capabilityId/epics" element={<ManageEpicsPage />} />
             <Route
@@ -58,7 +60,7 @@ function AuthenticatedApp() {
               <Route path="roles" element={<RolesSettingsPage />} />
             </Route>
             <Route path="/users" element={<Navigate to="/settings/users" replace />} />
-            <Route path="*" element={<CapabilitiesPage />} />
+            <Route path="*" element={<DashboardPage />} />
           </Routes>
         </AppShell>
       </CapabilityEditorProvider>

@@ -221,7 +221,7 @@ create policy "Signed-in users read assigned products"
   on public.products for select to authenticated
   using (
     (select public.app_sees_all())
-    or id = any ((select public.app_products()))
+    or id = any (public.app_products())
   );
 
 -- Spelled out per command rather than `for all`, which would OR a second,

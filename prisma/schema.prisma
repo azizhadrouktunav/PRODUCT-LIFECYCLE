@@ -30,6 +30,7 @@ model Lifecycle {
   decomposition  String
   stages         Json              @default("[]")
   storyStages    Json              @default("[]") @map("story_stages")
+  productIds     String[]          @default([]) @map("product_ids")
   groups         CapabilityGroup[]
 
   @@map("lifecycles")
@@ -44,6 +45,7 @@ model CapabilityGroup {
   track        String
   lifecycle    Lifecycle    @relation(fields: [track], references: [id], onDelete: Restrict)
   process      String       @default("")
+  productIds   String[]     @default([]) @map("product_ids")
   capabilities Capability[]
 
   @@index([track])
@@ -58,11 +60,12 @@ model EquipmentType {
 }
 
 model Equipment {
-  id     String @id
-  name   String
-  vendor String @default("")
-  model  String @default("")
-  type   String @default("")
+  id         String   @id
+  name       String
+  vendor     String   @default("")
+  model      String   @default("")
+  type       String   @default("")
+  productIds String[] @default([]) @map("product_ids")
 
   @@map("equipment")
 }
@@ -142,6 +145,7 @@ model Wave {
   state        String    @default("Planned")
   deliveryDate DateTime? @db.Date @map("delivery_date")
   itemIds      String[]  @default([]) @map("item_ids")
+  productIds   String[]  @default([]) @map("product_ids")
 
   @@map("waves")
 }

@@ -4,6 +4,7 @@ import {
   BoxesIcon,
   GitBranchIcon,
   LayersIcon,
+  LayoutDashboardIcon,
   ListTreeIcon,
   LogOutIcon,
   MoonIcon,
@@ -20,7 +21,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { navVisible } from '../lib/rbac';
 
 const NAV = [
-  { to: '/', label: 'Capabilities', icon: ListTreeIcon, end: true },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboardIcon, end: true },
+  { to: '/capabilities', label: 'Capabilities', icon: ListTreeIcon, end: true },
   { to: '/lifecycles', label: 'Lifecycles', icon: GitBranchIcon, end: false },
   { to: '/groups', label: 'Capability Groups', icon: LayersIcon, end: false },
   { to: '/products', label: 'Products', icon: PackageIcon, end: false },

@@ -42,6 +42,7 @@ export type LifecycleInput = {
   decomposition: DecompositionMode;
   stages: StageDef[];
   storyStages: StageDef[];
+  productIds: string[];
 };
 
 export interface NewCapabilityInput {
@@ -73,13 +74,17 @@ export type StoryInput = Pick<
   | 'adrApproved'
 >;
 
-export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type'>;
+export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type' | 'productIds'>;
 export type WaveInput = Pick<
   Wave,
-  'code' | 'name' | 'description' | 'state' | 'deliveryDate' | 'itemIds'
+  'code' | 'name' | 'description' | 'state' | 'deliveryDate' | 'itemIds' | 'productIds'
 >;
 export type ProductInput = Pick<Product, 'name' | 'description'>;
 export type ActorInput = Pick<Actor, 'name' | 'description' | 'productIds'>;
+export type GroupInput = Pick<
+  CapabilityGroup,
+  'name' | 'description' | 'track' | 'process' | 'code' | 'productIds'
+>;
 
 interface RegistryValue {
   loading: boolean;
@@ -99,11 +104,8 @@ interface RegistryValue {
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
   removeCapability: (id: string) => void;
-  addGroup: (name: string, description: string, track: TrackId, process: string, code?: string) => void;
-  updateGroup: (
-    id: string,
-    patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process' | 'code'>>
-  ) => void;
+  addGroup: (input: GroupInput) => void;
+  updateGroup: (id: string, patch: Partial<GroupInput>) => void;
   removeGroup: (id: string) => boolean;
   addLifecycle: (input: LifecycleInput) => Lifecycle;
   updateLifecycle: (id: string, patch: Partial<LifecycleInput>) => void;
@@ -290,6 +292,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         vendor: input.vendor.trim(),
         model: input.model.trim(),
         type: input.type.trim(),
+        productIds: input.productIds ?? [],
       };
       setEquipment((prev) => [...prev, created]);
       void api.upsertEquipment(created).catch((err) => persistError('addEquipment', err));
@@ -309,6 +312,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           vendor: patch.vendor !== undefined ? patch.vendor.trim() : item.vendor,
           model: patch.model !== undefined ? patch.model.trim() : item.model,
           type: patch.type !== undefined ? patch.type.trim() : item.type,
+          productIds: patch.productIds !== undefined ? patch.productIds : item.productIds,
         };
         void api.upsertEquipment(updated).catch((err) => persistError('updateEquipment', err));
         return updated;
@@ -419,6 +423,46 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           productIds: actor.productIds.filter((p) => p !== id),
         };
         void api.upsertActor(updated).catch((err) => persistError('removeProduct actor', err));
+        return updated;
+      });
+      return next;
+    });
+    setLifecycles((prev) => {
+      const next = prev.map((lc) => {
+        if (!lc.productIds.includes(id)) return lc;
+        const updated = { ...lc, productIds: lc.productIds.filter((p) => p !== id) };
+        void api.upsertLifecycle(updated).catch((err) =>
+          persistError('removeProduct lifecycle', err)
+        );
+        return updated;
+      });
+      return next;
+    });
+    setGroups((prev) => {
+      const next = prev.map((g) => {
+        if (!g.productIds.includes(id)) return g;
+        const updated = { ...g, productIds: g.productIds.filter((p) => p !== id) };
+        void api.upsertGroup(updated).catch((err) => persistError('removeProduct group', err));
+        return updated;
+      });
+      return next;
+    });
+    setEquipment((prev) => {
+      const next = prev.map((item) => {
+        if (!item.productIds.includes(id)) return item;
+        const updated = { ...item, productIds: item.productIds.filter((p) => p !== id) };
+        void api.upsertEquipment(updated).catch((err) =>
+          persistError('removeProduct equipment', err)
+        );
+        return updated;
+      });
+      return next;
+    });
+    setWaves((prev) => {
+      const next = prev.map((w) => {
+        if (!w.productIds.includes(id)) return w;
+        const updated = { ...w, productIds: w.productIds.filter((p) => p !== id) };
+        void api.upsertWave(updated).catch((err) => persistError('removeProduct wave', err));
         return updated;
       });
       return next;
@@ -567,36 +611,32 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     [epics, features, stories]
   );
 
-  const addGroup = useCallback(
-    (name: string, description: string, track: TrackId, process: string, code?: string) => {
-      setGroups((prev) => {
-        const normalized = normalizeGroupCode(code ?? '') || uniqueGroupCode(name, prev);
-        const unique = prev.some((g) => g.code === normalized)
-          ? uniqueGroupCode(name, prev)
-          : normalized;
-        const created: CapabilityGroup = {
-          id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
-            .replace(/[^a-zA-Z]/g, '')
-            .slice(0, 3)
-            .toUpperCase()}`,
-          name: name.trim(),
-          description: description.trim(),
-          code: unique,
-          track,
-          process: process.trim(),
-        };
-        void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
-        return [...prev, created];
-      });
-    },
-    []
-  );
+  const addGroup = useCallback((input: GroupInput) => {
+    setGroups((prev) => {
+      const name = input.name.trim();
+      const normalized = normalizeGroupCode(input.code ?? '') || uniqueGroupCode(name, prev);
+      const unique = prev.some((g) => g.code === normalized)
+        ? uniqueGroupCode(name, prev)
+        : normalized;
+      const created: CapabilityGroup = {
+        id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
+          .replace(/[^a-zA-Z]/g, '')
+          .slice(0, 3)
+          .toUpperCase()}`,
+        name,
+        description: input.description.trim(),
+        code: unique,
+        track: input.track,
+        process: input.process.trim(),
+        productIds: input.productIds ?? [],
+      };
+      void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
+      return [...prev, created];
+    });
+  }, []);
 
   const updateGroup = useCallback(
-    (
-      id: string,
-      patch: Partial<Pick<CapabilityGroup, 'name' | 'description' | 'track' | 'process' | 'code'>>
-    ) => {
+    (id: string, patch: Partial<GroupInput>) => {
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id !== id) return g;
@@ -615,6 +655,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             description: patch.description !== undefined ? patch.description.trim() : g.description,
             process: patch.process !== undefined ? patch.process.trim() : g.process,
             code: nextCode,
+            productIds: patch.productIds !== undefined ? patch.productIds : g.productIds,
           };
           void api.upsertGroup(updated).catch((err) => persistError('updateGroup', err));
           return updated;
@@ -698,6 +739,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         decomposition: input.decomposition,
         stages: input.stages,
         storyStages: input.decomposition === 'delivery' ? input.storyStages : [],
+        productIds: input.productIds ?? [],
       };
       setLifecycles((prev) => [...prev, created]);
       void api.upsertLifecycle(created).catch((err) => persistError('addLifecycle', err));
@@ -721,6 +763,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             decomposition === 'delivery'
               ? (patch.storyStages ?? lc.storyStages)
               : [],
+          productIds: patch.productIds !== undefined ? patch.productIds : lc.productIds,
         };
         void api.upsertLifecycle(updated).catch((err) => persistError('updateLifecycle', err));
         return updated;
@@ -994,6 +1037,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           Vendor: e.vendor,
           Model: e.model,
           Type: e.type,
+          'Product IDs': (e.productIds ?? []).join('; '),
         }));
       }
       if (dataset === 'products') {
@@ -1018,6 +1062,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         Code: g.code,
         Track: g.track,
         Process: g.process,
+        'Product IDs': (g.productIds ?? []).join('; '),
       }));
     };
 
@@ -1242,13 +1287,19 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             vendor: (r['Vendor'] ?? '').trim(),
             model: (r['Model'] ?? '').trim(),
             type: typeName,
+            productIds: list(r['Product IDs'] ?? '').filter((p) => productMap.has(p)),
           };
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
             next[at] = { ...next[at], ...patch };
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('EQP', next, 2), ...patch });
+            next.push({
+              id: id || nextId('EQP', next, 2),
+              ...patch,
+              productIds:
+                patch.productIds.length > 0 ? patch.productIds : products.map((p) => p.id),
+            });
             result.created += 1;
           }
         });
@@ -1331,6 +1382,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           description: (r['Description'] ?? '').trim(),
           track,
           process: (r['Process'] ?? '').trim(),
+          productIds: list(r['Product IDs'] ?? '').filter((pid) => productMap.has(pid)),
         };
         const at = id ? next.findIndex((g) => g.id === id) : -1;
         if (at >= 0) {
@@ -1343,6 +1395,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             ...next[at],
             ...patch,
             code: clash ? uniqueGroupCode(name, next, next[at].id) : code,
+            productIds:
+              patch.productIds.length > 0 ? patch.productIds : next[at].productIds,
           };
           result.updated += 1;
         } else {
@@ -1360,6 +1414,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
                 .toUpperCase()}`,
             ...patch,
             code: unique,
+            productIds:
+              patch.productIds.length > 0 ? patch.productIds : products.map((p) => p.id),
           });
           result.created += 1;
         }

@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { ProductMultiSelect } from './ProductMultiSelect';
 import { baseGroupCode, uniqueGroupCode, useRegistry } from '../contexts/RegistryContext';
+import { useAuth } from '../contexts/AuthContext';
 import type { CapabilityGroup, TrackId } from '../types/registry';
 import { DECOMPOSITION_LABEL } from '../types/registry';
+import { sharesProducts } from '../lib/rbac';
 
 export function AddGroupModal({
   open,
@@ -15,15 +18,26 @@ export function AddGroupModal({
   group?: CapabilityGroup | null;
 }) {
   const { addGroup, updateGroup, lifecycles, groups } = useRegistry();
+  const { entityVisible } = useAuth();
   const isEdit = !!group;
-  const defaultTrack =
-    lifecycles.find((l) => l.decomposition === 'delivery')?.id ?? lifecycles[0]?.id ?? '';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [code, setCode] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
-  const [track, setTrack] = useState<TrackId>(defaultTrack);
+  const [track, setTrack] = useState<TrackId>('');
   const [process, setProcess] = useState('');
+  const [productIds, setProductIds] = useState<string[]>([]);
+
+  const visibleLifecycles = useMemo(() => {
+    const base = lifecycles.filter((lc) => entityVisible(lc.productIds));
+    if (productIds.length === 0) return base;
+    return base.filter((lc) => sharesProducts(lc.productIds, productIds));
+  }, [lifecycles, entityVisible, productIds]);
+
+  const defaultTrack =
+    visibleLifecycles.find((l) => l.decomposition === 'delivery')?.id ??
+    visibleLifecycles[0]?.id ??
+    '';
 
   useEffect(() => {
     if (!open) return;
@@ -34,6 +48,7 @@ export function AddGroupModal({
       setCodeTouched(true);
       setTrack(group.track);
       setProcess(group.process);
+      setProductIds(group.productIds ?? []);
     } else {
       setName('');
       setDescription('');
@@ -41,6 +56,7 @@ export function AddGroupModal({
       setCodeTouched(false);
       setTrack(defaultTrack);
       setProcess('');
+      setProductIds([]);
     }
   }, [open, group, defaultTrack]);
 
@@ -49,11 +65,23 @@ export function AddGroupModal({
     setCode(baseGroupCode(name));
   }, [open, isEdit, codeTouched, name]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (track && !visibleLifecycles.some((l) => l.id === track)) {
+      setTrack(defaultTrack);
+    }
+  }, [open, track, visibleLifecycles, defaultTrack]);
+
   const normalizedCode = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
   const codeClash = groups.some(
     (g) => g.id !== group?.id && g.code === normalizedCode && normalizedCode !== ''
   );
-  const valid = name.trim().length > 1 && track !== '' && normalizedCode.length > 0 && !codeClash;
+  const valid =
+    name.trim().length > 1 &&
+    track !== '' &&
+    normalizedCode.length > 0 &&
+    !codeClash &&
+    productIds.length > 0;
 
   const previewId = useMemo(() => {
     const c = normalizedCode || uniqueGroupCode(name || 'G', groups, group?.id);
@@ -63,9 +91,23 @@ export function AddGroupModal({
   function submit() {
     if (!valid) return;
     if (group) {
-      updateGroup(group.id, { name, description, track, process, code: normalizedCode });
+      updateGroup(group.id, {
+        name,
+        description,
+        track,
+        process,
+        code: normalizedCode,
+        productIds,
+      });
     } else {
-      addGroup(name, description, track, process, normalizedCode);
+      addGroup({
+        name,
+        description,
+        track,
+        process,
+        code: normalizedCode,
+        productIds,
+      });
     }
     onClose();
   }
@@ -129,13 +171,19 @@ export function AddGroupModal({
           />
         </Field>
 
+        <ProductMultiSelect productIds={productIds} onChange={setProductIds} />
+
         <div>
           <span className="mb-1.5 block text-xs font-medium text-soft">Lifecycle</span>
-          {lifecycles.length === 0 ? (
-            <p className="text-xs text-mute">Create a lifecycle first on the Lifecycles page.</p>
+          {visibleLifecycles.length === 0 ? (
+            <p className="text-xs text-mute">
+              {productIds.length === 0
+                ? 'Select products first, then pick a lifecycle that shares them.'
+                : 'No lifecycle shares these products. Create one on the Lifecycles page.'}
+            </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {lifecycles.map((t) => {
+              {visibleLifecycles.map((t) => {
                 const active = track === t.id;
                 return (
                   <button

@@ -19,6 +19,7 @@ import {
   canSetStoryStageWithPermissions,
   canWithPermissions,
   capabilityVisibleToUser,
+  entityVisibleToUser,
   isReadOnlyFromPermissions,
   productVisibleToUser,
   roleDisplayLabel,
@@ -48,6 +49,7 @@ interface AuthValue {
   permissions: RbacAction[];
   capabilityVisible: (c: Pick<Capability, 'productIds'>) => boolean;
   productVisible: (productId: string) => boolean;
+  entityVisible: (productIds: string[] | null | undefined) => boolean;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -165,6 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       permissions,
       capabilityVisible: (c) => capabilityVisibleToUser(c, seesAll, assignedProductIds),
       productVisible: (id) => productVisibleToUser(id, seesAll, assignedProductIds),
+      entityVisible: (ids) => entityVisibleToUser(ids, seesAll, assignedProductIds),
     }),
     [
       loading,

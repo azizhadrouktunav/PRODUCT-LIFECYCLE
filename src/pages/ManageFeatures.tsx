@@ -36,7 +36,7 @@ export function ManageFeaturesPage() {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That epic is not in the register.</p>
-        <Link to="/" className="mt-2 inline-block text-xs text-brand-bright hover:text-strong">
+        <Link to="/capabilities" className="mt-2 inline-block text-xs text-brand-bright hover:text-strong">
           Back to the register
         </Link>
       </div>);

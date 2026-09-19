@@ -96,8 +96,8 @@ async function run(client) {
   const lifecycleId = lifecycleRows[0].id;
 
   await client.query(
-    `insert into public.capability_groups (id, name, description, track, process)
-     values ('RBACG', 'RBAC test group', '', $1, '')`,
+    `insert into public.capability_groups (id, name, description, track, process, code, product_ids)
+     values ('RBACG', 'RBAC test group', '', $1, '', 'RBAC', '{RBACP-MINE,RBACP-OTHER}')`,
     [lifecycleId]
   );
 
@@ -116,8 +116,24 @@ async function run(client) {
   `);
 
   await client.query(`
-    insert into public.equipment (id, name, vendor, model, type)
-    values ('EQ-RBAC', 'RBAC test device', '', '', '')
+    insert into public.equipment (id, name, vendor, model, type, product_ids)
+    values
+      ('EQ-RBACMINE', 'Visible device', '', '', '', '{RBACP-MINE}'),
+      ('EQ-RBACOTHER', 'Hidden device', '', '', '', '{RBACP-OTHER}')
+  `);
+
+  await client.query(`
+    insert into public.lifecycles (id, label, summary, decomposition, stages, story_stages, product_ids)
+    values
+      ('LC-RBACMINE', 'Mine LC', '', 'none', '[]'::jsonb, '[]'::jsonb, '{RBACP-MINE}'),
+      ('LC-RBACOTHER', 'Other LC', '', 'none', '[]'::jsonb, '[]'::jsonb, '{RBACP-OTHER}')
+  `);
+
+  await client.query(`
+    insert into public.waves (id, code, name, description, state, item_ids, product_ids)
+    values
+      ('WAVE-RBACMINE', 'W-91', 'Mine wave', '', 'Planned', '{}', '{RBACP-MINE}'),
+      ('WAVE-RBACOTHER', 'W-92', 'Other wave', '', 'Planned', '{}', '{RBACP-OTHER}')
   `);
 
   await client.query(`
@@ -211,8 +227,32 @@ async function run(client) {
     actors.rows.map((r) => r.id).join(', ') || 'none'
   );
 
-  const equip = await client.query(`select id from public.equipment where id = 'EQ-RBAC'`);
-  record('Equipment stays readable company-wide', equip.rowCount === 1);
+  const equip = await client.query(
+    `select id from public.equipment where id in ('EQ-RBACMINE', 'EQ-RBACOTHER')`
+  );
+  record(
+    'Equipment is product scoped',
+    equip.rowCount === 1 && equip.rows[0].id === 'EQ-RBACMINE',
+    equip.rows.map((r) => r.id).join(', ') || 'none'
+  );
+
+  const lcs = await client.query(
+    `select id from public.lifecycles where id in ('LC-RBACMINE', 'LC-RBACOTHER')`
+  );
+  record(
+    'Lifecycles are product scoped',
+    lcs.rowCount === 1 && lcs.rows[0].id === 'LC-RBACMINE',
+    lcs.rows.map((r) => r.id).join(', ') || 'none'
+  );
+
+  const waveRows = await client.query(
+    `select id from public.waves where id in ('WAVE-RBACMINE', 'WAVE-RBACOTHER')`
+  );
+  record(
+    'Waves are product scoped',
+    waveRows.rowCount === 1 && waveRows.rows[0].id === 'WAVE-RBACMINE',
+    waveRows.rows.map((r) => r.id).join(', ') || 'none'
+  );
 
   const status = await client.query(`select user_id from public.app_user_status`);
   record(
@@ -232,15 +272,15 @@ async function run(client) {
   const equipInsert = await attempt(
     client,
     'equipment insert',
-    `insert into public.equipment (id, name, vendor, model, type)
-     values ('EQ-RBAC2', 'Added by the technical manager', '', '', '')`
+    `insert into public.equipment (id, name, vendor, model, type, product_ids)
+     values ('EQ-RBAC2', 'Added by the technical manager', '', '', '', '{RBACP-MINE}')`
   );
   record('Equipment insert is allowed', equipInsert.allowed, equipInsert.error);
 
   const equipUpdate = await attempt(
     client,
     'equipment update',
-    `update public.equipment set name = 'Renamed' where id = 'EQ-RBAC'`
+    `update public.equipment set name = 'Renamed' where id = 'EQ-RBACMINE'`
   );
   record(
     'Equipment update is allowed',
@@ -248,10 +288,21 @@ async function run(client) {
     equipUpdate.error ?? `${equipUpdate.rowCount} row(s)`
   );
 
+  const equipOtherDenied = await attempt(
+    client,
+    'equipment other product',
+    `update public.equipment set name = 'Nope' where id = 'EQ-RBACOTHER'`
+  );
+  record(
+    'Equipment on another product is not writable',
+    !equipOtherDenied.allowed || equipOtherDenied.rowCount === 0,
+    equipOtherDenied.error ?? `${equipOtherDenied.rowCount} row(s)`
+  );
+
   const assign = await attempt(
     client,
     'assign capabilities',
-    `select public.app_set_equipment_capabilities('EQ-RBAC', '{CAP-RBACMINE}'::text[])`
+    `select public.app_set_equipment_capabilities('EQ-RBACMINE', '{CAP-RBACMINE}'::text[])`
   );
   record('Assigning capabilities to equipment is allowed', assign.allowed, assign.error);
 
@@ -266,7 +317,7 @@ async function run(client) {
     const other = assigned.rows.find((r) => r.id === 'CAP-RBACOTHER');
     record(
       'The assignment only touched the visible capability',
-      mine.equipment_ids.includes('EQ-RBAC') && !other.equipment_ids.includes('EQ-RBAC')
+      mine.equipment_ids.includes('EQ-RBACMINE') && !other.equipment_ids.includes('EQ-RBACMINE')
     );
   }
 

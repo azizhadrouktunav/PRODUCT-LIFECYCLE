@@ -56,6 +56,7 @@ export interface Lifecycle {
   decomposition: DecompositionMode;
   stages: StageDef[];
   storyStages: StageDef[];
+  productIds: string[];
 }
 
 /** @deprecated Use Lifecycle — kept as an alias for gradual migration. */
@@ -165,6 +166,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     decomposition: 'none',
     stages: HARDWARE_STAGES,
     storyStages: [],
+    productIds: [],
   },
   delivery: {
     label: 'Delivery track',
@@ -173,6 +175,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
     decomposition: 'delivery',
     stages: DELIVERY_STAGES,
     storyStages: DEFAULT_STORY_STAGES,
+    productIds: [],
   },
 };
 
@@ -240,6 +243,7 @@ export interface Equipment {
   vendor: string;
   model: string;
   type: string;
+  productIds: string[];
 }
 
 export interface RecordCounts {
@@ -316,6 +320,7 @@ export interface CapabilityGroup {
   track: TrackId;
   /** How this group is worked, shown behind the info icon on the Groups page. */
   process: string;
+  productIds: string[];
 }
 
 export interface Capability {
@@ -398,6 +403,7 @@ export interface Wave {
   deliveryDate: string;
   /** Mixed ids — CAP-…, EPIC-…, FEAT-… or US-… */
   itemIds: string[];
+  productIds: string[];
 }
 
 export function itemKind(id: string): 'capability' | 'epic' | 'feature' | 'story' | 'unknown' {

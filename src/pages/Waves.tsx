@@ -12,7 +12,7 @@ import { waveCounts, waveStories } from '../utils/scope';
 export function WavesPage() {
   const { waves, epics, features, stories, getCapability, getEpic, getFeature, getStory, removeWave } =
   useRegistry();
-  const { can, capabilityVisible } = useAuth();
+  const { can, capabilityVisible, entityVisible } = useAuth();
   const canManage = can('manage_waves');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Wave | null>(null);
@@ -43,8 +43,8 @@ export function WavesPage() {
   }
 
   const visibleWaves = waves
-    .map((w) => ({ wave: w, itemIds: w.itemIds.filter(itemVisible) }))
-    .filter((entry) => entry.itemIds.length > 0);
+    .filter((w) => entityVisible(w.productIds))
+    .map((w) => ({ wave: w, itemIds: w.itemIds.filter(itemVisible) }));
 
   return (
     <div>

@@ -18,14 +18,18 @@ export function EquipmentPage() {
     removeEquipment,
     removeEquipmentType,
   } = useRegistry();
-  const { can, capabilityVisible } = useAuth();
+  const { can, capabilityVisible, entityVisible } = useAuth();
   const canEdit = can('manage_equipment');
-  // Equipment is company-wide, but the capabilities it serves are product-scoped.
+  const visibleEquipment = useMemo(
+    () => equipment.filter((e) => entityVisible(e.productIds)),
+    [equipment, entityVisible]
+  );
+  // Capabilities assigned to equipment stay product-scoped.
   const visibleHardware = useMemo(
     () => hardwareCapabilities.filter(capabilityVisible),
     [hardwareCapabilities, capabilityVisible]
   );
-  const [activeId, setActiveId] = useState(equipment[0]?.id ?? '');
+  const [activeId, setActiveId] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [addingEquipment, setAddingEquipment] = useState(false);
   const [addingType, setAddingType] = useState(false);
@@ -33,16 +37,16 @@ export function EquipmentPage() {
   const [draft, setDraft] = useState<string[]>([]);
 
   useEffect(() => {
-    if (equipment.length === 0) {
+    if (visibleEquipment.length === 0) {
       setActiveId('');
       return;
     }
-    if (!equipment.some((e) => e.id === activeId)) {
-      setActiveId(equipment[0].id);
+    if (!visibleEquipment.some((e) => e.id === activeId)) {
+      setActiveId(visibleEquipment[0].id);
     }
-  }, [equipment, activeId]);
+  }, [visibleEquipment, activeId]);
 
-  const active = equipment.find((e) => e.id === activeId) ?? equipment[0];
+  const active = visibleEquipment.find((e) => e.id === activeId) ?? visibleEquipment[0];
   const supported = useMemo(
     () =>
       active ? visibleHardware.filter((c) => c.equipmentIds.includes(active.id)) : [],
@@ -81,7 +85,7 @@ export function EquipmentPage() {
     <div>
       <PageHeader
         title="Equipment"
-        count={`${equipment.length} models`}
+        count={`${visibleEquipment.length} models`}
         description="What each device model can actually do. Hardware capabilities are assigned here, and the assignment is the same record the register reads from."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
@@ -116,7 +120,7 @@ export function EquipmentPage() {
         ) : (
           <ul className="mt-3 flex flex-wrap gap-2">
             {sortedTypes.map((t) => {
-              const count = equipment.filter((e) => e.type === t.name).length;
+              const count = visibleEquipment.filter((e) => e.type === t.name).length;
               return (
                 <li
                   key={t.id}
@@ -142,7 +146,7 @@ export function EquipmentPage() {
         )}
       </section>
 
-      {equipment.length === 0 || !active ? (
+      {visibleEquipment.length === 0 || !active ? (
         <p className="mt-8 border-t border-line pt-8 text-sm text-mute">
           No equipment models yet. Use <span className="text-soft">Add equipment</span> or import an
           Equipment sheet to get started.
@@ -150,7 +154,7 @@ export function EquipmentPage() {
       ) : (
         <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
           <nav aria-label="Equipment models" className="border-t border-line">
-            {equipment.map((e) => {
+            {visibleEquipment.map((e) => {
               const isActive = e.id === active.id;
               const count = visibleHardware.filter((c) =>
                 c.equipmentIds.includes(e.id)

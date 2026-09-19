@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { ProductMultiSelect } from './ProductMultiSelect';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Equipment } from '../types/registry';
 
@@ -21,6 +22,7 @@ export function EquipmentModal({
   const [vendor, setVendor] = useState('');
   const [model, setModel] = useState('');
   const [type, setType] = useState('');
+  const [productIds, setProductIds] = useState<string[]>([]);
 
   const sortedTypes = useMemo(
     () => [...equipmentTypes].sort((a, b) => a.name.localeCompare(b.name)),
@@ -34,11 +36,13 @@ export function EquipmentModal({
       setVendor(equipment.vendor);
       setModel(equipment.model);
       setType(equipment.type || '');
+      setProductIds(equipment.productIds ?? []);
     } else {
       setName('');
       setVendor('');
       setModel('');
       setType(equipmentTypes[0]?.name ?? '');
+      setProductIds([]);
     }
   }, [open, equipment, equipmentTypes]);
 
@@ -48,14 +52,15 @@ export function EquipmentModal({
     vendor.trim() !== '' &&
     model.trim() !== '' &&
     type.trim() !== '' &&
-    hasTypes;
+    hasTypes &&
+    productIds.length > 0;
 
   function submit() {
     if (!valid) return;
     if (equipment) {
-      updateEquipment(equipment.id, { name, vendor, model, type });
+      updateEquipment(equipment.id, { name, vendor, model, type, productIds });
     } else {
-      const created = addEquipment({ name, vendor, model, type });
+      const created = addEquipment({ name, vendor, model, type, productIds });
       onCreated?.(created.id);
     }
     onClose();
@@ -92,6 +97,7 @@ export function EquipmentModal({
             placeholder="e.g. Teltonika FMB640"
           />
         </Field>
+        <ProductMultiSelect productIds={productIds} onChange={setProductIds} />
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Vendor" required>
             <input

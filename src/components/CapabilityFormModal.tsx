@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { ProductMultiSelect } from './ProductMultiSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
 import { CAPABILITY_STATUSES, stageIndex, usesEquipment } from '../types/registry';
+import { sharesProducts } from '../lib/rbac';
 
 interface Props {
   open: boolean;
@@ -17,19 +19,30 @@ interface Props {
 }
 
 export function CapabilityFormModal({ open, onClose, capability = null, onCreated }: Props) {
-  const { groups, products, equipment, addCapability, updateCapability, getLifecycle } =
-    useRegistry();
-  const { productVisible } = useAuth();
+  const { groups, equipment, addCapability, updateCapability, getLifecycle } = useRegistry();
+  const { entityVisible } = useAuth();
   const isEdit = !!capability;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [groupId, setGroupId] = useState(groups[0]?.id ?? '');
+  const [groupId, setGroupId] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<string>('Identified');
   const [status, setStatus] = useState<CapabilityStatus | ''>('');
   const [touched, setTouched] = useState(false);
+
+  const eligibleGroups = useMemo(() => {
+    const visible = groups.filter((g) => entityVisible(g.productIds));
+    if (productIds.length === 0) return visible;
+    return visible.filter((g) => sharesProducts(g.productIds, productIds));
+  }, [groups, entityVisible, productIds]);
+
+  const eligibleEquipment = useMemo(() => {
+    const visible = equipment.filter((e) => entityVisible(e.productIds));
+    if (productIds.length === 0) return visible;
+    return visible.filter((e) => sharesProducts(e.productIds, productIds));
+  }, [equipment, entityVisible, productIds]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,13 +58,19 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
     } else {
       setName('');
       setDescription('');
-      setGroupId(groups[0]?.id ?? '');
+      setGroupId('');
       setProductIds([]);
       setEquipmentIds([]);
       setProgress('Identified');
       setStatus('');
     }
-  }, [open, capability, groups]);
+  }, [open, capability]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (groupId && eligibleGroups.some((g) => g.id === groupId)) return;
+    setGroupId(eligibleGroups[0]?.id ?? '');
+  }, [open, groupId, eligibleGroups]);
 
   const trackId = groups.find((g) => g.id === groupId)?.track ?? '';
   const lifecycle = getLifecycle(trackId);
@@ -63,6 +82,12 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       setProgress(lifecycle.stages[0]?.name ?? 'Identified');
     }
   }, [lifecycle, progress]);
+
+  function toggleEquip(id: string) {
+    setEquipmentIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
 
   function submit() {
     setTouched(true);
@@ -80,25 +105,17 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
       });
     } else {
       const created = addCapability({
-        name,
-        description,
+        name: name.trim(),
+        description: description.trim(),
         groupId,
         productIds,
         jiraEpic: '',
-        equipmentIds,
+        equipmentIds: isHardware ? equipmentIds : [],
       });
       onCreated?.(created);
     }
     onClose();
   }
-
-  function toggle(list: string[], id: string, set: (v: string[]) => void) {
-    set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  }
-
-  const sortedProducts = [...products]
-    .filter((p) => productVisible(p.id))
-    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <Modal
@@ -140,14 +157,28 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
           />
         </Field>
 
+        <ProductMultiSelect productIds={productIds} onChange={setProductIds} />
+
         <Field label="Capability group" required>
-          <select className={inputClass} value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name} — {getLifecycle(g.track).label}
-              </option>
-            ))}
-          </select>
+          {eligibleGroups.length === 0 ? (
+            <p className="rounded-md border border-line-strong bg-ink-900 p-3 text-xs text-mute">
+              {productIds.length === 0
+                ? 'Select products first, then pick a group that shares them.'
+                : 'No group shares these products. Create one on Capability Groups.'}
+            </p>
+          ) : (
+            <select
+              className={inputClass}
+              value={groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+            >
+              {eligibleGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name} — {getLifecycle(g.track).label}
+                </option>
+              ))}
+            </select>
+          )}
         </Field>
 
         {isEdit && (
@@ -182,80 +213,48 @@ export function CapabilityFormModal({ open, onClose, capability = null, onCreate
           </div>
         )}
 
-        <div>
-          <span className="mb-1.5 flex items-baseline gap-2 text-xs font-medium text-soft">
-            Products <span className="text-brand-bright">*</span>
-            <span className="font-normal text-mute">
-              {productIds.length > 0 ? `${productIds.length} selected` : 'select one or more'}
-            </span>
-          </span>
-          {sortedProducts.length === 0 ? (
-            <p className="rounded-md border border-line-strong bg-ink-900 p-3 text-xs text-mute">
-              No products yet. Add products first, then assign them here.
-            </p>
-          ) : (
-            <div className="scroll-thin flex max-h-64 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-line-strong bg-ink-900 p-3">
-              {sortedProducts.map((p) => {
-                const active = productIds.includes(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => toggle(productIds, p.id, setProductIds)}
-                    title={p.description}
-                    aria-pressed={active}
-                    className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 text-2xs transition-colors duration-150 ease-out ${
-                      active
-                        ? 'border-brand bg-brand/10 text-strong'
-                        : 'border-line-strong text-mute hover:text-strong'
-                    }`}
-                  >
-                    <span className="font-mono">{p.id}</span>
-                    <span className="text-soft">{p.name}</span>
-                    {active && <CheckIcon className="h-3 w-3 text-brand-bright" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
         {isHardware && (
           <div>
             <span className="mb-1.5 flex items-baseline gap-2 text-xs font-medium text-soft">
               Equipment compatibility
               <span className="font-normal text-mute">required for hardware capabilities</span>
             </span>
-            <div className="grid gap-1.5 rounded-md border border-line-strong bg-ink-900 p-3 sm:grid-cols-2">
-              {equipment.map((eq) => {
-                const active = equipmentIds.includes(eq.id);
-                return (
-                  <button
-                    key={eq.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggle(equipmentIds, eq.id, setEquipmentIds)}
-                    className={`flex items-center justify-between gap-3 rounded border px-2.5 py-2 text-left transition-colors duration-150 ease-out ${
-                      active
-                        ? 'border-aqua/50 bg-aqua/5'
-                        : 'border-transparent hover:border-line-strong'
-                    }`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs text-strong">{eq.name}</span>
-                      <span className="block truncate text-2xs text-mute">{eq.type}</span>
-                    </span>
-                    {active && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-aqua" />}
-                  </button>
-                );
-              })}
-            </div>
+            {eligibleEquipment.length === 0 ? (
+              <p className="rounded-md border border-line-strong bg-ink-900 p-3 text-xs text-mute">
+                No equipment shares these products yet.
+              </p>
+            ) : (
+              <div className="grid gap-1.5 rounded-md border border-line-strong bg-ink-900 p-3 sm:grid-cols-2">
+                {eligibleEquipment.map((eq) => {
+                  const active = equipmentIds.includes(eq.id);
+                  return (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => toggleEquip(eq.id)}
+                      className={`flex items-center justify-between gap-3 rounded border px-2.5 py-2 text-left transition-colors duration-150 ease-out ${
+                        active
+                          ? 'border-aqua/50 bg-aqua/5'
+                          : 'border-transparent hover:border-line-strong'
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs text-strong">{eq.name}</span>
+                        <span className="block truncate text-2xs text-mute">{eq.type}</span>
+                      </span>
+                      {active && <CheckIcon className="h-3.5 w-3.5 shrink-0 text-aqua" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {touched && !valid && (
           <p className="text-xs text-danger">
-            Give the capability a name and at least one product.
+            Give the capability a name, at least one product, and a matching group.
           </p>
         )}
       </div>

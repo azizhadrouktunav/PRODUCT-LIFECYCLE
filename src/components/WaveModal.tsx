@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, SearchIcon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { ProductMultiSelect } from './ProductMultiSelect';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Wave, WaveState } from '../types/registry';
 import { WAVE_STATES } from '../types/registry';
+import { sharesProducts } from '../lib/rbac';
 
 interface Props {
   open: boolean;
@@ -71,12 +74,14 @@ function Row({
 
 export function WaveModal({ open, onClose, wave = null }: Props) {
   const { capabilities, epicsOf, featuresOf, storiesOf, waves, addWave, updateWave } = useRegistry();
+  const { capabilityVisible } = useAuth();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [state, setState] = useState<WaveState>('Planned');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [itemIds, setItemIds] = useState<string[]>([]);
+  const [productIds, setProductIds] = useState<string[]>([]);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string[]>([]);
 
@@ -98,25 +103,31 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
     setState(wave?.state ?? 'Planned');
     setDeliveryDate(wave?.deliveryDate ?? '');
     setItemIds(wave?.itemIds ?? []);
+    setProductIds(wave?.productIds ?? []);
     setQuery('');
     setExpanded(wave?.itemIds.filter((id) => id.startsWith('CAP-') || id.startsWith('EPIC-')) ?? []);
   }, [open, wave, waves]);
 
-  const valid = name.trim().length > 1 && code.trim() !== '';
+  const valid = name.trim().length > 1 && code.trim() !== '' && productIds.length > 0;
 
   const visible = useMemo(() => {
+    const scoped = capabilities.filter(
+      (c) =>
+        capabilityVisible(c) &&
+        (productIds.length === 0 || sharesProducts(c.productIds, productIds))
+    );
     const q = query.trim().toLowerCase();
-    if (!q) return capabilities;
-    return capabilities.filter(
+    if (!q) return scoped;
+    return scoped.filter(
       (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
     );
-  }, [capabilities, query]);
+  }, [capabilities, query, capabilityVisible, productIds]);
 
   function toggleItem(id: string) {
-    setItemIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+    setItemIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   }
   function toggleExpand(id: string) {
-    setExpanded((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+    setExpanded((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   }
 
   function submit() {
@@ -127,10 +138,11 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
       description: description.trim(),
       state,
       deliveryDate,
-      itemIds
+      itemIds,
+      productIds,
     };
-    if (wave) updateWave(wave.id, payload);else
-    addWave(payload);
+    if (wave) updateWave(wave.id, payload);
+    else addWave(payload);
     onClose();
   }
 
@@ -179,6 +191,8 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
             placeholder="What this increment proves on production." />
           
         </Field>
+
+        <ProductMultiSelect productIds={productIds} onChange={setProductIds} />
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="State">

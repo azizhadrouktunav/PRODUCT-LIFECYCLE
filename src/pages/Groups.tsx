@@ -78,18 +78,19 @@ function ProcessModal({ group, onClose }: { group: CapabilityGroup | null; onClo
 }
 
 export function GroupsPage() {
-  const { groups, capabilities, removeGroup, getLifecycle } = useRegistry();
-  const { can, capabilityVisible } = useAuth();
+  const { groups, capabilities, removeGroup, getLifecycle, getProduct } = useRegistry();
+  const { can, capabilityVisible, entityVisible } = useAuth();
   const canManage = can('manage_groups');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CapabilityGroup | null>(null);
   const [process, setProcess] = useState<CapabilityGroup | null>(null);
+  const visibleGroups = groups.filter((g) => entityVisible(g.productIds));
 
   return (
     <div>
       <PageHeader
         title="Capability Groups"
-        count={`${groups.length} groups`}
+        count={`${visibleGroups.length} groups`}
         description="Every capability belongs to exactly one group. The group decides which layer owns delivery, which lifecycle the capability follows, and whether equipment compatibility applies."
         action={
           <div className="flex flex-wrap items-center gap-1.5">
@@ -104,62 +105,69 @@ export function GroupsPage() {
         }
       />
 
-      <div className="mt-4 space-y-6">
-        {groups.map((g) => {
+      <div className="mt-4 space-y-4">
+        {visibleGroups.map((g) => {
           const members = capabilities.filter(
             (c) => c.groupId === g.id && capabilityVisible(c)
-          );
-          const lifecycle = getLifecycle(g.track);
+          ).length;
+          const track = getLifecycle(g.track);
           return (
-            <section key={g.id}>
+            <article key={g.id} className="border-t border-line pt-4">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h2 className="text-base font-semibold text-strong">{g.name}</h2>
-                <button
-                  type="button"
-                  onClick={() => setProcess(g)}
-                  aria-label={`Show the ${g.name} process`}
-                  title="Show the process for this group"
-                  className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-                >
-                  <InfoIcon className="h-3.5 w-3.5" />
-                </button>
-                {canManage && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setEditing(g)}
-                      aria-label={`Edit ${g.name}`}
-                      title="Edit group"
-                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-                    >
-                      <PencilIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeGroup(g.id)}
-                      aria-label={`Delete ${g.name}`}
-                      title="Delete group"
-                      className="rounded p-0.5 text-mute transition-colors duration-150 ease-out hover:text-danger"
-                    >
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-                <span className="font-mono text-2xs text-ink-500">{g.id}</span>
+                <span className="font-mono text-2xs text-ink-500">{g.code}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">
-                  {lifecycle.label} · {lifecycle.stages.length} stages
+                  {track.label}
                 </span>
-                {usesEquipment(lifecycle) && (
-                  <span className="rounded border border-aqua/40 px-1.5 py-0.5 text-2xs text-aqua">
-                    equipment-bound
+                <span className="font-mono text-2xs text-mute">
+                  {members} capability{members === 1 ? '' : 'ies'}
+                </span>
+                {(g.productIds ?? []).map((id) => (
+                  <span
+                    key={id}
+                    className="rounded border border-line-strong px-1.5 py-0.5 font-mono text-2xs text-mute"
+                  >
+                    {getProduct(id)?.name ?? id}
                   </span>
-                )}
-                <span className="ml-auto font-mono text-2xs text-mute">
-                  {members.length} capabilities
+                ))}
+                <span className="ml-auto flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setProcess(g)}
+                    aria-label={`Process for ${g.name}`}
+                    className="rounded p-1 text-mute hover:text-strong"
+                  >
+                    <InfoIcon className="h-3.5 w-3.5" />
+                  </button>
+                  {canManage && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEditing(g)}
+                        aria-label={`Edit ${g.name}`}
+                        className="rounded p-1 text-mute hover:text-brand-bright"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeGroup(g.id)}
+                        aria-label={`Delete ${g.name}`}
+                        className="rounded p-1 text-mute hover:text-danger"
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
                 </span>
               </div>
-              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">{g.description}</p>
-            </section>
+              {g.description && (
+                <p className="mt-1 max-w-3xl text-sm text-mute">{g.description}</p>
+              )}
+              {usesEquipment(track) && (
+                <p className="mt-1 text-2xs text-aqua">Equipment-style lifecycle</p>
+              )}
+            </article>
           );
         })}
       </div>

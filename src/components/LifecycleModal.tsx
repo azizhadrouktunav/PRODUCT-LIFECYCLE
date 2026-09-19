@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
+import { ProductMultiSelect } from './ProductMultiSelect';
 import { useRegistry } from '../contexts/RegistryContext';
 import type {
   DecompositionMode,
@@ -176,6 +177,7 @@ export function LifecycleModal({
   const [storyStages, setStoryStages] = useState<StageDef[]>(
     LIFECYCLE_TEMPLATES.delivery.storyStages
   );
+  const [productIds, setProductIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -185,6 +187,7 @@ export function LifecycleModal({
       setDecomposition(lifecycle.decomposition);
       setStages(lifecycle.stages.map((s) => ({ ...s })));
       setStoryStages(lifecycle.storyStages.map((s) => ({ ...s })));
+      setProductIds(lifecycle.productIds ?? []);
     } else {
       const tpl = LIFECYCLE_TEMPLATES.delivery;
       setLabel('');
@@ -192,6 +195,7 @@ export function LifecycleModal({
       setDecomposition('delivery');
       setStages(tpl.stages.map((s) => ({ ...s })));
       setStoryStages(tpl.storyStages.map((s) => ({ ...s })));
+      setProductIds([]);
     }
   }, [open, lifecycle]);
 
@@ -238,6 +242,7 @@ export function LifecycleModal({
 
   const valid =
     label.trim().length > 1 &&
+    productIds.length > 0 &&
     stages.length > 0 &&
     stages.every((s) => s.name.trim().length > 0) &&
     (decomposition === 'none' ||
@@ -254,6 +259,7 @@ export function LifecycleModal({
         decomposition === 'delivery'
           ? storyStages.map((s) => ({ ...s, name: s.name.trim() }))
           : [],
+      productIds,
     };
     if (lifecycle) {
       updateLifecycle(lifecycle.id, payload);
@@ -294,6 +300,7 @@ export function LifecycleModal({
             placeholder="e.g. Platform delivery track"
           />
         </Field>
+        <ProductMultiSelect productIds={productIds} onChange={setProductIds} />
         <Field label="Summary" hint="shown in process views">
           <textarea
             className={`${inputClass} min-h-[72px] resize-y`}

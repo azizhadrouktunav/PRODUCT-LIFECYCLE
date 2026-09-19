@@ -91,6 +91,7 @@ function mapLifecycle(row: Record<string, unknown>): Lifecycle {
           ? storyStages
           : LIFECYCLE_TEMPLATES.delivery.storyStages
         : [],
+    productIds: (row.product_ids as string[] | null) ?? [],
   };
 }
 
@@ -102,11 +103,14 @@ function lifecycleToRow(lc: Lifecycle) {
     decomposition: lc.decomposition,
     stages: lc.stages,
     story_stages: lc.decomposition === 'delivery' ? lc.storyStages : [],
+    product_ids: lc.productIds ?? [],
   };
 }
 
 async function ensureDefaultLifecycles(): Promise<Lifecycle[]> {
-  const defaults = Object.values(TRACKS);
+  const { data: productRows } = await supabase.from('products').select('id');
+  const productIds = (productRows ?? []).map((r) => String((r as { id: string }).id));
+  const defaults = Object.values(TRACKS).map((lc) => ({ ...lc, productIds }));
   const { error } = await supabase.from('lifecycles').upsert(defaults.map(lifecycleToRow));
   throwIfError(error, 'Seed default lifecycles');
   return defaults;
@@ -153,6 +157,7 @@ function mapGroup(row: Record<string, unknown>): CapabilityGroup {
     code: rawCode || fallback,
     track: String(row.track ?? FALLBACK_LIFECYCLE.id),
     process: String(row.process ?? ''),
+    productIds: (row.product_ids as string[] | null) ?? [],
   };
 }
 
@@ -163,6 +168,7 @@ function mapEquipment(row: Record<string, unknown>): Equipment {
     vendor: String(row.vendor ?? ''),
     model: String(row.model ?? ''),
     type: String(row.type ?? ''),
+    productIds: (row.product_ids as string[] | null) ?? [],
   };
 }
 
@@ -238,6 +244,7 @@ function mapWave(row: Record<string, unknown>): Wave {
     state: String(row.state ?? 'Planned') as WaveState,
     deliveryDate: row.delivery_date ? String(row.delivery_date).slice(0, 10) : '',
     itemIds: (row.item_ids as string[] | null) ?? [],
+    productIds: (row.product_ids as string[] | null) ?? [],
   };
 }
 
@@ -388,6 +395,7 @@ export async function upsertGroup(group: CapabilityGroup): Promise<void> {
     code: group.code,
     track: group.track,
     process: group.process,
+    product_ids: group.productIds,
   });
   throwIfError(error, 'Upsert capability_group');
 }
@@ -399,6 +407,7 @@ export async function upsertEquipment(item: Equipment): Promise<void> {
     vendor: item.vendor,
     model: item.model,
     type: item.type,
+    product_ids: item.productIds,
   });
   throwIfError(error, 'Upsert equipment');
 }
@@ -485,6 +494,7 @@ export async function upsertWave(wave: Wave): Promise<void> {
     state: wave.state,
     delivery_date: wave.deliveryDate ? wave.deliveryDate : null,
     item_ids: wave.itemIds,
+    product_ids: wave.productIds,
   });
   throwIfError(error, 'Upsert wave');
 }
@@ -621,6 +631,7 @@ export async function upsertEquipmentMany(items: Equipment[]): Promise<void> {
       vendor: item.vendor,
       model: item.model,
       type: item.type,
+      product_ids: item.productIds,
     }))
   );
   throwIfError(error, 'Upsert equipment batch');
@@ -661,6 +672,7 @@ export async function upsertGroups(items: CapabilityGroup[]): Promise<void> {
       code: group.code,
       track: group.track,
       process: group.process,
+      product_ids: group.productIds,
     }))
   );
   throwIfError(error, 'Upsert groups');

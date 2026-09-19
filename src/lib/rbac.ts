@@ -179,6 +179,27 @@ export function productVisibleToUser(
   return assignedProductIds.includes(productId);
 }
 
+/** Any registry row that carries product_ids (lifecycles, groups, equipment, waves, …). */
+export function entityVisibleToUser(
+  productIds: string[] | null | undefined,
+  seesAll: boolean,
+  assignedProductIds: string[]
+): boolean {
+  if (seesAll) return true;
+  if (assignedProductIds.length === 0) return false;
+  const set = new Set(assignedProductIds);
+  return (productIds ?? []).some((id) => set.has(id));
+}
+
+/** True when the two product lists share at least one id. */
+export function sharesProducts(a: string[] | null | undefined, b: string[] | null | undefined): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  if (left.length === 0 || right.length === 0) return false;
+  const set = new Set(right);
+  return left.some((id) => set.has(id));
+}
+
 /** Map a progress/stage name to a Status when “Also update Status” is on. */
 export function statusFromProgress(
   stage: string,
@@ -213,7 +234,8 @@ export function navVisible(
     path === '/' ||
     path === '/products' ||
     path === '/equipment' ||
-    path.startsWith('/capabilities') ||
+    path === '/capabilities' ||
+    path.startsWith('/capabilities/') ||
     path === '/lifecycles' ||
     path === '/groups' ||
     path === '/actors' ||

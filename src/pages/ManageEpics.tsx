@@ -35,7 +35,7 @@ export function ManageEpicsPage() {
     return (
       <div className="py-20 text-center">
         <p className="text-sm text-soft">That capability is not in the register.</p>
-        <Link to="/" className="mt-2 inline-block text-xs text-brand-bright hover:text-strong">
+        <Link to="/capabilities" className="mt-2 inline-block text-xs text-brand-bright hover:text-strong">
           Back to the register
         </Link>
       </div>);
@@ -49,7 +49,7 @@ export function ManageEpicsPage() {
       <nav className="flex flex-wrap items-center gap-2 text-xs text-mute">
         <button
           type="button"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/capabilities')}
           className="inline-flex items-center gap-1.5 transition-colors duration-150 ease-out hover:text-strong">
           
           <ArrowLeftIcon className="h-3.5 w-3.5" />

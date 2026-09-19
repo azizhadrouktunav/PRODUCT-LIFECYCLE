@@ -8,17 +8,18 @@ import type { Lifecycle } from '../types/registry';
 import { DECOMPOSITION_LABEL, REQUIREMENT_LABEL, usesDecomposition } from '../types/registry';
 
 export function LifecyclesPage() {
-  const { lifecycles, groups, removeLifecycle } = useRegistry();
-  const { can } = useAuth();
+  const { lifecycles, groups, removeLifecycle, getProduct } = useRegistry();
+  const { can, entityVisible } = useAuth();
   const canManage = can('manage_lifecycles');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Lifecycle | null>(null);
+  const visible = lifecycles.filter((lc) => entityVisible(lc.productIds));
 
   return (
     <div>
       <PageHeader
         title="Lifecycles"
-        count={`${lifecycles.length} lifecycles`}
+        count={`${visible.length} lifecycles`}
         description="Define the process tracks capability groups follow — ordered stages, prerequisites, and whether work decomposes into epics, features and user stories."
         action={
           canManage ? (
@@ -31,7 +32,7 @@ export function LifecyclesPage() {
       />
 
       <div className="mt-4 space-y-6">
-        {lifecycles.map((lc) => {
+        {visible.map((lc) => {
           const usedBy = groups.filter((g) => g.track === lc.id).length;
           return (
             <section key={lc.id} className="rounded-md border border-line-strong p-4">
@@ -67,6 +68,18 @@ export function LifecyclesPage() {
                   {usedBy} group{usedBy === 1 ? '' : 's'}
                 </span>
               </div>
+              {(lc.productIds ?? []).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {(lc.productIds ?? []).map((id) => (
+                    <span
+                      key={id}
+                      className="rounded border border-line-strong px-1.5 py-0.5 font-mono text-2xs text-mute"
+                    >
+                      {getProduct(id)?.name ?? id}
+                    </span>
+                  ))}
+                </div>
+              )}
               {lc.summary && (
                 <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">{lc.summary}</p>
               )}
