@@ -15,7 +15,15 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, CapabilityStatus } from '../types/registry';
-import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus, usesEquipment, usesDecomposition } from '../types/registry';
+import {
+  MANUAL_CAPABILITY_STATUSES,
+  breakdownCountLabel,
+  countForWorkItemType,
+  isAutoManagedStatus,
+  manageTablePath,
+  tableManageTargets,
+  usesEquipment,
+} from '../types/registry';
 
 type Panel = 'root' | 'status';
 
@@ -52,7 +60,7 @@ export function RowActions({ capability, onEdit }: Props) {
   const counts = countsOf(capability.id);
   const lifecycle = lifecycleOf(capability);
   const isHardware = usesEquipment(lifecycle);
-  const canDecompose = usesDecomposition(lifecycle);
+  const manageTargets = tableManageTargets(lifecycle);
   const canEdit = can('edit_capability') && !isReadOnly;
   const canDelete = can('delete_capability') && !isReadOnly;
   const canStatus =
@@ -164,25 +172,26 @@ export function RowActions({ capability, onEdit }: Props) {
                     <span className="ml-auto font-mono text-2xs font-normal text-mute">
                       {isHardware
                         ? `${counts.equipment} equip.`
-                        : `${counts.epics}E · ${counts.features}F · ${counts.stories}S`}
+                        : breakdownCountLabel(lifecycle, counts)}
                     </span>
                   </button>
-                  {canDecompose && (
+                  {manageTargets.map((t) => (
                     <button
+                      key={t.id}
                       type="button"
                       className={itemClass}
                       onClick={() => {
                         setOpen(false);
-                        navigate(`/capabilities/${capability.id}/epics`);
+                        navigate(manageTablePath(capability.id, t));
                       }}
                     >
                       <LayersIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
-                      Manage Epics
+                      Manage {t.pluralLabel}
                       <span className="ml-auto font-mono text-2xs font-normal text-mute">
-                        {counts.epics}
+                        {countForWorkItemType(t.id, counts)}
                       </span>
                     </button>
-                  )}
+                  ))}
                   {canEdit && (
                     <button
                       type="button"

@@ -7,10 +7,12 @@ import { useRegistry } from '../contexts/RegistryContext';
 import {
   childWorkItemTypes,
   isStoryDone,
+  manageTablePath,
   rootWorkItemTypes,
   stageDef,
   stageIndex,
   storyStagesOf,
+  tableManageTargets,
   usesEquipment,
   workItemTypeDef,
 } from '../types/registry';
@@ -40,17 +42,6 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
       <dd className="min-w-0 text-xs text-soft">{children}</dd>
     </div>
   );
-}
-
-function managePath(
-  capabilityId: string,
-  typeId: string,
-  storage: 'builtin' | 'custom'
-): string {
-  if (storage === 'builtin' && typeId === 'epic') {
-    return `/capabilities/${capabilityId}/epics`;
-  }
-  return `/capabilities/${capabilityId}/items/${typeId}`;
 }
 
 export function CapabilityDetailPage() {
@@ -104,6 +95,7 @@ export function CapabilityDetailPage() {
   const capStories = epics.flatMap((e) => featuresOf(e.id)).flatMap((f) => storiesOf(f.id));
   const released = capStories.filter((s) => isStoryDone(s, lifecycle)).length;
 
+  const tableTargets = tableManageTargets(lifecycle);
   const tableStages = stages.filter(
     (s) => (s.contentMode ?? 'inline') === 'table' && s.opensTypeId
   );
@@ -198,14 +190,17 @@ export function CapabilityDetailPage() {
                   <>
                     {' '}
                     <Link
-                      to={managePath(
-                        capability.id,
-                        current.opensTypeId,
-                        workItemTypeDef(lifecycle, current.opensTypeId)?.storage ?? 'custom'
-                      )}
+                      to={
+                        workItemTypeDef(lifecycle, current.opensTypeId)
+                          ? manageTablePath(
+                              capability.id,
+                              workItemTypeDef(lifecycle, current.opensTypeId)!
+                            )
+                          : `/capabilities/${capability.id}/items/${current.opensTypeId}`
+                      }
                       className="text-brand-bright hover:text-strong"
                     >
-                      Open{' '}
+                      Manage{' '}
                       {workItemTypeDef(lifecycle, current.opensTypeId)?.pluralLabel ??
                         current.opensTypeId}
                     </Link>
@@ -294,10 +289,10 @@ export function CapabilityDetailPage() {
                           {t.pluralLabel}
                         </h2>
                         <Link
-                          to={`/capabilities/${capability.id}/epics`}
+                          to={manageTablePath(capability.id, t)}
                           className="inline-flex items-center gap-1.5 text-xs text-brand-bright transition-colors duration-150 ease-out hover:text-strong"
                         >
-                          Manage {t.pluralLabel.toLowerCase()}
+                          Manage {t.pluralLabel}
                           <ArrowRightIcon className="h-3 w-3" />
                         </Link>
                       </div>
@@ -350,10 +345,10 @@ export function CapabilityDetailPage() {
                           {t.pluralLabel}
                         </h2>
                         <Link
-                          to={`/capabilities/${capability.id}/items/${t.id}`}
+                          to={manageTablePath(capability.id, t)}
                           className="inline-flex items-center gap-1.5 text-xs text-brand-bright hover:text-strong"
                         >
-                          Manage {t.pluralLabel.toLowerCase()}
+                          Manage {t.pluralLabel}
                           <ArrowRightIcon className="h-3 w-3" />
                         </Link>
                       </div>
@@ -390,26 +385,22 @@ export function CapabilityDetailPage() {
                 return null;
               })}
 
-              {/* Stages that open tables not already covered by root types */}
-              {tableStages
-                .filter((s) => {
-                  const tid = s.opensTypeId!;
-                  return !rootTypes.some((r) => r.id === tid);
-                })
-                .map((s) => {
-                  const t = workItemTypeDef(lifecycle, s.opensTypeId!);
-                  if (!t) return null;
+              {/* Table stages not already shown as root types */}
+              {tableTargets
+                .filter((t) => !rootTypes.some((r) => r.id === t.id))
+                .map((t) => {
+                  const stage = tableStages.find((s) => s.opensTypeId === t.id);
                   return (
-                    <div key={s.name} className="mt-6">
+                    <div key={t.id} className="mt-6">
                       <div className="flex items-baseline justify-between">
                         <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-                          {s.name} → {t.pluralLabel}
+                          {stage ? `${stage.name} → ${t.pluralLabel}` : t.pluralLabel}
                         </h2>
                         <Link
-                          to={managePath(capability.id, t.id, t.storage)}
+                          to={manageTablePath(capability.id, t)}
                           className="inline-flex items-center gap-1.5 text-xs text-brand-bright hover:text-strong"
                         >
-                          Open table
+                          Manage {t.pluralLabel}
                           <ArrowRightIcon className="h-3 w-3" />
                         </Link>
                       </div>

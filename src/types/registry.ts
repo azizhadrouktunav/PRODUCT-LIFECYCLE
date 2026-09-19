@@ -592,6 +592,72 @@ export function workItemTypeDef(
   return (lifecycle.workItemTypes ?? []).find((t) => t.id === typeId);
 }
 
+/**
+ * Unique work-item types opened by capability stages with contentMode === 'table'.
+ * Order follows the stage list; missing type ids are skipped.
+ */
+export function tableManageTargets(lifecycle: Lifecycle): WorkItemTypeDef[] {
+  const seen = new Set<string>();
+  const out: WorkItemTypeDef[] = [];
+  for (const stage of lifecycle.stages ?? []) {
+    if ((stage.contentMode ?? 'inline') !== 'table') continue;
+    const typeId = stage.opensTypeId?.trim();
+    if (!typeId || seen.has(typeId)) continue;
+    const t = workItemTypeDef(lifecycle, typeId);
+    if (!t) continue;
+    seen.add(typeId);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Route to manage a work-item type table for a capability. */
+export function manageTablePath(capabilityId: string, type: WorkItemTypeDef): string {
+  if (type.storage === 'builtin' && type.id === 'epic') {
+    return `/capabilities/${capabilityId}/epics`;
+  }
+  if (type.storage === 'builtin' && type.id === 'feature') {
+    // Feature list is nested under epics; send users to epics as the entry point.
+    return `/capabilities/${capabilityId}/epics`;
+  }
+  if (type.storage === 'builtin' && type.id === 'story') {
+    return `/capabilities/${capabilityId}/epics`;
+  }
+  return `/capabilities/${capabilityId}/items/${type.id}`;
+}
+
+/** Count of rows for a type on a capability (builtin + custom). */
+export function countForWorkItemType(
+  typeId: string,
+  counts: RecordCounts
+): number {
+  if (typeId === 'epic' || typeId === 'epics') return counts.epics;
+  if (typeId === 'feature' || typeId === 'features') return counts.features;
+  if (typeId === 'story' || typeId === 'stories') return counts.stories;
+  if (typeId === 'equipment') return counts.equipment;
+  return counts.byType?.[typeId] ?? 0;
+}
+
+/** Compact subtitle for open/breakdown (table targets or root types). */
+export function breakdownCountLabel(
+  lifecycle: Lifecycle,
+  counts: RecordCounts
+): string {
+  const targets = tableManageTargets(lifecycle);
+  const types = targets.length > 0 ? targets : rootWorkItemTypes(lifecycle);
+  if (types.length === 0) {
+    if (counts.equipment > 0) return `${counts.equipment} equip.`;
+    return '—';
+  }
+  return types
+    .map((t) => {
+      const n = countForWorkItemType(t.id, counts);
+      const abbr = t.label.charAt(0).toUpperCase() || '?';
+      return `${n}${abbr}`;
+    })
+    .join(' · ');
+}
+
 export function storyStagesOf(lifecycle: Lifecycle): StageDef[] {
   const fromType = workItemTypeDef(lifecycle, 'story')?.stages;
   if (fromType && fromType.length > 0) return fromType;
