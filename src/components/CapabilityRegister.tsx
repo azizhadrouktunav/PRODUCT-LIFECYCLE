@@ -125,7 +125,7 @@ export function CapabilityRegister({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
-  const showStructureFilters = Array.isArray(lifecycleOptions) && Array.isArray(groupOptions);
+  const showStructureFilters = Array.isArray(groupOptions);
 
   useEffect(() => {
     const status = searchParams.get('status');
@@ -262,8 +262,7 @@ export function CapabilityRegister({
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const structureFiltersActive =
-    showStructureFilters && (!!lifecycleValue || !!groupValue);
+  const structureFiltersActive = showStructureFilters && !!groupValue;
 
   const filtered =
     structureFiltersActive ||
@@ -278,7 +277,6 @@ export function CapabilityRegister({
     setProductFilter('all');
     setStatusFilter('all');
     if (showStructureFilters) {
-      onLifecycleChange?.('');
       onGroupChange?.('');
     }
   }
@@ -331,51 +329,7 @@ export function CapabilityRegister({
       <div
         className={`shrink-0 flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}
       >
-        {showStructureFilters && (
-          <>
-            <select
-              className={`${selectClass} max-w-[200px]`}
-              value={lifecycleValue ?? ''}
-              onChange={(e) => onLifecycleChange?.(e.target.value)}
-              aria-label="Filter by lifecycle"
-            >
-              <option value="">All lifecycles</option>
-              {(lifecycleOptions ?? []).map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex items-center gap-1">
-              <select
-                className={`${selectClass} max-w-[200px]`}
-                value={groupValue ?? ''}
-                onChange={(e) => onGroupChange?.(e.target.value)}
-                aria-label="Filter by capability group"
-              >
-                <option value="">All groups</option>
-                {(groupOptions ?? []).map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              {groupValue && onGroupProcess && (
-                <button
-                  type="button"
-                  onClick={onGroupProcess}
-                  className="shrink-0 rounded p-1.5 text-mute hover:text-brand-bright"
-                  title="View process"
-                  aria-label="View group process"
-                >
-                  <InfoIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="relative min-w-[160px] flex-1 sm:max-w-xs">
+        <div className="relative min-w-[200px] flex-1">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-500" />
           <input
             className={`${inputClass} py-1.5 pl-8 text-xs`}
@@ -385,6 +339,34 @@ export function CapabilityRegister({
             aria-label="Search capabilities"
           />
         </div>
+        {showStructureFilters && (
+          <div className="flex items-center gap-1">
+            <select
+              className={`${selectClass} max-w-[200px]`}
+              value={groupValue ?? ''}
+              onChange={(e) => onGroupChange?.(e.target.value)}
+              aria-label="Filter by capability group"
+            >
+              <option value="">All groups</option>
+              {(groupOptions ?? []).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {groupValue && onGroupProcess && (
+              <button
+                type="button"
+                onClick={onGroupProcess}
+                className="shrink-0 rounded p-1.5 text-mute hover:text-brand-bright"
+                title="View process"
+                aria-label="View group process"
+              >
+                <InfoIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
         {!hideGroupFilter && !groupId && !showStructureFilters && (
           <select
             className={selectClass}

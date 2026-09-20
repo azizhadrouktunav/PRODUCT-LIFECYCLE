@@ -82,10 +82,7 @@ export function StructurePage() {
   const selectedLifecycle =
     visibleLifecycles.find((l) => l.id === selectedLifecycleId) ?? null;
 
-  const groupOptions = useMemo(() => {
-    if (!selectedLifecycleId) return visibleGroups;
-    return visibleGroups.filter((g) => g.track === selectedLifecycleId);
-  }, [visibleGroups, selectedLifecycleId]);
+  const groupOptions = useMemo(() => visibleGroups, [visibleGroups]);
 
   const selectedGroup =
     visibleGroups.find((g) => g.id === selectedGroupId) ?? null;
@@ -130,19 +127,15 @@ export function StructurePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manageParam]);
 
-  // Drop stale group when it no longer matches the lifecycle filter.
+  // Drop stale group when it no longer exists / is out of scope.
   useEffect(() => {
     if (!selectedGroupId) return;
     const g = groups.find((x) => x.id === selectedGroupId);
     if (!g || !entityVisible(g.productIds)) {
       patchParams({ group: null });
-      return;
-    }
-    if (selectedLifecycleId && g.track !== selectedLifecycleId) {
-      patchParams({ group: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLifecycleId, selectedGroupId, groups]);
+  }, [selectedGroupId, groups]);
 
   function openTemplate(mode: TemplateModalMode, t: LifecycleTemplate | null = null) {
     setTemplateMode(mode);
@@ -159,29 +152,15 @@ export function StructurePage() {
 
   function onGroupChange(id: string) {
     if (!id) {
-      patchParams({ group: null });
+      patchParams({ group: null, lifecycle: null });
       return;
     }
     const g = groups.find((x) => x.id === id);
     patchParams({
       group: id,
-      lifecycle: g && !selectedLifecycleId ? g.track : selectedLifecycleId || null,
+      lifecycle: g?.track ?? null,
     });
   }
-
-  const lifecycleFilterOptions = useMemo(
-    () =>
-      visibleLifecycles.map((lc) => {
-        const gCount = groups.filter((g) => g.track === lc.id).length;
-        const cCount = capCountForLifecycle(lc.id);
-        return {
-          id: lc.id,
-          label: `${lc.label} (${gCount} groups · ${cCount} caps)`,
-        };
-      }),
-    // capCount uses capabilities/groups; include them
-    [visibleLifecycles, groups, capabilities, capabilityVisible]
-  );
 
   const groupFilterOptions = useMemo(
     () =>
@@ -196,19 +175,9 @@ export function StructurePage() {
     let list = capabilities.filter((c) => capabilityVisible(c));
     if (selectedGroupId) {
       list = list.filter((c) => c.groupId === selectedGroupId);
-    } else if (selectedLifecycleId) {
-      list = list.filter(
-        (c) => groups.find((g) => g.id === c.groupId)?.track === selectedLifecycleId
-      );
     }
     return list;
-  }, [
-    capabilities,
-    capabilityVisible,
-    selectedGroupId,
-    selectedLifecycleId,
-    groups,
-  ]);
+  }, [capabilities, capabilityVisible, selectedGroupId]);
 
   const capStats = useMemo(() => {
     let inProgress = 0;
@@ -301,12 +270,8 @@ export function StructurePage() {
         <CapabilityRegister
           fillHeight
           groupId={selectedGroupId || null}
-          lifecycleId={!selectedGroupId && selectedLifecycleId ? selectedLifecycleId : null}
           hideHeader
           hideGroupFilter
-          lifecycleValue={selectedLifecycleId}
-          onLifecycleChange={onLifecycleChange}
-          lifecycleOptions={lifecycleFilterOptions}
           groupValue={selectedGroupId}
           onGroupChange={onGroupChange}
           groupOptions={groupFilterOptions}
