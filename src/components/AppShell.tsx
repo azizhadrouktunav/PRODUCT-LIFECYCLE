@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const showSettings = can('manage_users');
 
   return (
-    <div className="flex min-h-full w-full bg-ink-900">
+    <div className="flex h-full min-h-0 w-full bg-ink-900">
       <aside
         className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-line bg-ink-950 py-6 transition-[width] duration-200 ease-out lg:flex ${
           collapsed ? 'w-[72px] px-3' : 'w-60 px-4'
@@ -163,7 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-line bg-ink-950 px-4 py-3 lg:hidden">
           <Logo />
           <div className="flex items-center gap-2">
@@ -195,8 +195,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <main className="min-w-0 flex-1 px-4 py-5 lg:px-6 lg:py-6">
-          <div className="mx-auto max-w-[1600px]">{children}</div>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-5 lg:px-6 lg:py-6">
+          <div className="mx-auto flex w-full max-w-[1600px] min-h-0 flex-1 flex-col">
+            {children}
+          </div>
         </main>
       </div>
     </div>

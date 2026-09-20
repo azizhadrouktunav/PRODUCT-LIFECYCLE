@@ -235,7 +235,8 @@ export function StructurePage() {
   ];
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0">
       <PageHeader
         title="Structure"
         count={`${visibleLifecycles.length} lifecycles · ${visibleGroups.length} groups`}
@@ -294,9 +295,11 @@ export function StructurePage() {
           </div>
         ))}
       </div>
+      </div>
 
-      <div className="mt-3">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col">
         <CapabilityRegister
+          fillHeight
           groupId={selectedGroupId || null}
           lifecycleId={!selectedGroupId && selectedLifecycleId ? selectedLifecycleId : null}
           hideHeader

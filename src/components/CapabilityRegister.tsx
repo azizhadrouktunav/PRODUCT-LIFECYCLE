@@ -68,6 +68,7 @@ export function CapabilityRegister({
   hideHeader = false,
   hideGroupFilter = false,
   compact = false,
+  fillHeight = false,
   onAddCapability,
   lifecycleValue,
   onLifecycleChange,
@@ -86,6 +87,8 @@ export function CapabilityRegister({
   hideGroupFilter?: boolean;
   /** Tighter chrome for embedding in Structure. */
   compact?: boolean;
+  /** Fill remaining parent height; table body scrolls inside a fixed pane. */
+  fillHeight?: boolean;
   /** Override Add capability (defaults to openCreate with optional groupId). */
   onAddCapability?: () => void;
   /** Controlled Structure lifecycle filter (shown in the same filter row). */
@@ -297,10 +300,16 @@ export function CapabilityRegister({
     openCreate(groupId ? { groupId } : undefined);
   }
 
-  const tableMaxHeight = `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 70vh)`;
+  const tableMaxHeight = fillHeight
+    ? undefined
+    : `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 70vh)`;
 
   return (
-    <div>
+    <div
+      className={
+        fillHeight ? 'flex h-full min-h-0 flex-1 flex-col' : undefined
+      }
+    >
       {!hideHeader && (
         <PageHeader
           title="Capability Register"
@@ -320,7 +329,7 @@ export function CapabilityRegister({
       )}
 
       <div
-        className={`flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}
+        className={`shrink-0 flex flex-wrap items-center gap-2 ${compact ? 'pb-2' : 'py-3'}`}
       >
         {showStructureFilters && (
           <>
@@ -433,8 +442,12 @@ export function CapabilityRegister({
       </div>
 
       <div
-        className="scroll-thin overflow-auto border-t border-line"
-        style={{ maxHeight: tableMaxHeight }}
+        className={
+          fillHeight
+            ? 'scroll-thin min-h-0 flex-1 overflow-auto border-t border-line'
+            : 'scroll-thin overflow-auto border-t border-line'
+        }
+        style={fillHeight ? undefined : { maxHeight: tableMaxHeight }}
       >
         <table className="w-full min-w-[900px] border-collapse text-left">
           <thead className="sticky top-0 z-[1] bg-ink-900">
@@ -580,7 +593,7 @@ export function CapabilityRegister({
       </div>
 
       {rows.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line py-2.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-line py-2.5">
           <span className="font-mono text-2xs text-ink-500">
             Showing {pageStart}–{pageEnd} of {rows.length}
           </span>
