@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckIcon,
   LayersIcon,
+  MoreVerticalIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -46,9 +47,11 @@ export function EquipmentPage() {
   const [editingType, setEditingType] = useState<EquipmentType | null>(null);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
   const addMenuRef = useRef<HTMLDivElement>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (visibleEquipment.length === 0) {
@@ -77,6 +80,23 @@ export function EquipmentPage() {
     };
   }, [addMenuOpen]);
 
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const onDown = (e: MouseEvent) => {
+      if (rowMenuRef.current?.contains(e.target as Node)) return;
+      setRowMenuId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRowMenuId(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rowMenuId]);
+
   const active = visibleEquipment.find((e) => e.id === activeId) ?? visibleEquipment[0];
   const supported = useMemo(
     () =>
@@ -89,10 +109,13 @@ export function EquipmentPage() {
     [equipmentTypes]
   );
 
-  function openAssign() {
-    if (!active) return;
-    setDraft(supported.map((c) => c.id));
+  function openAssignFor(item: Equipment) {
+    setActiveId(item.id);
+    setDraft(
+      visibleHardware.filter((c) => c.equipmentIds.includes(item.id)).map((c) => c.id)
+    );
     setAssigning(true);
+    setRowMenuId(null);
   }
 
   function save() {
@@ -105,9 +128,9 @@ export function EquipmentPage() {
     setAssigning(false);
   }
 
-  function handleDelete() {
-    if (!active) return;
-    removeEquipment(active.id);
+  function handleDeleteFor(id: string) {
+    removeEquipment(id);
+    setRowMenuId(null);
   }
 
   const addMenu = canEdit ? (
@@ -227,26 +250,89 @@ export function EquipmentPage() {
                 const count = visibleHardware.filter((c) =>
                   c.equipmentIds.includes(e.id)
                 ).length;
+                const menuOpen = rowMenuId === e.id;
                 return (
-                  <button
+                  <div
                     key={e.id}
-                    type="button"
-                    onClick={() => setActiveId(e.id)}
-                    aria-current={isActive}
-                    className={`flex w-full items-center gap-3 border-b border-line-soft px-3 py-2.5 text-left transition-colors duration-150 ease-out last:border-b-0 ${
+                    className={`flex items-center gap-1 border-b border-line-soft last:border-b-0 ${
                       isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
                     }`}
                   >
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
-                      >
-                        {e.name}
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(e.id)}
+                      aria-current={isActive}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 ease-out"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
+                        >
+                          {e.name}
+                        </span>
+                        <span className="block truncate text-2xs text-mute">{e.type}</span>
                       </span>
-                      <span className="block truncate text-2xs text-mute">{e.type}</span>
-                    </span>
-                    <span className="font-mono text-2xs text-ink-500">{count}</span>
-                  </button>
+                      <span className="font-mono text-2xs text-ink-500">{count}</span>
+                    </button>
+                    {canEdit && (
+                      <div
+                        ref={menuOpen ? rowMenuRef : undefined}
+                        className="relative shrink-0 pr-2"
+                      >
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setRowMenuId(menuOpen ? null : e.id);
+                          }}
+                          aria-label={`Actions for ${e.name}`}
+                          aria-expanded={menuOpen}
+                          title="Actions"
+                          className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-strong"
+                        >
+                          <MoreVerticalIcon className="h-3.5 w-3.5" />
+                        </button>
+                        {menuOpen && (
+                          <div
+                            role="menu"
+                            className="elev absolute right-0 z-[80] mt-1 min-w-[140px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className={menuItemClass}
+                              onClick={() => {
+                                setActiveId(e.id);
+                                setEditing(e);
+                                setRowMenuId(null);
+                              }}
+                            >
+                              <PencilIcon className="h-3.5 w-3.5" />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className={menuItemClass}
+                              onClick={() => openAssignFor(e)}
+                            >
+                              <PlusIcon className="h-3.5 w-3.5" />
+                              Assign
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className={`${menuItemClass} text-danger hover:text-danger`}
+                              onClick={() => handleDeleteFor(e.id)}
+                            >
+                              <Trash2Icon className="h-3.5 w-3.5" />
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </nav>
@@ -289,26 +375,6 @@ export function EquipmentPage() {
                       </option>
                     ))}
                   </select>
-                  <Button
-                    variant="quiet"
-                    onClick={() => setEditing(active)}
-                    className="!px-2"
-                    title="Edit"
-                  >
-                    <PencilIcon className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    onClick={handleDelete}
-                    className="!px-2"
-                    title="Delete"
-                  >
-                    <Trash2Icon className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="primary" onClick={openAssign}>
-                    <PlusIcon className="h-3.5 w-3.5" />
-                    Assign
-                  </Button>
                 </div>
               )}
             </div>
