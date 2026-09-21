@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -21,12 +22,25 @@ interface Props {
   parentId?: string;
   /** Appended to the exported file name, e.g. the parent record id. */
   scopeLabel?: string;
+  /**
+   * `dropdown` — Data button with nested Export/Import (default).
+   * `menuItems` — Export/Import rows only (for embedding in another menu).
+   */
+  mode?: 'dropdown' | 'menuItems';
+  /** Called after Export/Import is chosen in menuItems mode (e.g. close parent menu). */
+  onAction?: () => void;
 }
 
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
 
-export function DataTransfer({ dataset, parentId, scopeLabel }: Props) {
+export function DataTransfer({
+  dataset,
+  parentId,
+  scopeLabel,
+  mode = 'dropdown',
+  onAction,
+}: Props) {
   const def = DATASETS[dataset];
   const { exportDataset, importDataset } = useRegistry();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -100,49 +114,7 @@ export function DataTransfer({ dataset, parentId, scopeLabel }: Props) {
   const unknown = parsed ? parsed.headers.filter((h) => !expected.includes(h)) : [];
   const missingRequired = parsed ? !parsed.headers.includes(def.requiredColumn) : false;
 
-  return (
-    <>
-      <div ref={rootRef} className="relative">
-        <Button onClick={() => setMenuOpen((v) => !v)}>
-          <FileSpreadsheetIcon className="h-3.5 w-3.5" />
-          Data
-          <ChevronDownIcon className="h-3.5 w-3.5" />
-        </Button>
-
-        {menuOpen && (
-          <div
-            role="menu"
-            className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={menuItemClass}
-              onClick={() => {
-                setMenuOpen(false);
-                doExport();
-              }}
-            >
-              <DownloadIcon className="h-3.5 w-3.5 text-mute" />
-              Export
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={menuItemClass}
-              onClick={() => {
-                setMenuOpen(false);
-                reset();
-                setOpen(true);
-              }}
-            >
-              <UploadIcon className="h-3.5 w-3.5 text-mute" />
-              Import
-            </button>
-          </div>
-        )}
-      </div>
-
+  const importModal = (
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -252,6 +224,82 @@ export function DataTransfer({ dataset, parentId, scopeLabel }: Props) {
           )}
         </div>
       </Modal>
+  );
+
+  return (
+    <>
+      {mode === 'menuItems' ? (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            className={menuItemClass}
+            onClick={() => {
+              onAction?.();
+              doExport();
+            }}
+          >
+            <DownloadIcon className="h-3.5 w-3.5 text-mute" />
+            Export
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={menuItemClass}
+            onClick={() => {
+              onAction?.();
+              reset();
+              setOpen(true);
+            }}
+          >
+            <UploadIcon className="h-3.5 w-3.5 text-mute" />
+            Import
+          </button>
+        </>
+      ) : (
+        <div ref={rootRef} className="relative">
+          <Button onClick={() => setMenuOpen((v) => !v)}>
+            <FileSpreadsheetIcon className="h-3.5 w-3.5" />
+            Data
+            <ChevronDownIcon className="h-3.5 w-3.5" />
+          </Button>
+
+          {menuOpen && (
+            <div
+              role="menu"
+              className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemClass}
+                onClick={() => {
+                  setMenuOpen(false);
+                  doExport();
+                }}
+              >
+                <DownloadIcon className="h-3.5 w-3.5 text-mute" />
+                Export
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={menuItemClass}
+                onClick={() => {
+                  setMenuOpen(false);
+                  reset();
+                  setOpen(true);
+                }}
+              >
+                <UploadIcon className="h-3.5 w-3.5 text-mute" />
+                Import
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {createPortal(importModal, document.body)}
     </>
   );
 }

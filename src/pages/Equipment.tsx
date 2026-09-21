@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckIcon,
-  LayersIcon,
   MoreVerticalIcon,
   PencilIcon,
   PlusIcon,
+  SettingsIcon,
   Trash2Icon,
 } from 'lucide-react';
 import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
@@ -32,6 +32,8 @@ export function EquipmentPage() {
   } = useRegistry();
   const { can, capabilityVisible, entityVisible } = useAuth();
   const canEdit = can('manage_equipment');
+  const canImportExport = can('import_export');
+  const showSettings = canEdit || canImportExport;
   const visibleEquipment = useMemo(
     () => equipment.filter((e) => entityVisible(e.productIds)),
     [equipment, entityVisible]
@@ -46,11 +48,11 @@ export function EquipmentPage() {
   const [addingType, setAddingType] = useState(false);
   const [editingType, setEditingType] = useState<EquipmentType | null>(null);
   const [manageTypesOpen, setManageTypesOpen] = useState(false);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
-  const addMenuRef = useRef<HTMLDivElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const rowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,13 +66,13 @@ export function EquipmentPage() {
   }, [visibleEquipment, activeId]);
 
   useEffect(() => {
-    if (!addMenuOpen) return;
+    if (!settingsOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (addMenuRef.current?.contains(e.target as Node)) return;
-      setAddMenuOpen(false);
+      if (settingsRef.current?.contains(e.target as Node)) return;
+      setSettingsOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAddMenuOpen(false);
+      if (e.key === 'Escape') setSettingsOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -78,7 +80,7 @@ export function EquipmentPage() {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [addMenuOpen]);
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (!rowMenuId) return;
@@ -133,47 +135,72 @@ export function EquipmentPage() {
     setRowMenuId(null);
   }
 
-  const addMenu = canEdit ? (
-    <div ref={addMenuRef} className="relative">
+  const settingsMenu = showSettings ? (
+    <div ref={settingsRef} className="relative">
       <button
         type="button"
-        onClick={() => setAddMenuOpen((v) => !v)}
-        aria-label="Add"
-        aria-expanded={addMenuOpen}
-        title="Add"
+        onClick={() => setSettingsOpen((v) => !v)}
+        aria-label="Equipment settings"
+        aria-expanded={settingsOpen}
+        title="Settings"
         className="rounded-md border border-line-strong p-1.5 text-mute transition-colors duration-150 ease-out hover:border-brand hover:text-strong"
       >
-        <PlusIcon className="h-3.5 w-3.5" />
+        <SettingsIcon className="h-3.5 w-3.5" />
       </button>
-      {addMenuOpen && (
-        <div
-          role="menu"
-          className="elev absolute right-0 z-[80] mt-1.5 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
-        >
-          <button
-            type="button"
-            role="menuitem"
-            className={menuItemClass}
-            onClick={() => {
-              setAddMenuOpen(false);
-              setAddingType(true);
-            }}
-          >
-            Add type
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={menuItemClass}
-            onClick={() => {
-              setAddMenuOpen(false);
-              setAddingEquipment(true);
-            }}
-          >
-            Add equipment
-          </button>
-        </div>
-      )}
+      <div
+        role="menu"
+        hidden={!settingsOpen}
+        className="elev absolute right-0 z-[80] mt-1.5 min-w-[180px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+      >
+        {canEdit && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setSettingsOpen(false);
+                setManageTypesOpen(true);
+              }}
+            >
+              Manage types
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setSettingsOpen(false);
+                setEditingType(null);
+                setAddingType(true);
+              }}
+            >
+              Add type
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setSettingsOpen(false);
+                setAddingEquipment(true);
+              }}
+            >
+              Add equipment
+            </button>
+          </>
+        )}
+        {canEdit && canImportExport && (
+          <div className="my-1 border-t border-line-soft" role="separator" />
+        )}
+        {canImportExport && (
+          <DataTransfer
+            dataset="equipment"
+            mode="menuItems"
+            onAction={() => setSettingsOpen(false)}
+          />
+        )}
+      </div>
     </div>
   ) : null;
 
@@ -182,10 +209,7 @@ export function EquipmentPage() {
       <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
         Models · {visibleEquipment.length}
       </h2>
-      <div className="ml-auto flex items-center gap-1">
-        {canEdit && <DataTransfer dataset="equipment" />}
-        {addMenu}
-      </div>
+      {settingsMenu && <div className="ml-auto">{settingsMenu}</div>}
     </div>
   );
 
@@ -193,52 +217,17 @@ export function EquipmentPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0">
         <PageHeader title="Equipment" />
-
-        <section className="mt-5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-              Equipment types · {sortedTypes.length}
-            </h2>
-            <button
-              type="button"
-              onClick={() => setManageTypesOpen(true)}
-              aria-label="Manage equipment types"
-              title="Manage types"
-              className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-            >
-              <LayersIcon className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {sortedTypes.length === 0 ? (
-            <p className="mt-3 text-sm text-mute">No types yet.</p>
-          ) : (
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {sortedTypes.map((t) => {
-                const count = visibleEquipment.filter((e) => e.type === t.name).length;
-                return (
-                  <li
-                    key={t.id}
-                    className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5"
-                  >
-                    <span className="text-xs text-strong">{t.name}</span>
-                    <span className="font-mono text-2xs text-ink-500">{count}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
       </div>
 
       {visibleEquipment.length === 0 || !active ? (
-        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong">
           <div className="shrink-0">{modelsHeader}</div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <p className="text-sm text-mute">No models yet.</p>
           </div>
         </div>
       ) : (
-        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-b border-line-strong lg:h-full lg:border-b-0 lg:border-r lg:border-line-strong">
             <div className="shrink-0">{modelsHeader}</div>
             <nav
