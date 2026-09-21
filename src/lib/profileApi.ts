@@ -72,6 +72,15 @@ async function fetchRoleMetaBySlugs(slugs: string[]): Promise<Map<string, RoleMe
 }
 
 function withRoleMeta(profile: AppProfile, meta: RoleMeta | undefined): AppProfile {
+  // CEO is always view-all / modify-nothing, even if the roles table drifted.
+  if (profile.role === 'ceo') {
+    return {
+      ...profile,
+      roleLabel: meta?.label ?? 'CEO',
+      seesAllProducts: true,
+      permissions: [],
+    };
+  }
   if (!meta) {
     return {
       ...profile,

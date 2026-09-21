@@ -37,6 +37,7 @@ export function RolesSettingsPage() {
   const [permissions, setPermissions] = useState<RbacAction[]>([]);
 
   const isEdit = !!editing;
+  const isCeoRole = isEdit && editing?.slug === 'ceo';
   const resolvedSlug = isEdit ? slug : slugify(label) || slug.trim();
   const valid = label.trim().length > 1 && resolvedSlug.length > 0;
 
@@ -75,12 +76,18 @@ export function RolesSettingsPage() {
     setSlug(role.slug);
     setLabel(role.label);
     setDescription(role.description);
-    setSeesAllProducts(role.seesAllProducts);
-    setPermissions([...role.permissions]);
+    if (role.slug === 'ceo') {
+      setSeesAllProducts(true);
+      setPermissions([]);
+    } else {
+      setSeesAllProducts(role.seesAllProducts);
+      setPermissions([...role.permissions]);
+    }
     setModalOpen(true);
   }
 
   function togglePermission(action: RbacAction) {
+    if (isCeoRole) return;
     setPermissions((prev) =>
       prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]
     );
@@ -90,6 +97,7 @@ export function RolesSettingsPage() {
     if (!valid) return;
     const nextSlug = isEdit ? editing!.slug : resolvedSlug;
     if (!nextSlug) return;
+    const lockedCeo = nextSlug === 'ceo';
     setSaving(true);
     setError(null);
     try {
@@ -97,10 +105,10 @@ export function RolesSettingsPage() {
         slug: nextSlug,
         label: label.trim(),
         description: description.trim(),
-        seesAllProducts,
+        seesAllProducts: lockedCeo ? true : seesAllProducts,
         isSystem: editing?.isSystem ?? false,
       });
-      await setRolePermissions(nextSlug, permissions);
+      await setRolePermissions(nextSlug, lockedCeo ? [] : permissions);
       setModalOpen(false);
       await reload();
       await refreshProfile();
@@ -262,25 +270,34 @@ export function RolesSettingsPage() {
           <label className="flex items-center gap-2 text-xs text-soft">
             <input
               type="checkbox"
-              checked={seesAllProducts}
+              checked={isCeoRole ? true : seesAllProducts}
               onChange={(e) => setSeesAllProducts(e.target.checked)}
+              disabled={isCeoRole}
               className="rounded border-line-strong"
             />
             See all products (ignore product assignments)
           </label>
+          {isCeoRole && (
+            <p className="text-2xs text-mute">
+              CEO is locked to view all products with no modify permissions.
+            </p>
+          )}
           <div>
             <p className="mb-2 text-xs font-medium text-soft">Permissions</p>
             <div className="grid max-h-56 gap-1.5 overflow-y-auto sm:grid-cols-2">
               {RBAC_ACTIONS.map((action) => (
                 <label
                   key={action}
-                  className="flex cursor-pointer items-start gap-2 rounded-md border border-line px-2 py-1.5 text-xs text-soft"
+                  className={`flex items-start gap-2 rounded-md border border-line px-2 py-1.5 text-xs text-soft ${
+                    isCeoRole ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                  }`}
                 >
                   <input
                     type="checkbox"
                     className="mt-0.5"
-                    checked={permissions.includes(action)}
+                    checked={isCeoRole ? false : permissions.includes(action)}
                     onChange={() => togglePermission(action)}
+                    disabled={isCeoRole}
                   />
                   <span>
                     <span className="block text-strong">{ACTION_LABEL[action]}</span>
