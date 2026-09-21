@@ -1,23 +1,68 @@
-import React, { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { CheckCircle2Icon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { WaveModal } from '../components/WaveModal';
-import { Button, Chip, PageHeader, ProgressBar, WaveTag } from '../components/Primitives';
+import { Button, Chip, PageHeader, ProgressBar, WaveTag, inputClass } from '../components/Primitives';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
-import type { Wave } from '../types/registry';
-import { storyIsDone } from '../types/registry';
+import type { Wave, WaveState } from '../types/registry';
+import { WAVE_STATES, storyIsDone } from '../types/registry';
 import { waveCounts, waveStories } from '../utils/scope';
 
+function FilterChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
+        active
+          ? 'border-brand bg-brand/10 text-strong'
+          : 'border-line-strong text-mute hover:border-brand hover:text-strong'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function WavesPage() {
-  const { waves, epics, features, stories, getCapability, getEpic, getFeature, getStory, removeWave } =
-  useRegistry();
-  const { can, capabilityVisible, entityVisible } = useAuth();
+  const {
+    waves,
+    products,
+    epics,
+    features,
+    stories,
+    getCapability,
+    getEpic,
+    getFeature,
+    getStory,
+    removeWave,
+    updateWave,
+  } = useRegistry();
+  const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
   const canManage = can('manage_waves');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Wave | null>(null);
+  const [productFilter, setProductFilter] = useState<string | null>(null);
 
-  function labelFor(id: string): {label: string;tone: 'brand' | 'violet' | 'aqua' | 'neutral';} {
+  const visibleProducts = useMemo(
+    () => products.filter((p) => productVisible(p.id)).sort((a, b) => a.name.localeCompare(b.name)),
+    [products, productVisible]
+  );
+
+  function labelFor(id: string): {
+    label: string;
+    tone: 'brand' | 'violet' | 'aqua' | 'neutral';
+  } {
     if (id.startsWith('CAP-')) return { label: getCapability(id)?.name ?? id, tone: 'brand' };
     if (id.startsWith('EPIC-')) return { label: getEpic(id)?.name ?? id, tone: 'violet' };
     if (id.startsWith('FEAT-')) return { label: getFeature(id)?.name ?? id, tone: 'aqua' };
@@ -44,6 +89,9 @@ export function WavesPage() {
 
   const visibleWaves = waves
     .filter((w) => entityVisible(w.productIds))
+    .filter(
+      (w) => productFilter === null || (w.productIds ?? []).includes(productFilter)
+    )
     .map((w) => ({ wave: w, itemIds: w.itemIds.filter(itemVisible) }));
 
   return (
@@ -52,20 +100,36 @@ export function WavesPage() {
         title="Waves"
         count={`${visibleWaves.length} increments`}
         action={
-        canManage ?
-        <Button
-          variant="primary"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}>
-          
-            <PlusIcon className="h-3.5 w-3.5" />
-            Define wave
-          </Button> :
-        undefined
-        } />
-      
+          canManage ? (
+            <Button
+              variant="primary"
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Define wave
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        <FilterChip
+          active={productFilter === null}
+          label="All products"
+          onClick={() => setProductFilter(null)}
+        />
+        {visibleProducts.map((p) => (
+          <FilterChip
+            key={p.id}
+            active={productFilter === p.id}
+            label={p.name}
+            onClick={() => setProductFilter(p.id)}
+          />
+        ))}
+      </div>
 
       <div className="mt-4 space-y-5">
         {visibleWaves.map(({ wave: w, itemIds }) => {
@@ -73,6 +137,9 @@ export function WavesPage() {
           const scope = waveStories(scoped, { epics, features, stories });
           const done = scope.filter(storyIsDone).length;
           const counts = waveCounts(scoped);
+          const productNames = (w.productIds ?? [])
+            .map((id) => products.find((p) => p.id === id)?.name ?? id)
+            .join(', ');
 
           return (
             <article key={w.id} className="border-t border-line pt-4">
@@ -82,44 +149,78 @@ export function WavesPage() {
                 </span>
                 <h2 className="text-base font-semibold text-strong">{w.name}</h2>
                 <WaveTag state={w.state} />
-                {w.deliveryDate &&
-                <span className="font-mono text-2xs text-mute">Livraison {w.deliveryDate}</span>
-                }
-                {canManage &&
-                <span className="ml-auto flex items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label={`Edit ${w.code}`}
-                    onClick={() => {
-                      setEditing(w);
-                      setOpen(true);
-                    }}
-                    className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong">
-                    
-                    <PencilIcon className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Delete ${w.code}`}
-                    onClick={() => removeWave(w.id)}
-                    className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong">
-                    
-                    <Trash2Icon className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-                }
+                {w.deliveryDate && (
+                  <span className="font-mono text-2xs text-mute">
+                    Livraison {w.deliveryDate}
+                  </span>
+                )}
+                {productNames && (
+                  <span className="text-2xs text-mute">{productNames}</span>
+                )}
+                {canManage && (
+                  <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                    <select
+                      className={`${inputClass} w-auto py-1 text-2xs`}
+                      value={w.state}
+                      aria-label={`State for ${w.code}`}
+                      onChange={(e) =>
+                        updateWave(w.id, { state: e.target.value as WaveState })
+                      }
+                    >
+                      {WAVE_STATES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                    {w.state !== 'Closed' && (
+                      <button
+                        type="button"
+                        aria-label={`Mark ${w.code} done`}
+                        title="Mark done"
+                        onClick={() => updateWave(w.id, { state: 'Closed' })}
+                        className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
+                      >
+                        <CheckCircle2Icon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      aria-label={`Edit ${w.code}`}
+                      onClick={() => {
+                        setEditing(w);
+                        setOpen(true);
+                      }}
+                      className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${w.code}`}
+                      onClick={() => removeWave(w.id)}
+                      className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong"
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                )}
               </div>
 
-              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">{w.description}</p>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mute">
+                {w.description}
+              </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
                 <span className="flex items-center gap-2 text-2xs text-mute">
-                  <span className="uppercase tracking-[0.14em] text-ink-500">Stories complete</span>
+                  <span className="uppercase tracking-[0.14em] text-ink-500">
+                    Stories complete
+                  </span>
                   <ProgressBar done={done} total={scope.length} />
                 </span>
                 <span className="font-mono text-2xs text-mute">
-                  {counts.capabilities} capabilities · {counts.epics} epics · {counts.features} features ·{' '}
-                  {counts.stories} stories selected
+                  {counts.capabilities} capabilities · {counts.epics} epics · {counts.features}{' '}
+                  features · {counts.stories} stories selected
                 </span>
               </div>
 
@@ -127,32 +228,33 @@ export function WavesPage() {
                 {itemIds.map((id) => {
                   const { label, tone } = labelFor(id);
                   const href = id.startsWith('CAP-') ? `/capabilities/${id}` : undefined;
-                  const chip =
-                  <Chip tone={tone} title={id}>
+                  const chip = (
+                    <Chip tone={tone} title={id}>
                       {label}
-                    </Chip>;
+                    </Chip>
+                  );
 
-                  return href ?
-                  <Link key={id} to={href}>
+                  return href ? (
+                    <Link key={id} to={href}>
                       {chip}
-                    </Link> :
-
-                  <span key={id}>{chip}</span>;
-
+                    </Link>
+                  ) : (
+                    <span key={id}>{chip}</span>
+                  );
                 })}
               </div>
-            </article>);
-
+            </article>
+          );
         })}
 
-        {visibleWaves.length === 0 &&
-        <div className="rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
+        {visibleWaves.length === 0 && (
+          <div className="rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
             <p className="text-sm font-medium text-strong">No waves yet.</p>
           </div>
-        }
+        )}
       </div>
 
       <WaveModal open={open} wave={editing} onClose={() => setOpen(false)} />
-    </div>);
-
+    </div>
+  );
 }
