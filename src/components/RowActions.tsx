@@ -18,10 +18,10 @@ import type { Capability, CapabilityStatus } from '../types/registry';
 import {
   MANUAL_CAPABILITY_STATUSES,
   breakdownCountLabel,
+  capabilityManageTargets,
   countForWorkItemType,
   isAutoManagedStatus,
   manageTablePath,
-  tableManageTargets,
   usesEquipment,
 } from '../types/registry';
 
@@ -60,7 +60,7 @@ export function RowActions({ capability, onEdit }: Props) {
   const counts = countsOf(capability.id);
   const lifecycle = lifecycleOf(capability);
   const isHardware = usesEquipment(lifecycle);
-  const manageTargets = tableManageTargets(lifecycle);
+  const manageTargets = capabilityManageTargets(lifecycle);
   const canEdit = can('edit_capability') && !isReadOnly;
   const canDelete = can('delete_capability') && !isReadOnly;
   const canStatus =

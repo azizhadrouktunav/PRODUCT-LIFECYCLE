@@ -4,7 +4,11 @@ import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Epic, Feature, UserStory } from '../types/registry';
-import { CAPABILITY_STATUSES, DEFAULT_STORY_STAGES } from '../types/registry';
+import {
+  DEFAULT_STORY_STAGES,
+  MANUAL_CAPABILITY_STATUSES,
+  isAutoManagedStatus,
+} from '../types/registry';
 
 function StatusField({
   value,
@@ -13,15 +17,17 @@ function StatusField({
   value: CapabilityStatus | '';
   onChange: (v: CapabilityStatus | '') => void;
 }) {
+  const selectValue =
+    value === '' || isAutoManagedStatus(value) ? '' : value;
   return (
-    <Field label="Status">
+    <Field label="Status" hint="In Progress / Completed are set automatically">
       <select
         className={inputClass}
-        value={value}
+        value={selectValue}
         onChange={(e) => onChange(e.target.value as CapabilityStatus | '')}
       >
-        <option value="">No status</option>
-        {CAPABILITY_STATUSES.map((s) => (
+        <option value="">No flag (auto)</option>
+        {MANUAL_CAPABILITY_STATUSES.map((s) => (
           <option key={s} value={s}>
             {s}
           </option>

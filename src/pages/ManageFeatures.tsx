@@ -17,7 +17,7 @@ import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primit
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Feature } from '../types/registry';
-import { CAPABILITY_STATUSES, storyIsDone } from '../types/registry';
+import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus, storyIsDone } from '../types/registry';
 
 export function ManageFeaturesPage() {
   const { capabilityId = '', epicId = '' } = useParams();
@@ -163,9 +163,9 @@ export function ManageFeaturesPage() {
                         key: 'status',
                         label: 'Change Status',
                         icon: SignalHighIcon,
-                        current: feature.status,
-                        noneLabel: 'No status',
-                        options: CAPABILITY_STATUSES,
+                        current: isAutoManagedStatus(feature.status) ? null : feature.status,
+                        noneLabel: 'No flag (auto)',
+                        options: MANUAL_CAPABILITY_STATUSES,
                         onSelect: (v) =>
                         updateFeature(feature.id, { status: v as CapabilityStatus | null })
                       }] :

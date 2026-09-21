@@ -21,7 +21,7 @@ import { Button, Field, PageHeader, StatusTag, StoryStagePill, inputClass } from
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, UserStory } from '../types/registry';
-import { CAPABILITY_STATUSES, STORY_STAGE_NAMES } from '../types/registry';
+import { MANUAL_CAPABILITY_STATUSES, STORY_STAGE_NAMES, isAutoManagedStatus } from '../types/registry';
 
 function StoryPointsModal({
   open,
@@ -394,9 +394,9 @@ export function ManageStoriesPage() {
                               key: 'status',
                               label: 'Change Status',
                               icon: SignalHighIcon,
-                              current: story.status,
-                              noneLabel: 'No status',
-                              options: CAPABILITY_STATUSES,
+                              current: isAutoManagedStatus(story.status) ? null : story.status,
+                              noneLabel: 'No flag (auto)',
+                              options: MANUAL_CAPABILITY_STATUSES,
                               onSelect: (v: string | null) =>
                                 updateStory(story.id, {
                                   status: v as CapabilityStatus | null,

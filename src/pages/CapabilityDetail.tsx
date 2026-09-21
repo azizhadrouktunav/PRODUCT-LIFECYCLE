@@ -6,13 +6,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import {
   childWorkItemTypes,
+  capabilityManageTargets,
   isStoryDone,
   manageTablePath,
   rootWorkItemTypes,
   stageDef,
   stageIndex,
   storyStagesOf,
-  tableManageTargets,
   usesEquipment,
   workItemTypeDef,
 } from '../types/registry';
@@ -95,7 +95,7 @@ export function CapabilityDetailPage() {
   const capStories = epics.flatMap((e) => featuresOf(e.id)).flatMap((f) => storiesOf(f.id));
   const released = capStories.filter((s) => isStoryDone(s, lifecycle)).length;
 
-  const tableTargets = tableManageTargets(lifecycle);
+  const tableTargets = capabilityManageTargets(lifecycle);
   const tableStages = stages.filter(
     (s) => (s.contentMode ?? 'inline') === 'table' && s.opensTypeId
   );

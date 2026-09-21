@@ -611,6 +611,36 @@ export function tableManageTargets(lifecycle: Lifecycle): WorkItemTypeDef[] {
   return out;
 }
 
+/**
+ * Manage targets for capability menus: table stage targets, plus epic when the
+ * lifecycle supports epics but no table stage declares it (so Manage Epics always
+ * appears for delivery-style capabilities).
+ */
+export function capabilityManageTargets(lifecycle: Lifecycle): WorkItemTypeDef[] {
+  const fromTables = tableManageTargets(lifecycle);
+  const epic = workItemTypeDef(lifecycle, 'epic');
+  const hasEpicType =
+    !!epic ||
+    lifecycle.decomposition === 'delivery' ||
+    (lifecycle.workItemTypes ?? []).some((t) => t.id === 'epic');
+  if (!hasEpicType) return fromTables;
+
+  const epicDef: WorkItemTypeDef =
+    epic ??
+    {
+      id: 'epic',
+      label: 'Epic',
+      pluralLabel: 'Epics',
+      parentTypeId: null,
+      statuses: [...DEFAULT_WORK_ITEM_STATUSES],
+      stages: [],
+      storage: 'builtin',
+    };
+
+  if (fromTables.some((t) => t.id === 'epic')) return fromTables;
+  return [epicDef, ...fromTables];
+}
+
 /** Route to manage a work-item type table for a capability. */
 export function manageTablePath(capabilityId: string, type: WorkItemTypeDef): string {
   if (type.storage === 'builtin' && type.id === 'epic') {
@@ -643,7 +673,7 @@ export function breakdownCountLabel(
   lifecycle: Lifecycle,
   counts: RecordCounts
 ): string {
-  const targets = tableManageTargets(lifecycle);
+  const targets = capabilityManageTargets(lifecycle);
   const types = targets.length > 0 ? targets : rootWorkItemTypes(lifecycle);
   if (types.length === 0) {
     if (counts.equipment > 0) return `${counts.equipment} equip.`;
