@@ -167,56 +167,61 @@ export function EquipmentPage() {
   );
 
   return (
-    <div>
-      <PageHeader title="Equipment" />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0">
+        <PageHeader title="Equipment" />
 
-      <section className="mt-5">
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-            Equipment types · {sortedTypes.length}
-          </h2>
-          <button
-            type="button"
-            onClick={() => setManageTypesOpen(true)}
-            aria-label="Manage equipment types"
-            title="Manage types"
-            className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
-          >
-            <LayersIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        {sortedTypes.length === 0 ? (
-          <p className="mt-3 text-sm text-mute">No types yet.</p>
-        ) : (
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {sortedTypes.map((t) => {
-              const count = visibleEquipment.filter((e) => e.type === t.name).length;
-              return (
-                <li
-                  key={t.id}
-                  className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5"
-                >
-                  <span className="text-xs text-strong">{t.name}</span>
-                  <span className="font-mono text-2xs text-ink-500">{count}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+        <section className="mt-5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+              Equipment types · {sortedTypes.length}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setManageTypesOpen(true)}
+              aria-label="Manage equipment types"
+              title="Manage types"
+              className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-brand-bright"
+            >
+              <LayersIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {sortedTypes.length === 0 ? (
+            <p className="mt-3 text-sm text-mute">No types yet.</p>
+          ) : (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {sortedTypes.map((t) => {
+                const count = visibleEquipment.filter((e) => e.type === t.name).length;
+                return (
+                  <li
+                    key={t.id}
+                    className="inline-flex items-center gap-2 rounded border border-line-strong px-2.5 py-1.5"
+                  >
+                    <span className="text-xs text-strong">{t.name}</span>
+                    <span className="font-mono text-2xs text-ink-500">{count}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
 
       {visibleEquipment.length === 0 || !active ? (
-        <div className="mt-6 overflow-hidden rounded-md border border-line-strong">
-          {modelsHeader}
-          <div className="px-4 py-4">
+        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong">
+          <div className="shrink-0">{modelsHeader}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             <p className="text-sm text-mute">No models yet.</p>
           </div>
         </div>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="border-b border-line-strong lg:border-b-0 lg:border-r lg:border-line-strong">
-            {modelsHeader}
-            <nav aria-label="Equipment models">
+        <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-line-strong lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="flex min-h-0 flex-col border-b border-line-strong lg:h-full lg:border-b-0 lg:border-r lg:border-line-strong">
+            <div className="shrink-0">{modelsHeader}</div>
+            <nav
+              aria-label="Equipment models"
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
               {visibleEquipment.map((e) => {
                 const isActive = e.id === active.id;
                 const count = visibleHardware.filter((c) =>
@@ -247,8 +252,8 @@ export function EquipmentPage() {
             </nav>
           </div>
 
-          <section className="min-w-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-strong px-4 py-3">
+          <section className="flex min-h-0 min-w-0 flex-col">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line-strong px-4 py-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-lg font-semibold tracking-tight text-strong">
@@ -308,7 +313,7 @@ export function EquipmentPage() {
               )}
             </div>
 
-            <div className="px-4 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <h3 className="text-2xs uppercase tracking-[0.14em] text-ink-500">
                 Hardware capabilities · {supported.length}
               </h3>
