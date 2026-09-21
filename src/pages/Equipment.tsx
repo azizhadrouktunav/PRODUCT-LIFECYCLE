@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckIcon,
+  EyeIcon,
   MoreVerticalIcon,
   PencilIcon,
   PlusIcon,
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 import { AddEquipmentTypeModal } from '../components/AddEquipmentTypeModal';
 import { DataTransfer } from '../components/DataTransfer';
+import { DetailsModal } from '../components/DetailsModal';
 import { EquipmentModal } from '../components/EquipmentModal';
 import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitives';
@@ -20,17 +22,32 @@ import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus } from '../types/regist
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
 
+function productLabel(
+  productIds: string[],
+  products: { id: string; name: string }[],
+  productVisible: (id: string) => boolean
+): string {
+  const names = productIds
+    .filter((id) => productVisible(id))
+    .map((id) => products.find((p) => p.id === id)?.name ?? id)
+    .filter(Boolean);
+  if (names.length === 0) return '—';
+  if (names.length === 1) return names[0];
+  return `${names[0]} +${names.length - 1}`;
+}
+
 export function EquipmentPage() {
   const {
     equipment,
     equipmentTypes,
     hardwareCapabilities,
+    products,
     setEquipmentCapabilities,
     removeEquipment,
     removeEquipmentType,
     updateEquipment,
   } = useRegistry();
-  const { can, capabilityVisible, entityVisible } = useAuth();
+  const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
   const canEdit = can('manage_equipment');
   const canImportExport = can('import_export');
   const showSettings = canEdit || canImportExport;
@@ -51,6 +68,7 @@ export function EquipmentPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Equipment | null>(null);
+  const [viewing, setViewing] = useState<Equipment | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
   const settingsRef = useRef<HTMLDivElement>(null);
   const rowMenuRef = useRef<HTMLDivElement>(null);
@@ -240,6 +258,7 @@ export function EquipmentPage() {
                   c.equipmentIds.includes(e.id)
                 ).length;
                 const menuOpen = rowMenuId === e.id;
+                const productsText = productLabel(e.productIds ?? [], products, productVisible);
                 return (
                   <div
                     key={e.id}
@@ -259,68 +278,84 @@ export function EquipmentPage() {
                         >
                           {e.name}
                         </span>
-                        <span className="block truncate text-2xs text-mute">{e.type}</span>
+                        <span className="block truncate text-2xs text-mute">
+                          {e.type || '—'} · {productsText}
+                        </span>
                       </span>
                       <span className="font-mono text-2xs text-ink-500">{count}</span>
                     </button>
-                    {canEdit && (
-                      <div
-                        ref={menuOpen ? rowMenuRef : undefined}
-                        className="relative shrink-0 pr-2"
+                    <div
+                      ref={menuOpen ? rowMenuRef : undefined}
+                      className="relative shrink-0 pr-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          setRowMenuId(menuOpen ? null : e.id);
+                        }}
+                        aria-label={`Actions for ${e.name}`}
+                        aria-expanded={menuOpen}
+                        title="Actions"
+                        className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-strong"
                       >
-                        <button
-                          type="button"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            setRowMenuId(menuOpen ? null : e.id);
-                          }}
-                          aria-label={`Actions for ${e.name}`}
-                          aria-expanded={menuOpen}
-                          title="Actions"
-                          className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-strong"
+                        <MoreVerticalIcon className="h-3.5 w-3.5" />
+                      </button>
+                      {menuOpen && (
+                        <div
+                          role="menu"
+                          className="elev absolute right-0 z-[80] mt-1 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
                         >
-                          <MoreVerticalIcon className="h-3.5 w-3.5" />
-                        </button>
-                        {menuOpen && (
-                          <div
-                            role="menu"
-                            className="elev absolute right-0 z-[80] mt-1 min-w-[140px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={menuItemClass}
+                            onClick={() => {
+                              setViewing(e);
+                              setRowMenuId(null);
+                            }}
                           >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className={menuItemClass}
-                              onClick={() => {
-                                setActiveId(e.id);
-                                setEditing(e);
-                                setRowMenuId(null);
-                              }}
-                            >
-                              <PencilIcon className="h-3.5 w-3.5" />
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className={menuItemClass}
-                              onClick={() => openAssignFor(e)}
-                            >
-                              <PlusIcon className="h-3.5 w-3.5" />
-                              Assign
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className={`${menuItemClass} text-danger hover:text-danger`}
-                              onClick={() => handleDeleteFor(e.id)}
-                            >
-                              <Trash2Icon className="h-3.5 w-3.5" />
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                            <EyeIcon className="h-3.5 w-3.5" />
+                            View equipment
+                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={menuItemClass}
+                                onClick={() => {
+                                  setActiveId(e.id);
+                                  setEditing(e);
+                                  setRowMenuId(null);
+                                }}
+                              >
+                                <PencilIcon className="h-3.5 w-3.5" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={menuItemClass}
+                                onClick={() => openAssignFor(e)}
+                              >
+                                <PlusIcon className="h-3.5 w-3.5" />
+                                Assign
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className={`${menuItemClass} text-danger hover:text-danger`}
+                                onClick={() => handleDeleteFor(e.id)}
+                              >
+                                <Trash2Icon className="h-3.5 w-3.5" />
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -546,6 +581,54 @@ export function EquipmentPage() {
         onCreated={(id) => setActiveId(id)}
       />
       <EquipmentModal open={!!editing} onClose={() => setEditing(null)} equipment={editing} />
+
+      <DetailsModal
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing?.name ?? ''}
+        subtitle={viewing ? `${viewing.id} · equipment model` : undefined}
+        rows={
+          viewing
+            ? [
+                {
+                  label: 'Equipment ID',
+                  value: <span className="font-mono text-xs">{viewing.id}</span>,
+                },
+                { label: 'Name', value: viewing.name },
+                { label: 'Vendor', value: viewing.vendor || '—' },
+                { label: 'Model', value: viewing.model || '—' },
+                { label: 'Type', value: viewing.type || '—' },
+                {
+                  label: 'Products',
+                  value:
+                    (viewing.productIds ?? [])
+                      .filter((id) => productVisible(id))
+                      .map((id) => products.find((p) => p.id === id)?.name ?? id)
+                      .join(', ') || '—',
+                },
+                {
+                  label: 'Status',
+                  value: <StatusTag status={viewing.status ?? null} />,
+                },
+                {
+                  label: 'Document',
+                  value: viewing.documentUrl ? (
+                    <a
+                      href={viewing.documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-brand hover:underline"
+                    >
+                      {viewing.documentUrl}
+                    </a>
+                  ) : (
+                    '—'
+                  ),
+                },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

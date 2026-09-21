@@ -23,6 +23,7 @@ export function EquipmentModal({
   const [model, setModel] = useState('');
   const [type, setType] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
+  const [documentUrl, setDocumentUrl] = useState('');
 
   const sortedTypes = useMemo(
     () => [...equipmentTypes].sort((a, b) => a.name.localeCompare(b.name)),
@@ -37,12 +38,14 @@ export function EquipmentModal({
       setModel(equipment.model);
       setType(equipment.type || '');
       setProductIds(equipment.productIds ?? []);
+      setDocumentUrl(equipment.documentUrl ?? '');
     } else {
       setName('');
       setVendor('');
       setModel('');
       setType(equipmentTypes[0]?.name ?? '');
       setProductIds([]);
+      setDocumentUrl('');
     }
   }, [open, equipment, equipmentTypes]);
 
@@ -58,9 +61,9 @@ export function EquipmentModal({
   function submit() {
     if (!valid) return;
     if (equipment) {
-      updateEquipment(equipment.id, { name, vendor, model, type, productIds });
+      updateEquipment(equipment.id, { name, vendor, model, type, productIds, documentUrl });
     } else {
-      const created = addEquipment({ name, vendor, model, type, productIds });
+      const created = addEquipment({ name, vendor, model, type, productIds, documentUrl });
       onCreated?.(created.id);
     }
     onClose();
@@ -134,6 +137,15 @@ export function EquipmentModal({
               Create an equipment type first from the Equipment page.
             </p>
           )}
+        </Field>
+        <Field label="Document URL" hint="optional link to datasheet, manual, or other file">
+          <input
+            className={inputClass}
+            type="url"
+            value={documentUrl}
+            onChange={(e) => setDocumentUrl(e.target.value)}
+            placeholder="https://…"
+          />
         </Field>
       </div>
     </Modal>

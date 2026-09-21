@@ -437,6 +437,7 @@ function mapEquipment(row: Record<string, unknown>): Equipment {
     model: String(row.model ?? ''),
     type: String(row.type ?? ''),
     productIds: (row.product_ids as string[] | null) ?? [],
+    documentUrl: String(row.document_url ?? ''),
     status: asStatus(row.status as string | null),
   };
 }
@@ -738,6 +739,7 @@ export async function upsertEquipment(item: Equipment): Promise<void> {
     model: item.model,
     type: item.type,
     product_ids: item.productIds,
+    document_url: item.documentUrl ?? '',
     status: item.status,
   });
   throwIfError(error, 'Upsert equipment');

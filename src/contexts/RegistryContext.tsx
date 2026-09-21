@@ -143,7 +143,10 @@ export type StoryInput = Pick<
   | 'adrApproved'
 >;
 
-export type EquipmentInput = Pick<Equipment, 'name' | 'vendor' | 'model' | 'type' | 'productIds'> & {
+export type EquipmentInput = Pick<
+  Equipment,
+  'name' | 'vendor' | 'model' | 'type' | 'productIds' | 'documentUrl'
+> & {
   status?: CapabilityStatus | null;
 };
 export type WaveInput = Pick<
@@ -473,6 +476,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         model: input.model.trim(),
         type: input.type.trim(),
         productIds: input.productIds ?? [],
+        documentUrl: (input.documentUrl ?? '').trim(),
         status: input.status ?? null,
       };
       setEquipment((prev) => [...prev, created]);
@@ -495,6 +499,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             model: patch.model !== undefined ? patch.model.trim() : item.model,
             type: patch.type !== undefined ? patch.type.trim() : item.type,
             productIds: patch.productIds !== undefined ? patch.productIds : item.productIds,
+            documentUrl:
+              patch.documentUrl !== undefined ? patch.documentUrl.trim() : item.documentUrl,
             status: patch.status !== undefined ? patch.status : item.status,
           };
           void api.upsertEquipment(updated).catch((err) => persistError('updateEquipment', err));
@@ -1496,6 +1502,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
           Model: e.model,
           Type: e.type,
           'Product IDs': (e.productIds ?? []).join('; '),
+          'Document URL': e.documentUrl ?? '',
         }));
       }
       if (dataset === 'products') {
@@ -1745,24 +1752,34 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             nextTypes = [...nextTypes, created];
             createdTypes.push(created);
           }
-          const patch = {
-            name,
-            vendor: (r['Vendor'] ?? '').trim(),
-            model: (r['Model'] ?? '').trim(),
-            type: typeName,
-            productIds: list(r['Product IDs'] ?? '').filter((p) => productMap.has(p)),
-          };
+          const productIds = list(r['Product IDs'] ?? '').filter((p) => productMap.has(p));
+          const documentUrl = (r['Document URL'] ?? '').trim();
           const at = id ? next.findIndex((e) => e.id === id) : -1;
           if (at >= 0) {
-            next[at] = { ...next[at], ...patch };
+            next[at] = {
+              ...next[at],
+              name,
+              vendor: (r['Vendor'] ?? '').trim(),
+              model: (r['Model'] ?? '').trim(),
+              type: typeName,
+              productIds: productIds.length > 0 ? productIds : next[at].productIds,
+              documentUrl:
+                r['Document URL'] !== undefined && r['Document URL'] !== null
+                  ? documentUrl
+                  : next[at].documentUrl,
+            };
             result.updated += 1;
           } else {
+            if (productIds.length === 0) return note(i, 'no product ids');
             next.push({
               id: id || nextId('EQP', next, 2),
-              ...patch,
+              name,
+              vendor: (r['Vendor'] ?? '').trim(),
+              model: (r['Model'] ?? '').trim(),
+              type: typeName,
+              productIds,
+              documentUrl,
               status: null,
-              productIds:
-                patch.productIds.length > 0 ? patch.productIds : products.map((p) => p.id),
             });
             result.created += 1;
           }

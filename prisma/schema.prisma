@@ -60,12 +60,14 @@ model EquipmentType {
 }
 
 model Equipment {
-  id         String   @id
-  name       String
-  vendor     String   @default("")
-  model      String   @default("")
-  type       String   @default("")
-  productIds String[] @default([]) @map("product_ids")
+  id          String   @id
+  name        String
+  vendor      String   @default("")
+  model       String   @default("")
+  type        String   @default("")
+  productIds  String[] @default([]) @map("product_ids")
+  documentUrl String   @default("") @map("document_url")
+  status      String?
 
   @@map("equipment")
 }

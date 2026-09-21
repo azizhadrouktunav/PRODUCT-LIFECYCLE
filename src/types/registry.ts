@@ -722,6 +722,8 @@ export interface Equipment {
   model: string;
   type: string;
   productIds: string[];
+  /** Optional link to a related document (datasheet, manual, etc.). */
+  documentUrl: string;
   status: CapabilityStatus | null;
 }
 

@@ -131,6 +131,8 @@ export const DATASETS: Record<DatasetId, DatasetDef> = {
       { label: 'Vendor', example: 'Teltonika' },
       { label: 'Model', example: 'FMC920' },
       { label: 'Type', example: 'Tracker' },
+      { label: 'Product IDs', example: 'PRD-001' },
+      { label: 'Document URL', example: 'https://example.com/datasheet.pdf' },
     ],
   },
   products: {
