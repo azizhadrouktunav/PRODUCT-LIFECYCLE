@@ -17,7 +17,11 @@ import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitiv
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Equipment, EquipmentType } from '../types/registry';
-import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus } from '../types/registry';
+import {
+  MANUAL_CAPABILITY_STATUSES,
+  isAutoManagedStatus,
+  sortCapabilities,
+} from '../types/registry';
 
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium text-strong transition-colors duration-150 ease-out hover:bg-ink-700';
@@ -56,7 +60,7 @@ export function EquipmentPage() {
     [equipment, entityVisible]
   );
   const visibleHardware = useMemo(
-    () => hardwareCapabilities.filter(capabilityVisible),
+    () => sortCapabilities(hardwareCapabilities.filter(capabilityVisible)),
     [hardwareCapabilities, capabilityVisible]
   );
   const [activeId, setActiveId] = useState('');

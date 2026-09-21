@@ -870,6 +870,20 @@ export interface Capability {
   equipmentIds: string[];
   progress: string;
   status: CapabilityStatus | null;
+  /** Display order in register / wave scope (lower first). */
+  sortOrder: number;
+}
+
+/** Stable display order for capability lists. */
+export function sortCapabilities<T extends Pick<Capability, 'id' | 'sortOrder'>>(
+  list: T[]
+): T[] {
+  return [...list].sort((a, b) => {
+    const ao = a.sortOrder ?? 0;
+    const bo = b.sortOrder ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.id.localeCompare(b.id, undefined, { numeric: true });
+  });
 }
 
 export interface Epic {

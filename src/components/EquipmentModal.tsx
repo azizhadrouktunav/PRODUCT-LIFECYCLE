@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { FileTextIcon, Trash2Icon } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button, Field, inputClass } from './Primitives';
 import { ProductMultiSelect } from './ProductMultiSelect';
 import { useRegistry } from '../contexts/RegistryContext';
+import { uploadEquipmentPdf } from '../lib/equipmentDocuments';
 import type { Equipment } from '../types/registry';
 
 export function EquipmentModal({
@@ -24,6 +26,10 @@ export function EquipmentModal({
   const [type, setType] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
   const [documentUrl, setDocumentUrl] = useState('');
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [clearDocument, setClearDocument] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const sortedTypes = useMemo(
     () => [...equipmentTypes].sort((a, b) => a.name.localeCompare(b.name)),
@@ -32,6 +38,10 @@ export function EquipmentModal({
 
   useEffect(() => {
     if (!open) return;
+    setError(null);
+    setPdfFile(null);
+    setClearDocument(false);
+    setSaving(false);
     if (equipment) {
       setName(equipment.name);
       setVendor(equipment.vendor);
@@ -58,16 +68,40 @@ export function EquipmentModal({
     hasTypes &&
     productIds.length > 0;
 
-  function submit() {
-    if (!valid) return;
-    if (equipment) {
-      updateEquipment(equipment.id, { name, vendor, model, type, productIds, documentUrl });
-    } else {
-      const created = addEquipment({ name, vendor, model, type, productIds, documentUrl });
-      onCreated?.(created.id);
+  async function submit() {
+    if (!valid || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      let id = equipment?.id;
+      const base = { name, vendor, model, type, productIds };
+
+      if (equipment) {
+        updateEquipment(equipment.id, base);
+      } else {
+        const created = addEquipment({ ...base, documentUrl: '' });
+        id = created.id;
+        onCreated?.(created.id);
+      }
+
+      let nextUrl = clearDocument ? '' : documentUrl;
+      if (pdfFile && id) {
+        nextUrl = await uploadEquipmentPdf(id, pdfFile);
+      }
+
+      if (id && (pdfFile || clearDocument || (equipment && nextUrl !== (equipment.documentUrl ?? '')))) {
+        updateEquipment(id, { documentUrl: nextUrl });
+      }
+
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
     }
-    onClose();
   }
+
+  const showingExisting = !clearDocument && !pdfFile && !!documentUrl;
 
   return (
     <Modal
@@ -82,11 +116,11 @@ export function EquipmentModal({
       }
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!valid}>
-            {isEdit ? 'Save changes' : 'Add equipment'}
+          <Button variant="primary" onClick={() => void submit()} disabled={!valid || saving}>
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add equipment'}
           </Button>
         </>
       }
@@ -138,15 +172,50 @@ export function EquipmentModal({
             </p>
           )}
         </Field>
-        <Field label="Document URL" hint="optional link to datasheet, manual, or other file">
+        <Field label="Document" hint="optional PDF datasheet or manual (max 10 MB)">
+          {showingExisting && (
+            <div className="mb-2 flex items-center gap-2 rounded-md border border-line-soft px-2.5 py-2 text-xs">
+              <FileTextIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
+              <a
+                href={documentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="min-w-0 flex-1 truncate text-brand hover:underline"
+              >
+                Current PDF
+              </a>
+              <button
+                type="button"
+                aria-label="Remove document"
+                onClick={() => {
+                  setClearDocument(true);
+                  setDocumentUrl('');
+                  setPdfFile(null);
+                }}
+                className="rounded p-1 text-mute hover:text-danger"
+              >
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {pdfFile && (
+            <p className="mb-2 text-2xs text-mute">
+              Selected: <span className="text-soft">{pdfFile.name}</span>
+            </p>
+          )}
           <input
-            className={inputClass}
-            type="url"
-            value={documentUrl}
-            onChange={(e) => setDocumentUrl(e.target.value)}
-            placeholder="https://…"
+            type="file"
+            accept="application/pdf,.pdf"
+            aria-label="Upload PDF document"
+            className="block w-full text-2xs text-mute file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-line-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-soft hover:file:border-brand hover:file:text-strong"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setPdfFile(file);
+              if (file) setClearDocument(false);
+            }}
           />
         </Field>
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     </Modal>
   );

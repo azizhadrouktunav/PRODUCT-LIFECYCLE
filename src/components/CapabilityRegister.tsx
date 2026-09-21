@@ -18,7 +18,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability } from '../types/registry';
-import { CAPABILITY_STATUSES, isStageAhead, stageIndex, usesEquipment } from '../types/registry';
+import {
+  CAPABILITY_STATUSES,
+  isStageAhead,
+  sortCapabilities,
+  stageIndex,
+  usesEquipment,
+} from '../types/registry';
 
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
@@ -26,12 +32,13 @@ const selectClass =
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
 const ROW_HEIGHT_REM = 3.25;
 
-type SortKey = 'id' | 'name' | 'group' | 'products' | 'breakdown' | 'progress' | 'status';
+type SortKey = 'sortOrder' | 'id' | 'name' | 'group' | 'products' | 'breakdown' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export type RegisterFilterOption = { id: string; label: string };
 
 const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
+  { key: 'sortOrder', label: '#', className: 'w-12' },
   { key: 'id', label: 'ID', className: 'w-24' },
   { key: 'name', label: 'Capability', className: '' },
   { key: 'group', label: 'Group', className: 'w-36' },
@@ -120,7 +127,7 @@ export function CapabilityRegister({
   const [groupFilter, setGroupFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sortKey, setSortKey] = useState<SortKey>('id');
+  const [sortKey, setSortKey] = useState<SortKey>('sortOrder');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -176,6 +183,8 @@ export function CapabilityRegister({
     const lifecycle = lifecycleOf(c);
     const counts = countsOf(c.id);
     switch (key) {
+      case 'sortOrder':
+        return c.sortOrder ?? 0;
       case 'id':
         return c.id;
       case 'name':
@@ -217,6 +226,11 @@ export function CapabilityRegister({
         (c.productIds ?? []).some((d) => d.toLowerCase().includes(q))
       );
     });
+
+    if (sortKey === 'sortOrder') {
+      const ordered = sortCapabilities(filtered);
+      return sortDir === 'asc' ? ordered : [...ordered].reverse();
+    }
 
     return [...filtered].sort((a, b) =>
       compareValues(sortValue(a, sortKey), sortValue(b, sortKey), sortDir)
@@ -486,6 +500,9 @@ export function CapabilityRegister({
                   }}
                   className="cursor-pointer border-t border-line-soft align-top transition-colors duration-150 ease-out hover:bg-ink-800"
                 >
+                  <td className="py-3 pr-4 font-mono text-2xs text-mute">
+                    {(c.sortOrder ?? 0) + 1}
+                  </td>
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{c.id}</td>
                   <td className="py-3 pr-4">
                     <div className="flex items-center gap-2">

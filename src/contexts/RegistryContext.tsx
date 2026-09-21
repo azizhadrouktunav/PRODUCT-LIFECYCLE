@@ -180,6 +180,10 @@ interface RegistryValue {
   addCapability: (input: NewCapabilityInput) => Capability;
   updateCapability: (id: string, patch: Partial<Omit<Capability, 'id'>>) => void;
   removeCapability: (id: string) => void;
+  /** Reassign sortOrder from 0..n-1 for the given id sequence. */
+  reorderCapabilities: (orderedIds: string[]) => void;
+  /** Swap with previous/next capability in current sort order. */
+  moveCapability: (id: string, direction: -1 | 1) => void;
   addGroup: (input: GroupInput) => void;
   updateGroup: (id: string, patch: Partial<GroupInput>) => void;
   removeGroup: (id: string) => boolean;
@@ -775,6 +779,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const group = groups.find((g) => g.id === input.groupId);
       const code = group?.code?.trim().toUpperCase() || baseGroupCode(group?.name ?? 'G');
       const lifecycle = resolveLifecycle(trackOfGroup(input.groupId));
+      const maxOrder = capabilities.reduce((acc, c) => Math.max(acc, c.sortOrder ?? 0), -1);
       const draft: Capability = {
         id: nextId(`CAP-${code}`, capabilities, 4),
         name: input.name.trim(),
@@ -785,6 +790,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         equipmentIds: isEquipmentGroup(input.groupId) ? input.equipmentIds : [],
         progress: lifecycle.stages[0]?.name ?? 'Identified',
         status: null,
+        sortOrder: maxOrder + 1,
       };
       const created = withAutoProgress(draft, epics, features, stories, lifecycle);
       setCapabilities((prev) => [created, ...prev]);
@@ -841,6 +847,60 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       void api.deleteCapability(id).catch((err) => persistError('removeCapability', err));
     },
     [epics, features, stories]
+  );
+
+  const reorderCapabilities = useCallback((orderedIds: string[]) => {
+    setCapabilities((prev) => {
+      const byId = new Map(prev.map((c) => [c.id, c]));
+      const touched: Capability[] = [];
+      orderedIds.forEach((id, index) => {
+        const cap = byId.get(id);
+        if (!cap) return;
+        if (cap.sortOrder === index) return;
+        const updated = { ...cap, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertCapabilities(touched).catch((err) =>
+        persistError('reorderCapabilities', err)
+      );
+      return prev.map((c) => byId.get(c.id) ?? c);
+    });
+  }, []);
+
+  const moveCapability = useCallback(
+    (id: string, direction: -1 | 1) => {
+      setCapabilities((prev) => {
+        const sorted = [...prev].sort((a, b) => {
+          const ao = a.sortOrder ?? 0;
+          const bo = b.sortOrder ?? 0;
+          if (ao !== bo) return ao - bo;
+          return a.id.localeCompare(b.id, undefined, { numeric: true });
+        });
+        const idx = sorted.findIndex((c) => c.id === id);
+        const swapIdx = idx + direction;
+        if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return prev;
+        const a = sorted[idx];
+        const b = sorted[swapIdx];
+        const updatedA = { ...a, sortOrder: b.sortOrder };
+        const updatedB = { ...b, sortOrder: a.sortOrder };
+        // If sortOrders were equal, assign distinct values from indices
+        if (updatedA.sortOrder === updatedB.sortOrder) {
+          updatedA.sortOrder = swapIdx;
+          updatedB.sortOrder = idx;
+        }
+        void api
+          .upsertCapabilities([updatedA, updatedB])
+          .catch((err) => persistError('moveCapability', err));
+        return prev.map((c) => {
+          if (c.id === updatedA.id) return updatedA;
+          if (c.id === updatedB.id) return updatedB;
+          return c;
+        });
+      });
+    },
+    []
   );
 
   const addGroup = useCallback((input: GroupInput) => {
@@ -1583,9 +1643,11 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
               groups.find((g) => g.id === groupId)?.code?.trim().toUpperCase() ||
               baseGroupCode(groups.find((g) => g.id === groupId)?.name ?? 'G');
             const createdId = id || nextId(`CAP-${groupCode}`, next, 4);
+            const maxOrder = next.reduce((acc, c) => Math.max(acc, c.sortOrder ?? 0), -1);
             next.unshift({
               id: createdId,
               progress: lifecycle.stages[0]?.name ?? 'Identified',
+              sortOrder: maxOrder + 1,
               ...patch,
             });
             touch(createdId);
@@ -1968,6 +2030,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       addCapability,
       updateCapability,
       removeCapability,
+      reorderCapabilities,
+      moveCapability,
       addGroup,
       updateGroup,
       removeGroup,
@@ -2057,6 +2121,8 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     addCapability,
     updateCapability,
     removeCapability,
+    reorderCapabilities,
+    moveCapability,
     addGroup,
     updateGroup,
     removeGroup,

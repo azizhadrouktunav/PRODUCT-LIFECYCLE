@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
   LayersIcon,
   ListTreeIcon,
   MoreHorizontalIcon,
@@ -48,7 +50,8 @@ function placeMenu(btn: DOMRect, menuHeight = MENU_ESTIMATE): MenuCoords {
 }
 
 export function RowActions({ capability, onEdit }: Props) {
-  const { updateCapability, removeCapability, countsOf, lifecycleOf } = useRegistry();
+  const { updateCapability, removeCapability, moveCapability, countsOf, lifecycleOf } =
+    useRegistry();
   const { can, isReadOnly } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -65,6 +68,7 @@ export function RowActions({ capability, onEdit }: Props) {
   const canDelete = can('delete_capability') && !isReadOnly;
   const canStatus =
     (can('edit_capability') || can('edit_capability_progress') || can('edit_all')) && !isReadOnly;
+  const canReorder = canEdit;
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -192,6 +196,32 @@ export function RowActions({ capability, onEdit }: Props) {
                       </span>
                     </button>
                   ))}
+                  {canReorder && (
+                    <>
+                      <button
+                        type="button"
+                        className={itemClass}
+                        onClick={() => {
+                          moveCapability(capability.id, -1);
+                          setOpen(false);
+                        }}
+                      >
+                        <ChevronUpIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
+                        Move up
+                      </button>
+                      <button
+                        type="button"
+                        className={itemClass}
+                        onClick={() => {
+                          moveCapability(capability.id, 1);
+                          setOpen(false);
+                        }}
+                      >
+                        <ChevronDownIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
+                        Move down
+                      </button>
+                    </>
+                  )}
                   {canEdit && (
                     <button
                       type="button"

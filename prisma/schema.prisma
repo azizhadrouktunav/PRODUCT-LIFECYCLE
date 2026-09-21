@@ -83,6 +83,7 @@ model Capability {
   equipmentIds String[]        @default([]) @map("equipment_ids")
   progress     String          @default("Identified")
   status       String?
+  sortOrder    Int             @default(0) @map("sort_order")
   epics        Epic[]
 
   @@index([groupId])

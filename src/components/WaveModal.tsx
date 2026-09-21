@@ -6,7 +6,7 @@ import { ProductMultiSelect } from './ProductMultiSelect';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Wave, WaveState } from '../types/registry';
-import { WAVE_STATES } from '../types/registry';
+import { WAVE_STATES, sortCapabilities } from '../types/registry';
 import { sharesProducts } from '../lib/rbac';
 
 interface Props {
@@ -176,10 +176,12 @@ export function WaveModal({ open, onClose, wave = null }: Props) {
         (productIds.length === 0 || sharesProducts(c.productIds, productIds))
     );
     const q = query.trim().toLowerCase();
-    if (!q) return scoped;
-    return scoped.filter(
-      (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
-    );
+    const filtered = !q
+      ? scoped
+      : scoped.filter(
+          (c) => c.name.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)
+        );
+    return sortCapabilities(filtered);
   }, [capabilities, query, capabilityVisible, productIds]);
 
   function toggleItem(id: string) {

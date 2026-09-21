@@ -460,6 +460,7 @@ function mapCapability(row: Record<string, unknown>): Capability {
     equipmentIds: (row.equipment_ids as string[] | null) ?? [],
     progress: String(row.progress ?? 'Identified'),
     status: asStatus(row.status as string | null),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -769,6 +770,7 @@ export async function upsertCapability(cap: Capability): Promise<void> {
     equipment_ids: cap.equipmentIds,
     progress: cap.progress,
     status: cap.status,
+    sort_order: cap.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert capability');
 }
@@ -896,6 +898,7 @@ export async function upsertCapabilities(items: Capability[]): Promise<void> {
       equipment_ids: cap.equipmentIds,
       progress: cap.progress,
       status: cap.status,
+      sort_order: cap.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert capabilities');
@@ -965,6 +968,7 @@ export async function upsertEquipmentMany(items: Equipment[]): Promise<void> {
       model: item.model,
       type: item.type,
       product_ids: item.productIds,
+      document_url: item.documentUrl ?? '',
       status: item.status,
     }))
   );
