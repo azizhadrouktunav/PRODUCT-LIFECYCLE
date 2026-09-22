@@ -11,10 +11,11 @@ import {
 import { DataTransfer } from '../components/DataTransfer';
 import { ProductModal } from '../components/ProductModal';
 import { Button, PageHeader, StatusTag } from '../components/Primitives';
+import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Capability, Product } from '../types/registry';
-import { stageIndex } from '../types/registry';
+import { sortByOrder, stageIndex } from '../types/registry';
 
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
@@ -52,8 +53,10 @@ function compareValues(a: string | number, b: string | number, dir: SortDir): nu
 }
 
 export function ProductsPage() {
-  const { products, capabilities, groups, getGroup, lifecycleOf, removeProduct } = useRegistry();
+  const { products, capabilities, groups, getGroup, lifecycleOf, removeProduct, reorderProducts } =
+    useRegistry();
   const { can, productVisible, capabilityVisible } = useAuth();
+  const canManage = can('manage_products');
   const [activeId, setActiveId] = useState(products[0]?.id ?? '');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -62,10 +65,7 @@ export function ProductsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const sorted = useMemo(
-    () =>
-      [...products]
-        .filter((p) => productVisible(p.id))
-        .sort((a, b) => a.name.localeCompare(b.name)),
+    () => sortByOrder(products.filter((p) => productVisible(p.id))),
     [products, productVisible]
   );
 
@@ -151,8 +151,8 @@ export function ProductsPage() {
         count={`${sorted.length} products`}
         action={
           <div className="flex flex-wrap items-center gap-1.5">
-            {can('manage_products') && <DataTransfer dataset="products" />}
-            {can('manage_products') && (
+            {canManage && <DataTransfer dataset="products" />}
+            {canManage && (
               <Button
                 variant="primary"
                 onClick={() => {
@@ -177,19 +177,24 @@ export function ProductsPage() {
         <div className="mt-4 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="border-t border-line pt-3 lg:border-t-0 lg:border-r lg:border-line lg:pr-4 lg:pt-0">
             <p className="mb-2 text-2xs uppercase tracking-[0.14em] text-ink-500">Products</p>
-            <ul className="space-y-0.5">
-              {sorted.map((p) => {
+            <SortableList
+              items={sorted}
+              disabled={!canManage}
+              onReorder={reorderProducts}
+              className="space-y-0.5"
+              renderItem={(p, handle) => {
                 const count = capabilities.filter((c) =>
                   (c.productIds ?? []).includes(p.id)
                 ).length;
                 const isActive = active?.id === p.id;
                 return (
-                  <li key={p.id}>
+                  <div className="flex items-center gap-0.5">
+                    {canManage && <SortableGripButton handle={handle} />}
                     <button
                       type="button"
                       onClick={() => setActiveId(p.id)}
                       aria-current={isActive}
-                      className={`flex w-full items-start justify-between gap-2 rounded-md px-2.5 py-2 text-left transition-colors duration-150 ease-out ${
+                      className={`flex min-w-0 flex-1 items-start justify-between gap-2 rounded-md px-2.5 py-2 text-left transition-colors duration-150 ease-out ${
                         isActive
                           ? 'bg-ink-700 text-strong'
                           : 'text-mute hover:bg-ink-800 hover:text-soft'
@@ -201,10 +206,10 @@ export function ProductsPage() {
                       </span>
                       <span className="shrink-0 text-2xs text-ink-500">{count}</span>
                     </button>
-                  </li>
+                  </div>
                 );
-              })}
-            </ul>
+              }}
+            />
           </aside>
 
           {active && (
@@ -218,7 +223,7 @@ export function ProductsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5">
-                  {can('manage_products') && (
+                  {canManage && (
                     <>
                       <button
                         type="button"

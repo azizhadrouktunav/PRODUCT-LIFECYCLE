@@ -18,6 +18,7 @@ function asDraftLifecycle(t: LifecycleTemplate): Lifecycle {
     workItemTypes: t.workItemTypes,
     productIds: t.productIds,
     automationRules: t.automationRules,
+    sortOrder: 0,
   };
 }
 

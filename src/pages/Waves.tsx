@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2Icon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { WaveModal } from '../components/WaveModal';
 import { Button, Chip, PageHeader, ProgressBar, WaveTag, inputClass } from '../components/Primitives';
+import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Wave, WaveState } from '../types/registry';
-import { WAVE_STATES, storyIsDone } from '../types/registry';
+import { WAVE_STATES, sortByOrder, storyIsDone } from '../types/registry';
 import { waveCounts, waveStories } from '../utils/scope';
 
 function FilterChip({
@@ -46,6 +47,7 @@ export function WavesPage() {
     getFeature,
     getStory,
     removeWave,
+    reorderWaves,
     updateWave,
   } = useRegistry();
   const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
@@ -87,12 +89,18 @@ export function WavesPage() {
     return !!story && itemVisible(story.featureId);
   }
 
-  const visibleWaves = waves
-    .filter((w) => entityVisible(w.productIds))
-    .filter(
-      (w) => productFilter === null || (w.productIds ?? []).includes(productFilter)
-    )
-    .map((w) => ({ wave: w, itemIds: w.itemIds.filter(itemVisible) }));
+  const visibleWaves = sortByOrder(
+    waves
+      .filter((w) => entityVisible(w.productIds))
+      .filter(
+        (w) => productFilter === null || (w.productIds ?? []).includes(productFilter)
+      )
+  ).map((w) => ({
+    id: w.id,
+    wave: w,
+    itemIds: w.itemIds.filter(itemVisible),
+  }));
+
 
   return (
     <div>
@@ -131,8 +139,12 @@ export function WavesPage() {
         ))}
       </div>
 
-      <div className="mt-4 space-y-5">
-        {visibleWaves.map(({ wave: w, itemIds }) => {
+      <SortableList
+        items={visibleWaves}
+        disabled={!canManage}
+        onReorder={reorderWaves}
+        className="mt-4 space-y-5"
+        renderItem={({ wave: w, itemIds }, handle) => {
           const scoped = { ...w, itemIds };
           const scope = waveStories(scoped, { epics, features, stories });
           const done = scope.filter(storyIsDone).length;
@@ -142,8 +154,9 @@ export function WavesPage() {
             .join(', ');
 
           return (
-            <article key={w.id} className="border-t border-line pt-4">
+            <article className="border-t border-line pt-4">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                {canManage && <SortableGripButton handle={handle} />}
                 <span className="rounded border border-violet/40 px-1.5 py-0.5 font-mono text-2xs text-violet">
                   {w.code}
                 </span>
@@ -245,14 +258,14 @@ export function WavesPage() {
               </div>
             </article>
           );
-        })}
+        }}
+      />
 
-        {visibleWaves.length === 0 && (
-          <div className="rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
-            <p className="text-sm font-medium text-strong">No waves yet.</p>
-          </div>
-        )}
-      </div>
+      {visibleWaves.length === 0 && (
+        <div className="mt-4 rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
+          <p className="text-sm font-medium text-strong">No waves yet.</p>
+        </div>
+      )}
 
       <WaveModal open={open} wave={editing} onClose={() => setOpen(false)} />
     </div>

@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PencilIcon, PlusIcon, Trash2Icon, UsersIcon } from 'lucide-react';
 import { ActorModal } from '../components/ActorModal';
 import { DataTransfer } from '../components/DataTransfer';
 import { Button, Chip, PageHeader } from '../components/Primitives';
+import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Actor } from '../types/registry';
+import { sortByOrder } from '../types/registry';
 
 export function ActorsPage() {
-  const { actors, products, removeActor } = useRegistry();
+  const { actors, products, removeActor, reorderActors } = useRegistry();
   const { can, productVisible } = useAuth();
   const canManage = can('manage_actors');
   const [adding, setAdding] = useState(false);
@@ -19,9 +21,13 @@ export function ActorsPage() {
   }
 
   // An actor with no products is company-wide, so it stays visible to everyone.
-  const sorted = [...actors]
-    .filter((a) => (a.productIds ?? []).length === 0 || visibleProductIds(a).length > 0)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = useMemo(
+    () =>
+      sortByOrder(
+        actors.filter((a) => (a.productIds ?? []).length === 0 || visibleProductIds(a).length > 0)
+      ),
+    [actors, productVisible]
+  );
 
   return (
     <div>
@@ -57,6 +63,7 @@ export function ActorsPage() {
           <table className="w-full min-w-[720px] border-collapse text-left">
             <thead>
               <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+                {canManage && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
                 <th className="w-28 py-2.5 pr-4 font-medium">ID</th>
                 <th className="w-48 py-2.5 pr-4 font-medium">Name</th>
                 <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -64,9 +71,13 @@ export function ActorsPage() {
                 {canManage && <th className="w-24 py-2.5 text-right font-medium">Actions</th>}
               </tr>
             </thead>
-            <tbody>
-              {sorted.map((actor) => (
-                <tr key={actor.id} className="border-t border-line-soft align-top">
+            <SortableTableBody
+              items={sorted}
+              disabled={!canManage}
+              onReorder={reorderActors}
+              renderRow={(actor, handle) => (
+                <>
+                  {canManage && <SortableGrip handle={handle} />}
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{actor.id}</td>
                   <td className="py-3 pr-4 text-sm font-medium text-strong">{actor.name}</td>
                   <td className="py-3 pr-4">
@@ -116,9 +127,9 @@ export function ActorsPage() {
                       </div>
                     </td>
                   )}
-                </tr>
-              ))}
-            </tbody>
+                </>
+              )}
+            />
           </table>
         </div>
       )}

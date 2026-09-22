@@ -14,12 +14,14 @@ import { DetailsModal } from '../components/DetailsModal';
 import { EquipmentModal } from '../components/EquipmentModal';
 import { Modal } from '../components/Modal';
 import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitives';
+import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Equipment, EquipmentType } from '../types/registry';
 import {
   MANUAL_CAPABILITY_STATUSES,
   isAutoManagedStatus,
+  sortByOrder,
   sortCapabilities,
 } from '../types/registry';
 
@@ -49,6 +51,7 @@ export function EquipmentPage() {
     setEquipmentCapabilities,
     removeEquipment,
     removeEquipmentType,
+    reorderEquipment,
     updateEquipment,
   } = useRegistry();
   const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
@@ -56,7 +59,7 @@ export function EquipmentPage() {
   const canImportExport = can('import_export');
   const showSettings = canEdit || canImportExport;
   const visibleEquipment = useMemo(
-    () => equipment.filter((e) => entityVisible(e.productIds)),
+    () => sortByOrder(equipment.filter((e) => entityVisible(e.productIds))),
     [equipment, entityVisible]
   );
   const visibleHardware = useMemo(
@@ -256,113 +259,122 @@ export function EquipmentPage() {
               aria-label="Equipment models"
               className="min-h-0 flex-1 overflow-y-auto"
             >
-              {visibleEquipment.map((e) => {
-                const isActive = e.id === active.id;
-                const count = visibleHardware.filter((c) =>
-                  c.equipmentIds.includes(e.id)
-                ).length;
-                const menuOpen = rowMenuId === e.id;
-                const productsText = productLabel(e.productIds ?? [], products, productVisible);
-                return (
-                  <div
-                    key={e.id}
-                    className={`flex items-center gap-1 border-b border-line-soft last:border-b-0 ${
-                      isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setActiveId(e.id)}
-                      aria-current={isActive}
-                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 ease-out"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
-                        >
-                          {e.name}
-                        </span>
-                        <span className="block truncate text-2xs text-mute">
-                          {e.type || '—'} · {productsText}
-                        </span>
-                      </span>
-                      <span className="font-mono text-2xs text-ink-500">{count}</span>
-                    </button>
+              <SortableList
+                items={visibleEquipment}
+                disabled={!canEdit}
+                onReorder={reorderEquipment}
+                renderItem={(e, handle) => {
+                  const isActive = e.id === active.id;
+                  const count = visibleHardware.filter((c) =>
+                    c.equipmentIds.includes(e.id)
+                  ).length;
+                  const menuOpen = rowMenuId === e.id;
+                  const productsText = productLabel(e.productIds ?? [], products, productVisible);
+                  return (
                     <div
-                      ref={menuOpen ? rowMenuRef : undefined}
-                      className="relative shrink-0 pr-2"
+                      className={`flex items-center gap-1 border-b border-line-soft last:border-b-0 ${
+                        isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
+                      }`}
                     >
-                      <button
-                        type="button"
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          setRowMenuId(menuOpen ? null : e.id);
-                        }}
-                        aria-label={`Actions for ${e.name}`}
-                        aria-expanded={menuOpen}
-                        title="Actions"
-                        className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-strong"
-                      >
-                        <MoreVerticalIcon className="h-3.5 w-3.5" />
-                      </button>
-                      {menuOpen && (
-                        <div
-                          role="menu"
-                          className="elev absolute right-0 z-[80] mt-1 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className={menuItemClass}
-                            onClick={() => {
-                              setViewing(e);
-                              setRowMenuId(null);
-                            }}
-                          >
-                            <EyeIcon className="h-3.5 w-3.5" />
-                            View equipment
-                          </button>
-                          {canEdit && (
-                            <>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                onClick={() => {
-                                  setActiveId(e.id);
-                                  setEditing(e);
-                                  setRowMenuId(null);
-                                }}
-                              >
-                                <PencilIcon className="h-3.5 w-3.5" />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={menuItemClass}
-                                onClick={() => openAssignFor(e)}
-                              >
-                                <PlusIcon className="h-3.5 w-3.5" />
-                                Assign
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`${menuItemClass} text-danger hover:text-danger`}
-                                onClick={() => handleDeleteFor(e.id)}
-                              >
-                                <Trash2Icon className="h-3.5 w-3.5" />
-                                Delete
-                              </button>
-                            </>
-                          )}
+                      {canEdit && (
+                        <div className="shrink-0 pl-1">
+                          <SortableGripButton handle={handle} />
                         </div>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setActiveId(e.id)}
+                        aria-current={isActive}
+                        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 ease-out"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block truncate text-sm ${isActive ? 'text-strong' : 'text-soft'}`}
+                          >
+                            {e.name}
+                          </span>
+                          <span className="block truncate text-2xs text-mute">
+                            {e.type || '—'} · {productsText}
+                          </span>
+                        </span>
+                        <span className="font-mono text-2xs text-ink-500">{count}</span>
+                      </button>
+                      <div
+                        ref={menuOpen ? rowMenuRef : undefined}
+                        className="relative shrink-0 pr-2"
+                      >
+                        <button
+                          type="button"
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setRowMenuId(menuOpen ? null : e.id);
+                          }}
+                          aria-label={`Actions for ${e.name}`}
+                          aria-expanded={menuOpen}
+                          title="Actions"
+                          className="rounded p-1 text-mute transition-colors duration-150 ease-out hover:text-strong"
+                        >
+                          <MoreVerticalIcon className="h-3.5 w-3.5" />
+                        </button>
+                        {menuOpen && (
+                          <div
+                            role="menu"
+                            className="elev absolute right-0 z-[80] mt-1 min-w-[160px] rounded-lg border border-line-strong bg-ink-800 p-1 shadow-lg"
+                          >
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className={menuItemClass}
+                              onClick={() => {
+                                setViewing(e);
+                                setRowMenuId(null);
+                              }}
+                            >
+                              <EyeIcon className="h-3.5 w-3.5" />
+                              View equipment
+                            </button>
+                            {canEdit && (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className={menuItemClass}
+                                  onClick={() => {
+                                    setActiveId(e.id);
+                                    setEditing(e);
+                                    setRowMenuId(null);
+                                  }}
+                                >
+                                  <PencilIcon className="h-3.5 w-3.5" />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className={menuItemClass}
+                                  onClick={() => openAssignFor(e)}
+                                >
+                                  <PlusIcon className="h-3.5 w-3.5" />
+                                  Assign
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className={`${menuItemClass} text-danger hover:text-danger`}
+                                  onClick={() => handleDeleteFor(e.id)}
+                                >
+                                  <Trash2Icon className="h-3.5 w-3.5" />
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                }}
+              />
             </nav>
           </div>
 

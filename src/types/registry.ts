@@ -116,6 +116,8 @@ export interface Lifecycle {
   productIds: string[];
   /** Cross-table status automation rules for this lifecycle. */
   automationRules: AutomationRule[];
+  /** Display order in lifecycles list (lower first). */
+  sortOrder: number;
 }
 
 /**
@@ -373,7 +375,7 @@ function leafWhen(
 }
 
 /** Seed / editor templates for the two built-in lifecycle styles. */
-export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'>> = {
+export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id' | 'sortOrder'>> = {
   none: {
     label: 'Hardware review track',
     summary:
@@ -470,7 +472,7 @@ export function templateToLifecycleDraft(
     | 'workItemTypes'
     | 'automationRules'
   >
-): Omit<Lifecycle, 'id' | 'productIds'> & { productIds?: string[] } {
+): Omit<Lifecycle, 'id' | 'productIds' | 'sortOrder'> & { productIds?: string[] } {
   return {
     label: t.label,
     summary: t.summary,
@@ -524,6 +526,7 @@ export function lifecycleToTemplateFields(
 /** Fallback when a group references a missing lifecycle id. */
 export const FALLBACK_LIFECYCLE: Lifecycle = {
   id: 'delivery',
+  sortOrder: 1,
   ...LIFECYCLE_TEMPLATES.delivery,
 };
 
@@ -532,8 +535,8 @@ export const FALLBACK_LIFECYCLE: Lifecycle = {
  * Kept for import fallbacks and editor “start from template”.
  */
 export const TRACKS: Record<string, Lifecycle> = {
-  hardware: { id: 'hardware', ...LIFECYCLE_TEMPLATES.none },
-  delivery: { id: 'delivery', ...LIFECYCLE_TEMPLATES.delivery },
+  hardware: { id: 'hardware', sortOrder: 0, ...LIFECYCLE_TEMPLATES.none },
+  delivery: { id: 'delivery', sortOrder: 1, ...LIFECYCLE_TEMPLATES.delivery },
 };
 
 /** @deprecated Prefer lifecycle.storyStages from the registry. */
@@ -740,6 +743,8 @@ export interface Equipment {
   /** Optional link to a related document (datasheet, manual, etc.). */
   documentUrl: string;
   status: CapabilityStatus | null;
+  /** Display order in equipment list (lower first). */
+  sortOrder: number;
 }
 
 /** Generic custom work item (name + description + status). */
@@ -822,6 +827,8 @@ export interface Product {
   id: string;
   name: string;
   description: string;
+  /** Display order in products list (lower first). */
+  sortOrder: number;
 }
 
 export interface Actor {
@@ -829,6 +836,8 @@ export interface Actor {
   name: string;
   description: string;
   productIds: string[];
+  /** Display order in actors list (lower first). */
+  sortOrder: number;
 }
 
 export interface CapabilityGroup {
@@ -842,6 +851,8 @@ export interface CapabilityGroup {
   /** How this group is worked, shown behind the info icon on the Groups page. */
   process: string;
   productIds: string[];
+  /** Display order in groups list (lower first). */
+  sortOrder: number;
 }
 
 export interface Capability {
@@ -863,6 +874,11 @@ export interface Capability {
 export function sortCapabilities<T extends Pick<Capability, 'id' | 'sortOrder'>>(
   list: T[]
 ): T[] {
+  return sortByOrder(list);
+}
+
+/** Generic stable sort by sortOrder then id. */
+export function sortByOrder<T extends { id: string; sortOrder?: number }>(list: T[]): T[] {
   return [...list].sort((a, b) => {
     const ao = a.sortOrder ?? 0;
     const bo = b.sortOrder ?? 0;
@@ -878,6 +894,8 @@ export interface Epic {
   name: string;
   description: string;
   status: CapabilityStatus | null;
+  /** Display order within capability (lower first). */
+  sortOrder: number;
 }
 
 export interface Feature {
@@ -886,6 +904,8 @@ export interface Feature {
   name: string;
   description: string;
   status: CapabilityStatus | null;
+  /** Display order within epic (lower first). */
+  sortOrder: number;
 }
 
 export interface UserStory {
@@ -909,6 +929,8 @@ export interface UserStory {
   adrTechnical?: string;
   adrConsequences?: string;
   adrApproved?: boolean;
+  /** Display order within feature (lower first). */
+  sortOrder: number;
 }
 
 export function isStoryDone(story: UserStory, lifecycle?: Lifecycle): boolean {
@@ -940,6 +962,8 @@ export interface Wave {
   /** Mixed ids — CAP-…, EPIC-…, FEAT-… or US-… */
   itemIds: string[];
   productIds: string[];
+  /** Display order in waves list (lower first). */
+  sortOrder: number;
 }
 
 export function itemKind(id: string): 'capability' | 'epic' | 'feature' | 'story' | 'unknown' {

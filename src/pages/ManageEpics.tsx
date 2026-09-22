@@ -14,6 +14,7 @@ import { DataTransfer } from '../components/DataTransfer';
 import { DetailsModal } from '../components/DetailsModal';
 import { EpicModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
+import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Epic } from '../types/registry';
@@ -22,7 +23,15 @@ import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus, storyIsDone } from '..
 export function ManageEpicsPage() {
   const { capabilityId = '' } = useParams();
   const navigate = useNavigate();
-  const { getCapability, epicsOf, featuresOf, storiesOfEpic, updateEpic, removeEpic } = useRegistry();
+  const {
+    getCapability,
+    epicsOf,
+    featuresOf,
+    storiesOfEpic,
+    updateEpic,
+    removeEpic,
+    reorderEpics,
+  } = useRegistry();
   const { can, capabilityVisible } = useAuth();
   const capability = getCapability(capabilityId);
   const canManage = can('edit_capability');
@@ -94,6 +103,7 @@ export function ManageEpicsPage() {
         <table className="w-full min-w-[900px] border-collapse text-left">
           <thead>
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+              {canManage && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
               <th className="w-28 py-2.5 pr-4 font-medium">Epic ID</th>
               <th className="w-64 py-2.5 pr-4 font-medium">Epic Name</th>
               <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -102,12 +112,16 @@ export function ManageEpicsPage() {
               <th className="w-16 py-2.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {epics.map((epic) => {
+          <SortableTableBody
+            items={epics}
+            disabled={!canManage}
+            onReorder={(orderedIds) => reorderEpics(capability.id, orderedIds)}
+            renderRow={(epic, handle) => {
               const stories = storiesOfEpic(epic.id);
               const done = stories.filter(storyIsDone).length;
               return (
-                <tr key={epic.id} className="border-t border-line-soft align-top">
+                <>
+                  {canManage && <SortableGrip handle={handle} />}
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{epic.id}</td>
                   <td className="py-3 pr-4">
                     <div className="text-sm font-medium text-strong">{epic.name}</div>
@@ -173,10 +187,10 @@ export function ManageEpicsPage() {
                       } />
                     
                   </td>
-                </tr>);
-
-            })}
-          </tbody>
+                </>
+              );
+            }}
+          />
         </table>
 
         {epics.length === 0 &&

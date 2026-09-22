@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EyeIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { LifecycleModal } from '../components/LifecycleModal';
 import {
@@ -6,12 +6,14 @@ import {
   type TemplateModalMode,
 } from '../components/LifecycleTemplateModal';
 import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
+import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { Lifecycle, LifecycleTemplate } from '../types/registry';
 import {
   DECOMPOSITION_LABEL,
   REQUIREMENT_LABEL,
+  sortByOrder,
   storyStagesOf,
   usesDecomposition,
 } from '../types/registry';
@@ -23,6 +25,7 @@ export function LifecyclesPage() {
     groups,
     removeLifecycle,
     removeLifecycleTemplate,
+    reorderLifecycles,
     getProduct,
   } = useRegistry();
   const { can, entityVisible } = useAuth();
@@ -35,7 +38,10 @@ export function LifecyclesPage() {
   const [activeTemplate, setActiveTemplate] = useState<LifecycleTemplate | null>(null);
   const [seedTemplateId, setSeedTemplateId] = useState<string | undefined>();
 
-  const visible = lifecycles.filter((lc) => entityVisible(lc.productIds));
+  const visible = useMemo(
+    () => sortByOrder(lifecycles.filter((lc) => entityVisible(lc.productIds))),
+    [lifecycles, entityVisible]
+  );
   const visibleTemplates = lifecycleTemplates.filter(
     (t) => t.productIds.length === 0 || entityVisible(t.productIds)
   );
@@ -141,12 +147,17 @@ export function LifecyclesPage() {
       </div>
 
       <h2 className="mt-8 text-2xs uppercase tracking-[0.14em] text-ink-500">Lifecycles</h2>
-      <div className="mt-3 space-y-6">
-        {visible.map((lc) => {
+      <SortableList
+        items={visible}
+        disabled={!canManage}
+        onReorder={reorderLifecycles}
+        className="mt-3 space-y-6"
+        renderItem={(lc, handle) => {
           const usedBy = groups.filter((g) => g.track === lc.id).length;
           return (
-            <section key={lc.id} className="rounded-md border border-line-strong p-4">
+            <section className="rounded-md border border-line-strong p-4">
               <div className="flex flex-wrap items-baseline gap-3">
+                {canManage && <SortableGripButton handle={handle} />}
                 <h2 className="text-base font-semibold text-strong">{lc.label}</h2>
                 {canManage && (
                   <>
@@ -300,8 +311,8 @@ export function LifecyclesPage() {
               )}
             </section>
           );
-        })}
-      </div>
+        }}
+      />
 
       <LifecycleModal
         open={adding}

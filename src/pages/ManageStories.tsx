@@ -18,6 +18,7 @@ import { DetailsModal } from '../components/DetailsModal';
 import { StoryModal } from '../components/DeliveryModals';
 import { Modal } from '../components/Modal';
 import { Button, Field, PageHeader, StatusTag, StoryStagePill, inputClass } from '../components/Primitives';
+import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, UserStory } from '../types/registry';
@@ -216,7 +217,8 @@ function StoryAdrModal({
 export function ManageStoriesPage() {
   const { capabilityId = '', epicId = '', featureId = '' } = useParams();
   const navigate = useNavigate();
-  const { getCapability, getEpic, getFeature, storiesOf, updateStory, removeStory } = useRegistry();
+  const { getCapability, getEpic, getFeature, storiesOf, updateStory, removeStory, reorderStories } =
+    useRegistry();
   const { can, canSetStoryStage, capabilityVisible, isReadOnly } = useAuth();
   const capability = getCapability(capabilityId);
   const epic = getEpic(epicId);
@@ -300,6 +302,7 @@ export function ManageStoriesPage() {
         <table className="w-full min-w-[1000px] border-collapse text-left">
           <thead>
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+              {canMutateStories && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
               <th className="w-24 py-2.5 pr-4 font-medium">US ID</th>
               <th className="w-64 py-2.5 pr-4 font-medium">User Story Name</th>
               <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -308,9 +311,13 @@ export function ManageStoriesPage() {
               <th className="w-16 py-2.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {stories.map((story) => (
-              <tr key={story.id} className="border-t border-line-soft align-top">
+          <SortableTableBody
+            items={stories}
+            disabled={!canMutateStories}
+            onReorder={(orderedIds) => reorderStories(feature.id, orderedIds)}
+            renderRow={(story, handle) => (
+              <>
+                {canMutateStories && <SortableGrip handle={handle} />}
                 <td className="py-3 pr-4 font-mono text-2xs text-mute">{story.id}</td>
                 <td className="py-3 pr-4 text-sm font-medium text-strong">{story.title}</td>
                 <td className="py-3 pr-4">
@@ -419,9 +426,9 @@ export function ManageStoriesPage() {
                     ]}
                   />
                 </td>
-              </tr>
-            ))}
-          </tbody>
+              </>
+            )}
+          />
         </table>
 
         {stories.length === 0 && (

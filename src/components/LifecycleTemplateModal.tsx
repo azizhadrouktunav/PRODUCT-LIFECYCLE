@@ -110,6 +110,7 @@ export function LifecycleTemplateModal({
         workItemTypes,
         productIds: [],
         automationRules: [],
+        sortOrder: 0,
       }),
     [stages, workItemTypes]
   );

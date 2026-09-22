@@ -734,6 +734,7 @@ export function AutomationRulesEditor({
         workItemTypes: lifecycleDraft.workItemTypes,
         productIds: [],
         automationRules: rules,
+        sortOrder: 0,
       }) satisfies Lifecycle,
     [lifecycleDraft.stages, lifecycleDraft.storyStages, lifecycleDraft.workItemTypes, rules]
   );
@@ -1029,6 +1030,7 @@ export function LifecycleModal({
         workItemTypes,
         productIds: [],
         automationRules: [],
+        sortOrder: 0,
       }) satisfies Lifecycle,
     [stages, workItemTypes]
   );

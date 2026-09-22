@@ -14,6 +14,7 @@ import {
 import { FullDataTransfer } from './FullDataTransfer';
 import { RowActions } from './RowActions';
 import { Button, Chip, PageHeader, StagePill, StatusTag, inputClass } from './Primitives';
+import { SortableGrip, SortableTableBody } from './SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
@@ -117,8 +118,9 @@ export function CapabilityRegister({
     getProduct,
     countsOf,
     lifecycleOf,
+    reorderCapabilities,
   } = useRegistry();
-  const { can, capabilityVisible, productVisible } = useAuth();
+  const { can, capabilityVisible, productVisible, isReadOnly } = useAuth();
   const getEquipment = (id: string) => equipment.find((e) => e.id === id);
   const { openCreate, openEdit } = useCapabilityEditor();
   const navigate = useNavigate();
@@ -131,6 +133,9 @@ export function CapabilityRegister({
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
+
+  const canReorder = can('edit_capability') && !isReadOnly;
+  const dndEnabled = canReorder && sortKey === 'sortOrder';
 
   const showStructureFilters = Array.isArray(groupOptions);
 
@@ -448,6 +453,9 @@ export function CapabilityRegister({
         <table className="w-full min-w-[900px] border-collapse text-left">
           <thead className="sticky top-0 z-[1] bg-ink-900">
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+              {dndEnabled && (
+                <th className="w-8 border-b border-line bg-ink-900 py-2.5 pr-1 font-medium" aria-label="Reorder" />
+              )}
               {columns.map((col) => {
                 const active = sortKey === col.key;
                 const ariaSort = active
@@ -484,22 +492,32 @@ export function CapabilityRegister({
               </th>
             </tr>
           </thead>
-          <tbody>
-            {pageRows.map((c) => {
+          <SortableTableBody
+            items={pageRows}
+            disabled={!dndEnabled}
+            rowClassName="cursor-pointer transition-colors duration-150 ease-out hover:bg-ink-800"
+            onRowClick={(c) => navigate(`/capabilities/${c.id}`)}
+            onRowKeyDown={(c, e) => {
+              if (e.key === 'Enter') navigate(`/capabilities/${c.id}`);
+            }}
+            onReorder={(orderedIds) => {
+              const start = (safePage - 1) * pageSize;
+              const allIds = rows.map((r) => r.id);
+              const merged = [
+                ...allIds.slice(0, start),
+                ...orderedIds,
+                ...allIds.slice(start + orderedIds.length),
+              ];
+              reorderCapabilities(merged);
+            }}
+            renderRow={(c, handle) => {
               const counts = countsOf(c.id);
               const lifecycle = lifecycleOf(c);
               const ahead = isStageAhead(lifecycle, c.progress, counts);
               const equipmentBound = usesEquipment(lifecycle);
               return (
-                <tr
-                  key={c.id}
-                  tabIndex={0}
-                  onClick={() => navigate(`/capabilities/${c.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') navigate(`/capabilities/${c.id}`);
-                  }}
-                  className="cursor-pointer border-t border-line-soft align-top transition-colors duration-150 ease-out hover:bg-ink-800"
-                >
+                <>
+                  {dndEnabled && <SortableGrip handle={handle} />}
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">
                     {(c.sortOrder ?? 0) + 1}
                   </td>
@@ -568,13 +586,13 @@ export function CapabilityRegister({
                   <td className="py-3 pr-4">
                     <StatusTag status={c.status} />
                   </td>
-                  <td className="py-3 text-right">
+                  <td className="py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <RowActions capability={c} onEdit={openEdit} />
                   </td>
-                </tr>
+                </>
               );
-            })}
-          </tbody>
+            }}
+          />
         </table>
 
         {rows.length === 0 && (

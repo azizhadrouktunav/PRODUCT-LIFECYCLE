@@ -37,6 +37,7 @@ import {
   FALLBACK_LIFECYCLE,
   computeCapabilityProgress,
   isAutoManagedStatus,
+  sortByOrder,
   sortCapabilities,
   statusForStage,
   storyStagesOf,
@@ -215,6 +216,16 @@ interface RegistryValue {
   reorderCapabilities: (orderedIds: string[]) => void;
   /** Swap with previous/next capability in current sort order. */
   moveCapability: (id: string, direction: -1 | 1) => void;
+  reorderActors: (orderedIds: string[]) => void;
+  reorderEquipment: (orderedIds: string[]) => void;
+  reorderGroups: (orderedIds: string[]) => void;
+  reorderWaves: (orderedIds: string[]) => void;
+  reorderProducts: (orderedIds: string[]) => void;
+  reorderLifecycles: (orderedIds: string[]) => void;
+  reorderEpics: (capabilityId: string, orderedIds: string[]) => void;
+  reorderFeatures: (epicId: string, orderedIds: string[]) => void;
+  reorderStories: (featureId: string, orderedIds: string[]) => void;
+  reorderWorkItems: (capabilityId: string, orderedIds: string[]) => void;
   addGroup: (input: GroupInput) => void;
   updateGroup: (id: string, patch: Partial<GroupInput>) => void;
   removeGroup: (id: string) => boolean;
@@ -514,6 +525,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addEquipment = useCallback(
     (input: EquipmentInput) => {
+      const maxOrder = equipment.reduce((acc, e) => Math.max(acc, e.sortOrder ?? 0), -1);
       const created: Equipment = {
         id: nextId('EQP', equipment, 2),
         name: input.name.trim(),
@@ -523,6 +535,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         productIds: input.productIds ?? [],
         documentUrl: (input.documentUrl ?? '').trim(),
         status: input.status ?? null,
+        sortOrder: maxOrder + 1,
       };
       setEquipment((prev) => [...prev, created]);
       void api.upsertEquipment(created).catch((err) => persistError('addEquipment', err));
@@ -650,10 +663,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = useCallback(
     (input: ProductInput) => {
+      const maxOrder = products.reduce((acc, p) => Math.max(acc, p.sortOrder ?? 0), -1);
       const created: Product = {
         id: nextId('PRD', products),
         name: input.name.trim(),
         description: input.description.trim(),
+        sortOrder: maxOrder + 1,
       };
       setProducts((prev) => [...prev, created]);
       void api.upsertProduct(created).catch((err) => persistError('addProduct', err));
@@ -747,11 +762,13 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addActor = useCallback(
     (input: ActorInput) => {
+      const maxOrder = actors.reduce((acc, a) => Math.max(acc, a.sortOrder ?? 0), -1);
       const created: Actor = {
         id: nextId('ACT', actors),
         name: input.name.trim(),
         description: input.description.trim(),
         productIds: input.productIds,
+        sortOrder: maxOrder + 1,
       };
       setActors((prev) => [...prev, created]);
       void api.upsertActor(created).catch((err) => persistError('addActor', err));
@@ -939,6 +956,176 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const reorderActors = useCallback((orderedIds: string[]) => {
+    setActors((prev) => {
+      const byId = new Map(prev.map((a) => [a.id, a]));
+      const touched: Actor[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertActors(touched).catch((err) => persistError('reorderActors', err));
+      return prev.map((a) => byId.get(a.id) ?? a);
+    });
+  }, []);
+
+  const reorderEquipment = useCallback((orderedIds: string[]) => {
+    setEquipment((prev) => {
+      const byId = new Map(prev.map((e) => [e.id, e]));
+      const touched: Equipment[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertEquipmentMany(touched).catch((err) => persistError('reorderEquipment', err));
+      return prev.map((e) => byId.get(e.id) ?? e);
+    });
+  }, []);
+
+  const reorderGroups = useCallback((orderedIds: string[]) => {
+    setGroups((prev) => {
+      const byId = new Map(prev.map((g) => [g.id, g]));
+      const touched: CapabilityGroup[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertGroups(touched).catch((err) => persistError('reorderGroups', err));
+      return prev.map((g) => byId.get(g.id) ?? g);
+    });
+  }, []);
+
+  const reorderWaves = useCallback((orderedIds: string[]) => {
+    setWaves((prev) => {
+      const byId = new Map(prev.map((w) => [w.id, w]));
+      const touched: Wave[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertWaves(touched).catch((err) => persistError('reorderWaves', err));
+      return prev.map((w) => byId.get(w.id) ?? w);
+    });
+  }, []);
+
+  const reorderProducts = useCallback((orderedIds: string[]) => {
+    setProducts((prev) => {
+      const byId = new Map(prev.map((p) => [p.id, p]));
+      const touched: Product[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertProducts(touched).catch((err) => persistError('reorderProducts', err));
+      return prev.map((p) => byId.get(p.id) ?? p);
+    });
+  }, []);
+
+  const reorderLifecycles = useCallback((orderedIds: string[]) => {
+    setLifecycles((prev) => {
+      const byId = new Map(prev.map((l) => [l.id, l]));
+      const touched: Lifecycle[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertLifecycles(touched).catch((err) => persistError('reorderLifecycles', err));
+      return prev.map((l) => byId.get(l.id) ?? l);
+    });
+  }, []);
+
+  const reorderEpics = useCallback((capabilityId: string, orderedIds: string[]) => {
+    setEpics((prev) => {
+      const byId = new Map(prev.map((e) => [e.id, e]));
+      const touched: Epic[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.capabilityId !== capabilityId || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertEpics(touched).catch((err) => persistError('reorderEpics', err));
+      return prev.map((e) => byId.get(e.id) ?? e);
+    });
+  }, []);
+
+  const reorderFeatures = useCallback((epicId: string, orderedIds: string[]) => {
+    setFeatures((prev) => {
+      const byId = new Map(prev.map((f) => [f.id, f]));
+      const touched: Feature[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.epicId !== epicId || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertFeatures(touched).catch((err) => persistError('reorderFeatures', err));
+      return prev.map((f) => byId.get(f.id) ?? f);
+    });
+  }, []);
+
+  const reorderStories = useCallback((featureId: string, orderedIds: string[]) => {
+    setStories((prev) => {
+      const byId = new Map(prev.map((s) => [s.id, s]));
+      const touched: UserStory[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.featureId !== featureId || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertStories(touched).catch((err) => persistError('reorderStories', err));
+      return prev.map((s) => byId.get(s.id) ?? s);
+    });
+  }, []);
+
+  const reorderWorkItems = useCallback((capabilityId: string, orderedIds: string[]) => {
+    setWorkItems((prev) => {
+      const byId = new Map(prev.map((w) => [w.id, w]));
+      const touched: WorkItem[] = [];
+      orderedIds.forEach((id, index) => {
+        const item = byId.get(id);
+        if (!item || item.capabilityId !== capabilityId || item.sortOrder === index) return;
+        const updated = { ...item, sortOrder: index };
+        byId.set(id, updated);
+        touched.push(updated);
+      });
+      if (touched.length === 0) return prev;
+      void api.upsertWorkItems(touched).catch((err) => persistError('reorderWorkItems', err));
+      return prev.map((w) => byId.get(w.id) ?? w);
+    });
+  }, []);
+
   const addGroup = useCallback((input: GroupInput) => {
     setGroups((prev) => {
       const name = input.name.trim();
@@ -946,6 +1133,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       const unique = prev.some((g) => g.code === normalized)
         ? uniqueGroupCode(name, prev)
         : normalized;
+      const maxOrder = prev.reduce((acc, g) => Math.max(acc, g.sortOrder ?? 0), -1);
       const created: CapabilityGroup = {
         id: `GRP-${String(prev.length + 1).padStart(2, '0')}-${name
           .replace(/[^a-zA-Z]/g, '')
@@ -957,6 +1145,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         track: input.track,
         process: input.process.trim(),
         productIds: input.productIds ?? [],
+        sortOrder: maxOrder + 1,
       };
       void api.upsertGroup(created).catch((err) => persistError('addGroup', err));
       return [...prev, created];
@@ -1056,6 +1245,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addLifecycle = useCallback(
     (input: LifecycleInput) => {
+      const maxOrder = lifecycles.reduce((acc, l) => Math.max(acc, l.sortOrder ?? 0), -1);
       const created: Lifecycle = {
         id: nextId('LC', lifecycles),
         label: input.label.trim(),
@@ -1066,6 +1256,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         workItemTypes: input.workItemTypes ?? [],
         productIds: input.productIds ?? [],
         automationRules: input.automationRules ?? [],
+        sortOrder: maxOrder + 1,
       };
       setLifecycles((prev) => [...prev, created]);
       void api.upsertLifecycle(created).catch((err) => persistError('addLifecycle', err));
@@ -1200,6 +1391,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addEpic = useCallback(
     (capabilityId: string, input: EpicInput) => {
+      const maxOrder = epics
+        .filter((e) => e.capabilityId === capabilityId)
+        .reduce((acc, e) => Math.max(acc, e.sortOrder ?? 0), -1);
       const created: Epic = {
         id: nextId('EPIC', epics),
         capabilityId,
@@ -1207,6 +1401,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         name: input.name.trim(),
         description: input.description.trim(),
         status: input.status,
+        sortOrder: maxOrder + 1,
       };
       const nextEpics = [...epics, created];
       setEpics(nextEpics);
@@ -1255,12 +1450,16 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addFeature = useCallback(
     (epicId: string, input: FeatureInput) => {
+      const maxOrder = features
+        .filter((f) => f.epicId === epicId)
+        .reduce((acc, f) => Math.max(acc, f.sortOrder ?? 0), -1);
       const created: Feature = {
         id: nextId('FEAT', features),
         epicId,
         name: input.name.trim(),
         description: input.description.trim(),
         status: input.status,
+        sortOrder: maxOrder + 1,
       };
       const nextFeatures = [...features, created];
       setFeatures(nextFeatures);
@@ -1303,6 +1502,9 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   const addStory = useCallback(
     (featureId: string, input: StoryInput) => {
       const actorIds = input.actorIds ?? [];
+      const maxOrder = stories
+        .filter((s) => s.featureId === featureId)
+        .reduce((acc, s) => Math.max(acc, s.sortOrder ?? 0), -1);
       const created: UserStory = {
         id: nextId('US', stories),
         featureId,
@@ -1320,6 +1522,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         adrTechnical: input.adrTechnical,
         adrConsequences: input.adrConsequences,
         adrApproved: input.adrApproved,
+        sortOrder: maxOrder + 1,
       };
       const nextStories = [...stories, created];
       setStories(nextStories);
@@ -1429,7 +1632,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
 
   const addWave = useCallback(
     (input: WaveInput) => {
-      const created: Wave = { id: nextId('WAVE', waves), ...input };
+      const maxOrder = waves.reduce((acc, w) => Math.max(acc, w.sortOrder ?? 0), -1);
+      const created: Wave = {
+        id: nextId('WAVE', waves),
+        ...input,
+        sortOrder: maxOrder + 1,
+      };
       const nextWaves = [...waves, created];
       setWaves(nextWaves);
       void api.upsertWave(created).catch((err) => persistError('addWave', err));
@@ -1470,27 +1678,31 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     const storyMap = new Map(stories.map((s) => [s.id, s]));
     const workItemMap = new Map(workItems.map((w) => [w.id, w]));
 
-    const epicsOf = (capabilityId: string) => epics.filter((e) => e.capabilityId === capabilityId);
-    const featuresOf = (epicId: string) => features.filter((f) => f.epicId === epicId);
-    const storiesOf = (featureId: string) => stories.filter((s) => s.featureId === featureId);
+    const epicsOf = (capabilityId: string) =>
+      sortByOrder(epics.filter((e) => e.capabilityId === capabilityId));
+    const featuresOf = (epicId: string) => sortByOrder(features.filter((f) => f.epicId === epicId));
+    const storiesOf = (featureId: string) =>
+      sortByOrder(stories.filter((s) => s.featureId === featureId));
     const storiesOfEpic = (epicId: string) => {
       const ids = featuresOf(epicId).map((f) => f.id);
-      return stories.filter((s) => ids.includes(s.featureId));
+      return sortByOrder(stories.filter((s) => ids.includes(s.featureId)));
     };
     const workItemsOf = (
       capabilityId: string,
       typeId?: string,
       parentId?: string | null
     ) =>
-      workItems.filter((w) => {
-        if (w.capabilityId !== capabilityId) return false;
-        if (typeId && w.typeId !== typeId) return false;
-        if (parentId !== undefined) {
-          if (parentId === null) return w.parentId == null;
-          return w.parentId === parentId;
-        }
-        return true;
-      });
+      sortByOrder(
+        workItems.filter((w) => {
+          if (w.capabilityId !== capabilityId) return false;
+          if (typeId && w.typeId !== typeId) return false;
+          if (parentId !== undefined) {
+            if (parentId === null) return w.parentId == null;
+            return w.parentId === parentId;
+          }
+          return true;
+        })
+      );
 
     const countsOf = (capabilityId: string): RecordCounts => {
       const capEpics = epicsOf(capabilityId);
@@ -1728,7 +1940,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             result.updated += 1;
           } else {
             const createdId = id || nextId('EPIC', next);
-            next.push({ id: createdId, ...patch });
+            const maxOrder = next
+              .filter((e) => e.capabilityId === capabilityId)
+              .reduce((acc, e) => Math.max(acc, e.sortOrder ?? 0), -1);
+            next.push({ id: createdId, sortOrder: maxOrder + 1, ...patch });
             touch(createdId);
             result.created += 1;
           }
@@ -1761,7 +1976,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             result.updated += 1;
           } else {
             const createdId = id || nextId('FEAT', next);
-            next.push({ id: createdId, ...patch });
+            const maxOrder = next
+              .filter((f) => f.epicId === epicId)
+              .reduce((acc, f) => Math.max(acc, f.sortOrder ?? 0), -1);
+            next.push({ id: createdId, sortOrder: maxOrder + 1, ...patch });
             touch(createdId);
             result.created += 1;
           }
@@ -1820,7 +2038,10 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             result.updated += 1;
           } else {
             const createdId = id || nextId('US', next);
-            next.push({ id: createdId, ...patch });
+            const maxOrder = next
+              .filter((s) => s.featureId === featureId)
+              .reduce((acc, s) => Math.max(acc, s.sortOrder ?? 0), -1);
+            next.push({ id: createdId, sortOrder: maxOrder + 1, ...patch });
             touch(createdId);
             result.created += 1;
           }
@@ -1869,6 +2090,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             result.updated += 1;
           } else {
             if (productIds.length === 0) return note(i, 'no product ids');
+            const maxOrder = next.reduce((acc, e) => Math.max(acc, e.sortOrder ?? 0), -1);
             next.push({
               id: id || nextId('EQP', next, 2),
               name,
@@ -1878,6 +2100,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
               productIds,
               documentUrl,
               status: null,
+              sortOrder: maxOrder + 1,
             });
             result.created += 1;
           }
@@ -1907,7 +2130,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             next[at] = { ...next[at], ...patch };
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('PRD', next), ...patch });
+            const maxOrder = next.reduce((acc, p) => Math.max(acc, p.sortOrder ?? 0), -1);
+            next.push({
+              id: id || nextId('PRD', next),
+              sortOrder: maxOrder + 1,
+              ...patch,
+            });
             result.created += 1;
           }
         });
@@ -1934,7 +2162,12 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             next[at] = { ...next[at], ...patch };
             result.updated += 1;
           } else {
-            next.push({ id: id || nextId('ACT', next), ...patch });
+            const maxOrder = next.reduce((acc, a) => Math.max(acc, a.sortOrder ?? 0), -1);
+            next.push({
+              id: id || nextId('ACT', next),
+              sortOrder: maxOrder + 1,
+              ...patch,
+            });
             result.created += 1;
           }
         });
@@ -1995,6 +2228,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
             code: unique,
             productIds:
               patch.productIds.length > 0 ? patch.productIds : products.map((p) => p.id),
+            sortOrder: next.reduce((acc, g) => Math.max(acc, g.sortOrder ?? 0), -1) + 1,
           });
           result.created += 1;
         }
@@ -2068,6 +2302,16 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       removeCapability,
       reorderCapabilities,
       moveCapability,
+      reorderActors,
+      reorderEquipment,
+      reorderGroups,
+      reorderWaves,
+      reorderProducts,
+      reorderLifecycles,
+      reorderEpics,
+      reorderFeatures,
+      reorderStories,
+      reorderWorkItems,
       addGroup,
       updateGroup,
       removeGroup,
@@ -2159,6 +2403,16 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     removeCapability,
     reorderCapabilities,
     moveCapability,
+    reorderActors,
+    reorderEquipment,
+    reorderGroups,
+    reorderWaves,
+    reorderProducts,
+    reorderLifecycles,
+    reorderEpics,
+    reorderFeatures,
+    reorderStories,
+    reorderWorkItems,
     addGroup,
     updateGroup,
     removeGroup,

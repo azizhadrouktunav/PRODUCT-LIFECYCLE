@@ -14,6 +14,7 @@ import { DataTransfer } from '../components/DataTransfer';
 import { DetailsModal } from '../components/DetailsModal';
 import { FeatureModal } from '../components/DeliveryModals';
 import { Button, PageHeader, ProgressBar, StatusTag } from '../components/Primitives';
+import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityStatus, Feature } from '../types/registry';
@@ -22,7 +23,15 @@ import { MANUAL_CAPABILITY_STATUSES, isAutoManagedStatus, storyIsDone } from '..
 export function ManageFeaturesPage() {
   const { capabilityId = '', epicId = '' } = useParams();
   const navigate = useNavigate();
-  const { getCapability, getEpic, featuresOf, storiesOf, updateFeature, removeFeature } = useRegistry();
+  const {
+    getCapability,
+    getEpic,
+    featuresOf,
+    storiesOf,
+    updateFeature,
+    removeFeature,
+    reorderFeatures,
+  } = useRegistry();
   const { can, capabilityVisible } = useAuth();
   const capability = getCapability(capabilityId);
   const epic = getEpic(epicId);
@@ -97,6 +106,7 @@ export function ManageFeaturesPage() {
         <table className="w-full min-w-[900px] border-collapse text-left">
           <thead>
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
+              {canManage && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
               <th className="w-28 py-2.5 pr-4 font-medium">Feature ID</th>
               <th className="w-64 py-2.5 pr-4 font-medium">Feature Name</th>
               <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -105,12 +115,16 @@ export function ManageFeaturesPage() {
               <th className="w-16 py-2.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {features.map((feature) => {
+          <SortableTableBody
+            items={features}
+            disabled={!canManage}
+            onReorder={(orderedIds) => reorderFeatures(epic.id, orderedIds)}
+            renderRow={(feature, handle) => {
               const stories = storiesOf(feature.id);
               const done = stories.filter(storyIsDone).length;
               return (
-                <tr key={feature.id} className="border-t border-line-soft align-top">
+                <>
+                  {canManage && <SortableGrip handle={handle} />}
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{feature.id}</td>
                   <td className="py-3 pr-4 text-sm font-medium text-strong">{feature.name}</td>
                   <td className="py-3 pr-4">
@@ -173,10 +187,10 @@ export function ManageFeaturesPage() {
                       } />
                     
                   </td>
-                </tr>);
-
-            })}
-          </tbody>
+                </>
+              );
+            }}
+          />
         </table>
 
         {features.length === 0 &&

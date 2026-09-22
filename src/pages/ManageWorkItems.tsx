@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeftIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Button, Field, StatusTag, inputClass } from '../components/Primitives';
 import { Modal } from '../components/Modal';
+import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useRegistry } from '../contexts/RegistryContext';
 import { childWorkItemTypes, workItemTypeDef } from '../types/registry';
 
@@ -18,6 +19,7 @@ export function ManageWorkItemsPage() {
     addWorkItem,
     updateWorkItem,
     removeWorkItem,
+    reorderWorkItems,
     getWorkItem,
   } = useRegistry();
 
@@ -118,12 +120,13 @@ export function ManageWorkItemsPage() {
       {items.length === 0 ? (
         <p className="mt-6 text-xs text-mute">No {typeDef.pluralLabel.toLowerCase()} yet.</p>
       ) : (
-        <ul className="mt-4">
-          {items.map((item) => (
-            <li
-              key={item.id}
-              className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-line-soft py-3"
-            >
+        <SortableList
+          items={items}
+          onReorder={(orderedIds) => reorderWorkItems(capability.id, orderedIds)}
+          className="mt-4"
+          renderItem={(item, handle) => (
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-line-soft py-3">
+              <SortableGripButton handle={handle} />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-2xs text-ink-500">{item.id}</span>
@@ -161,9 +164,9 @@ export function ManageWorkItemsPage() {
                   <Trash2Icon className="h-3.5 w-3.5" />
                 </button>
               </div>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+        />
       )}
 
       <Modal

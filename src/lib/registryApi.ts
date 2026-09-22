@@ -253,6 +253,7 @@ function mapLifecycle(row: Record<string, unknown>): Lifecycle {
       row.automation_rules === undefined || row.automation_rules === null
         ? (tpl.automationRules ?? [])
         : mapAutomationRules(row.automation_rules),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -276,6 +277,7 @@ function lifecycleToRow(lc: Lifecycle) {
       setValue: r.setValue,
       when: normalizeRuleWhen(r),
     })),
+    sort_order: lc.sortOrder ?? 0,
   };
 }
 
@@ -394,6 +396,7 @@ function mapProduct(row: Record<string, unknown>): Product {
     id: String(row.id),
     name: String(row.name),
     description: String(row.description ?? ''),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -403,6 +406,7 @@ function mapActor(row: Record<string, unknown>): Actor {
     name: String(row.name),
     description: String(row.description ?? ''),
     productIds: (row.product_ids as string[] | null) ?? [],
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -426,6 +430,7 @@ function mapGroup(row: Record<string, unknown>): CapabilityGroup {
     track: String(row.track ?? FALLBACK_LIFECYCLE.id),
     process: String(row.process ?? ''),
     productIds: (row.product_ids as string[] | null) ?? [],
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -439,6 +444,7 @@ function mapEquipment(row: Record<string, unknown>): Equipment {
     productIds: (row.product_ids as string[] | null) ?? [],
     documentUrl: String(row.document_url ?? ''),
     status: asStatus(row.status as string | null),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -472,6 +478,7 @@ function mapEpic(row: Record<string, unknown>): Epic {
     name: String(row.name),
     description: String(row.description ?? ''),
     status: asStatus(row.status as string | null),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -482,6 +489,7 @@ function mapFeature(row: Record<string, unknown>): Feature {
     name: String(row.name),
     description: String(row.description ?? ''),
     status: asStatus(row.status as string | null),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -503,6 +511,7 @@ function mapStory(row: Record<string, unknown>): UserStory {
     adrTechnical: String(row.adr_technical ?? ''),
     adrConsequences: String(row.adr_consequences ?? ''),
     adrApproved: Boolean(row.adr_approved),
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -516,6 +525,7 @@ function mapWave(row: Record<string, unknown>): Wave {
     deliveryDate: row.delivery_date ? String(row.delivery_date).slice(0, 10) : '',
     itemIds: (row.item_ids as string[] | null) ?? [],
     productIds: (row.product_ids as string[] | null) ?? [],
+    sortOrder: Number(row.sort_order ?? 0),
   };
 }
 
@@ -695,6 +705,7 @@ export async function upsertProduct(product: Product): Promise<void> {
     id: product.id,
     name: product.name,
     description: product.description,
+    sort_order: product.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert product');
 }
@@ -710,6 +721,7 @@ export async function upsertActor(actor: Actor): Promise<void> {
     name: actor.name,
     description: actor.description,
     product_ids: actor.productIds,
+    sort_order: actor.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert actor');
 }
@@ -728,6 +740,7 @@ export async function upsertGroup(group: CapabilityGroup): Promise<void> {
     track: group.track,
     process: group.process,
     product_ids: group.productIds,
+    sort_order: group.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert capability_group');
 }
@@ -742,6 +755,7 @@ export async function upsertEquipment(item: Equipment): Promise<void> {
     product_ids: item.productIds,
     document_url: item.documentUrl ?? '',
     status: item.status,
+    sort_order: item.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert equipment');
 }
@@ -783,6 +797,7 @@ export async function upsertEpic(epic: Epic): Promise<void> {
     name: epic.name,
     description: epic.description,
     status: epic.status,
+    sort_order: epic.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert epic');
 }
@@ -794,6 +809,7 @@ export async function upsertFeature(feature: Feature): Promise<void> {
     name: feature.name,
     description: feature.description,
     status: feature.status,
+    sort_order: feature.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert feature');
 }
@@ -816,6 +832,7 @@ export async function upsertStory(story: UserStory): Promise<void> {
     adr_technical: story.adrTechnical ?? '',
     adr_consequences: story.adrConsequences ?? '',
     adr_approved: story.adrApproved ?? false,
+    sort_order: story.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert user_story');
 }
@@ -830,6 +847,7 @@ export async function upsertWave(wave: Wave): Promise<void> {
     delivery_date: wave.deliveryDate ? wave.deliveryDate : null,
     item_ids: wave.itemIds,
     product_ids: wave.productIds,
+    sort_order: wave.sortOrder ?? 0,
   });
   throwIfError(error, 'Upsert wave');
 }
@@ -914,6 +932,7 @@ export async function upsertEpics(items: Epic[]): Promise<void> {
       name: epic.name,
       description: epic.description,
       status: epic.status,
+      sort_order: epic.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert epics');
@@ -928,6 +947,7 @@ export async function upsertFeatures(items: Feature[]): Promise<void> {
       name: feature.name,
       description: feature.description,
       status: feature.status,
+      sort_order: feature.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert features');
@@ -953,6 +973,7 @@ export async function upsertStories(items: UserStory[]): Promise<void> {
       adr_technical: story.adrTechnical ?? '',
       adr_consequences: story.adrConsequences ?? '',
       adr_approved: story.adrApproved ?? false,
+      sort_order: story.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert stories');
@@ -970,6 +991,7 @@ export async function upsertEquipmentMany(items: Equipment[]): Promise<void> {
       product_ids: item.productIds,
       document_url: item.documentUrl ?? '',
       status: item.status,
+      sort_order: item.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert equipment batch');
@@ -982,6 +1004,7 @@ export async function upsertProducts(items: Product[]): Promise<void> {
       id: product.id,
       name: product.name,
       description: product.description,
+      sort_order: product.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert products');
@@ -995,6 +1018,7 @@ export async function upsertActors(items: Actor[]): Promise<void> {
       name: actor.name,
       description: actor.description,
       product_ids: actor.productIds,
+      sort_order: actor.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert actors');
@@ -1011,9 +1035,34 @@ export async function upsertGroups(items: CapabilityGroup[]): Promise<void> {
       track: group.track,
       process: group.process,
       product_ids: group.productIds,
+      sort_order: group.sortOrder ?? 0,
     }))
   );
   throwIfError(error, 'Upsert groups');
+}
+
+export async function upsertWaves(items: Wave[]): Promise<void> {
+  if (items.length === 0) return;
+  const { error } = await supabase.from('waves').upsert(
+    items.map((wave) => ({
+      id: wave.id,
+      code: wave.code,
+      name: wave.name,
+      description: wave.description,
+      state: wave.state,
+      delivery_date: wave.deliveryDate ? wave.deliveryDate : null,
+      item_ids: wave.itemIds,
+      product_ids: wave.productIds,
+      sort_order: wave.sortOrder ?? 0,
+    }))
+  );
+  throwIfError(error, 'Upsert waves');
+}
+
+export async function upsertLifecycles(items: Lifecycle[]): Promise<void> {
+  if (items.length === 0) return;
+  const { error } = await supabase.from('lifecycles').upsert(items.map(lifecycleToRow));
+  throwIfError(error, 'Upsert lifecycles');
 }
 
 export async function upsertWorkItem(item: WorkItem): Promise<void> {
