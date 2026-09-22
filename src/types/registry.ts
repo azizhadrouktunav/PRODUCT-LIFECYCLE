@@ -42,12 +42,14 @@ export const STAGE_TONES: StageTone[] = [
 
 /** Operational / derived status flags (progress stage is separate). */
 export type CapabilityStatus =
+  | 'Not Started'
   | 'On Hold'
   | 'In Progress'
   | 'Needs Review'
   | 'Completed';
 
 export const CAPABILITY_STATUSES: CapabilityStatus[] = [
+  'Not Started',
   'On Hold',
   'In Progress',
   'Needs Review',
@@ -55,7 +57,11 @@ export const CAPABILITY_STATUSES: CapabilityStatus[] = [
 ];
 
 /** Manual-only flags a user may set without fighting auto-derived status. */
-export const MANUAL_CAPABILITY_STATUSES: CapabilityStatus[] = ['On Hold', 'Needs Review'];
+export const MANUAL_CAPABILITY_STATUSES: CapabilityStatus[] = [
+  'Not Started',
+  'On Hold',
+  'Needs Review',
+];
 
 export interface StageDef {
   name: string;

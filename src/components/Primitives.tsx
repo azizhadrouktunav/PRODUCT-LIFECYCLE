@@ -43,6 +43,7 @@ export function StagePill({ track, stage }: { track: TrackId; stage: string }) {
 }
 
 const STATUS_TONE: Record<CapabilityStatus, string> = {
+  'Not Started': 'border-line-strong text-mute',
   'On Hold': 'border-warn/40 text-warn',
   'In Progress': 'border-brand/40 text-brand-bright',
   'Needs Review': 'border-aqua/40 text-aqua',

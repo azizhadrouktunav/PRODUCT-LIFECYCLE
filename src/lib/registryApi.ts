@@ -85,7 +85,7 @@ function mapStageDef(raw: unknown): StageDef | null {
   let status: CapabilityStatus | null | undefined;
   if (statusRaw === null || statusRaw === '') status = null;
   else if (typeof statusRaw === 'string') {
-    const hit = (['On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
+    const hit = (['Not Started', 'On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
       (s) => s === statusRaw
     );
     status = hit;
@@ -385,7 +385,7 @@ function asStatus(raw: string | null | undefined): CapabilityStatus | null {
   if (raw == null || raw === '') return null;
   if (raw === 'Approved') return 'In Progress';
   if (raw === 'Blocked' || raw === 'Rejected') return 'On Hold';
-  const hit = (['On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
+  const hit = (['Not Started', 'On Hold', 'In Progress', 'Needs Review', 'Completed'] as CapabilityStatus[]).find(
     (s) => s === raw
   );
   return hit ?? null;

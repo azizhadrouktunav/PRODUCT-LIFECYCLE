@@ -272,7 +272,8 @@ export function RowActions({ capability, onEdit }: Props) {
                     Flag status
                   </button>
                   <p className="px-2.5 pb-1.5 text-2xs text-mute">
-                    On Hold / Needs Review pause auto status. No flag resumes lifecycle-driven status.
+                    Not Started / On Hold / Needs Review pause auto status. No flag resumes
+                    lifecycle-driven status.
                   </p>
                   <button type="button" className={itemClass} onClick={() => setStatus(null)}>
                     No flag (auto)
