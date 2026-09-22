@@ -37,12 +37,43 @@ import {
   FALLBACK_LIFECYCLE,
   computeCapabilityProgress,
   isAutoManagedStatus,
+  sortCapabilities,
   statusForStage,
   storyStagesOf,
   usesEquipment,
 } from '../types/registry';
 import * as api from '../lib/registryApi';
 import { runAutomation } from '../lib/automationEngine';
+
+/** True when two or more capabilities share the same sortOrder. */
+function hasDuplicateSortOrders(list: Capability[]): boolean {
+  const seen = new Set<number>();
+  for (const c of list) {
+    const o = c.sortOrder ?? 0;
+    if (seen.has(o)) return true;
+    seen.add(o);
+  }
+  return false;
+}
+
+/** Assign contiguous unique sortOrder 0..n-1; returns list + changed rows to persist. */
+function withNormalizedSortOrders(list: Capability[]): {
+  next: Capability[];
+  touched: Capability[];
+} {
+  const sorted = sortCapabilities(list);
+  const touched: Capability[] = [];
+  const next = sorted.map((c, index) => {
+    if ((c.sortOrder ?? 0) === index) return c;
+    const updated = { ...c, sortOrder: index };
+    touched.push(updated);
+    return updated;
+  });
+  // Preserve any caps not in sorted (shouldn't happen); merge by id
+  const byId = new Map(next.map((c) => [c.id, c]));
+  const merged = list.map((c) => byId.get(c.id) ?? c);
+  return { next: merged, touched };
+}
 
 function countsForCapability(
   cap: Capability,
@@ -339,7 +370,17 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
       setEquipmentTypes(snap.equipmentTypes);
       setLifecycles(snap.lifecycles);
       setLifecycleTemplates(snap.lifecycleTemplates ?? []);
-      setCapabilities(snap.capabilities);
+      if (hasDuplicateSortOrders(snap.capabilities)) {
+        const { next, touched } = withNormalizedSortOrders(snap.capabilities);
+        setCapabilities(next);
+        if (touched.length > 0) {
+          void api.upsertCapabilities(touched).catch((err) =>
+            persistError('normalizeCapabilitySortOrders', err)
+          );
+        }
+      } else {
+        setCapabilities(snap.capabilities);
+      }
       setEpics(snap.epics);
       setFeatures(snap.features);
       setStories(snap.stories);
@@ -869,39 +910,34 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const moveCapability = useCallback(
-    (id: string, direction: -1 | 1) => {
-      setCapabilities((prev) => {
-        const sorted = [...prev].sort((a, b) => {
-          const ao = a.sortOrder ?? 0;
-          const bo = b.sortOrder ?? 0;
-          if (ao !== bo) return ao - bo;
-          return a.id.localeCompare(b.id, undefined, { numeric: true });
-        });
-        const idx = sorted.findIndex((c) => c.id === id);
-        const swapIdx = idx + direction;
-        if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return prev;
-        const a = sorted[idx];
-        const b = sorted[swapIdx];
-        const updatedA = { ...a, sortOrder: b.sortOrder };
-        const updatedB = { ...b, sortOrder: a.sortOrder };
-        // If sortOrders were equal, assign distinct values from indices
-        if (updatedA.sortOrder === updatedB.sortOrder) {
-          updatedA.sortOrder = swapIdx;
-          updatedB.sortOrder = idx;
+  const moveCapability = useCallback((id: string, direction: -1 | 1) => {
+    setCapabilities((prev) => {
+      const sorted = sortCapabilities(prev);
+      const idx = sorted.findIndex((c) => c.id === id);
+      const swapIdx = idx + direction;
+      if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return prev;
+      const reordered = [...sorted];
+      const tmp = reordered[idx];
+      reordered[idx] = reordered[swapIdx];
+      reordered[swapIdx] = tmp;
+      const touched: Capability[] = [];
+      const nextById = new Map<string, Capability>();
+      reordered.forEach((c, index) => {
+        if ((c.sortOrder ?? 0) === index) {
+          nextById.set(c.id, c);
+          return;
         }
-        void api
-          .upsertCapabilities([updatedA, updatedB])
-          .catch((err) => persistError('moveCapability', err));
-        return prev.map((c) => {
-          if (c.id === updatedA.id) return updatedA;
-          if (c.id === updatedB.id) return updatedB;
-          return c;
-        });
+        const updated = { ...c, sortOrder: index };
+        touched.push(updated);
+        nextById.set(c.id, updated);
       });
-    },
-    []
-  );
+      if (touched.length === 0) return prev;
+      void api
+        .upsertCapabilities(touched)
+        .catch((err) => persistError('moveCapability', err));
+      return prev.map((c) => nextById.get(c.id) ?? c);
+    });
+  }, []);
 
   const addGroup = useCallback((input: GroupInput) => {
     setGroups((prev) => {
