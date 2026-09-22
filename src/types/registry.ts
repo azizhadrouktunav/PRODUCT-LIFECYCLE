@@ -302,24 +302,9 @@ export const DEFAULT_STORY_STAGES: StageDef[] = [
     contentMode: 'inline',
   },
   {
-    name: 'In Architecture',
-    description:
-      'The story is analysed for feasibility and given a technical approval, recorded as an ADR with the technical information needed to build it.',
-    tone: 'orange',
-    requirement: 'none',
-    contentMode: 'inline',
-  },
-  {
     name: 'In Development',
     description: 'Development is in progress.',
     tone: 'cyan',
-    requirement: 'none',
-    contentMode: 'inline',
-  },
-  {
-    name: 'In Testing',
-    description: 'The functionality is being tested.',
-    tone: 'violet',
     requirement: 'none',
     contentMode: 'inline',
   },
@@ -412,7 +397,7 @@ export const LIFECYCLE_TEMPLATES: Record<DecompositionMode, Omit<Lifecycle, 'id'
   delivery: {
     label: 'Delivery track',
     summary:
-      'Software capabilities are approved, decomposed into epics, then features, then user stories, and follow those stories through design, development, testing and release.',
+      'Software capabilities are approved, decomposed into epics, then features, then user stories, and follow those stories through design, development and release.',
     decomposition: 'delivery',
     stages: DELIVERY_STAGES,
     storyStages: DEFAULT_STORY_STAGES,
@@ -918,7 +903,7 @@ export interface UserStory {
   status: CapabilityStatus | null;
   /** Execution stage — the delivery lifecycle lives on the story, not the capability. */
   stage: string;
-  /** Architecture decision record, captured during In Architecture. */
+  /** Optional architecture decision record (not required to progress). */
   adrContext?: string;
   adrDecision?: string;
   adrTechnical?: string;

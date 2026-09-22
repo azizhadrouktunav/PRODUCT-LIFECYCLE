@@ -136,11 +136,7 @@ function StoryAdrModal({
       open={open}
       onClose={onClose}
       width="max-w-xl"
-      title={
-        isUpdate
-          ? 'Update architecture decision record'
-          : 'Set architecture decision record'
-      }
+      title={isUpdate ? 'Update decision record' : 'Set decision record'}
       subtitle={story ? `${story.id} · ${story.title}` : undefined}
       footer={
         <>
@@ -156,7 +152,7 @@ function StoryAdrModal({
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-            Architecture decision record
+            Decision record (optional)
           </p>
           <button
             type="button"
@@ -210,7 +206,7 @@ function StoryAdrModal({
         </Field>
 
         <p className="text-2xs leading-relaxed text-mute">
-          A story cannot pass In Architecture until the ADR is technically approved.
+          Optional. Capture a decision record when the story needs one — not required to progress.
         </p>
       </div>
     </Modal>
@@ -329,11 +325,14 @@ export function ManageStoriesPage() {
                 </td>
                 <td className="py-3 pr-4">
                   <StoryStagePill stage={story.stage} />
-                  {story.stage === 'In Architecture' && (
+                  {(story.adrContext ||
+                    story.adrDecision ||
+                    story.adrTechnical ||
+                    story.adrApproved) && (
                     <span
-                      className={`mt-1 block text-2xs ${story.adrApproved ? 'text-ok' : 'text-orange'}`}
+                      className={`mt-1 block text-2xs ${story.adrApproved ? 'text-ok' : 'text-mute'}`}
                     >
-                      {story.adrApproved ? 'ADR approved' : 'ADR pending'}
+                      {story.adrApproved ? 'ADR approved' : 'ADR draft'}
                     </span>
                   )}
                 </td>
@@ -369,8 +368,8 @@ export function ManageStoriesPage() {
                             },
                             {
                               label: story.adrDecision?.trim()
-                                ? 'Update architecture decision record'
-                                : 'Set architecture decision record',
+                                ? 'Update decision record'
+                                : 'Set decision record',
                               icon: FileTextIcon,
                               onSelect: () => setAdrStory(story),
                             },

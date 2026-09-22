@@ -226,8 +226,6 @@ export function StoryModal({
   const lifecycle = capability ? lifecycleOf(capability) : undefined;
   const storyStages =
     lifecycle && lifecycle.storyStages.length > 0 ? lifecycle.storyStages : DEFAULT_STORY_STAGES;
-  const architectureStage =
-    storyStages.find((s) => /architecture/i.test(s.name))?.name ?? storyStages[1]?.name ?? '';
 
   const availableActors = useMemo(() => {
     const productIds = capability?.productIds ?? [];
@@ -257,10 +255,7 @@ export function StoryModal({
     setStatus(story?.status ?? '');
   }, [open, story, lifecycle?.id]);
 
-  const stageIdx = storyStages.findIndex((s) => s.name === stage);
-  const archIdx = storyStages.findIndex((s) => s.name === architectureStage);
-  const adrBlocked = archIdx >= 0 && stageIdx > archIdx && !(story?.adrApproved ?? false);
-  const valid = title.trim().length > 1 && !adrBlocked;
+  const valid = title.trim().length > 1;
 
   function toggleActor(id: string) {
     setActorIds((prev) =>
@@ -409,13 +404,6 @@ export function StoryModal({
             </select>
           </Field>
         </div>
-
-        {adrBlocked && (
-          <p className="text-2xs leading-relaxed text-orange">
-            “{stage}” is blocked until the ADR is technically approved. Set the architecture decision
-            record from the story actions menu.
-          </p>
-        )}
       </div>
     </Modal>
   );

@@ -131,9 +131,8 @@ const CAPABILITY_PROGRESS_STAGES = new Set([
 
 /** Story stages Project Manager–style permission may set. */
 const STORY_STAGES = new Set([
-  'In Architecture',
+  'In UI/UX Design',
   'In Development',
-  'In Testing',
   'Ready for Deploy',
   'Released',
 ]);
