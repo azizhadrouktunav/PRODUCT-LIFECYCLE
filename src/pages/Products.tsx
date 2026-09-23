@@ -14,6 +14,7 @@ import { Button, PageHeader, StatusTag } from '../components/Primitives';
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Capability, Product } from '../types/registry';
 import { sortByOrder, stageIndex } from '../types/registry';
 
@@ -55,8 +56,9 @@ function compareValues(a: string | number, b: string | number, dir: SortDir): nu
 export function ProductsPage() {
   const { products, capabilities, groups, getGroup, lifecycleOf, removeProduct, reorderProducts } =
     useRegistry();
-  const { can, productVisible, capabilityVisible } = useAuth();
+  const { can, role, productVisible, capabilityVisible, isReadOnly } = useAuth();
   const canManage = can('manage_products');
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const [activeId, setActiveId] = useState(products[0]?.id ?? '');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -179,7 +181,7 @@ export function ProductsPage() {
             <p className="mb-2 text-2xs uppercase tracking-[0.14em] text-ink-500">Products</p>
             <SortableList
               items={sorted}
-              disabled={!canManage}
+              disabled={!canReorder}
               onReorder={reorderProducts}
               className="space-y-0.5"
               renderItem={(p, handle) => {
@@ -189,7 +191,7 @@ export function ProductsPage() {
                 const isActive = active?.id === p.id;
                 return (
                   <div className="flex items-center gap-0.5">
-                    {canManage && <SortableGripButton handle={handle} />}
+                    {canReorder && <SortableGripButton handle={handle} />}
                     <button
                       type="button"
                       onClick={() => setActiveId(p.id)}

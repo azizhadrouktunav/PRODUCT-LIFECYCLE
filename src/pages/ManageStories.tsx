@@ -21,6 +21,7 @@ import { Button, Field, PageHeader, StatusTag, StoryStagePill, inputClass } from
 import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { CapabilityStatus, UserStory } from '../types/registry';
 import { MANUAL_CAPABILITY_STATUSES, STORY_STAGE_NAMES, isAutoManagedStatus } from '../types/registry';
 
@@ -219,7 +220,7 @@ export function ManageStoriesPage() {
   const navigate = useNavigate();
   const { getCapability, getEpic, getFeature, storiesOf, updateStory, removeStory, reorderStories } =
     useRegistry();
-  const { can, canSetStoryStage, capabilityVisible, isReadOnly } = useAuth();
+  const { can, role, canSetStoryStage, capabilityVisible, isReadOnly } = useAuth();
   const capability = getCapability(capabilityId);
   const epic = getEpic(epicId);
   const feature = getFeature(featureId);
@@ -244,6 +245,7 @@ export function ManageStoriesPage() {
   const stories = storiesOf(feature.id);
   const stageOptions = STORY_STAGE_NAMES.filter((s) => canSetStoryStage(s));
   const canMutateStories = can('edit_capability') && !isReadOnly;
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const canChangeStage = stageOptions.length > 0 && !isReadOnly;
 
   return (
@@ -302,7 +304,7 @@ export function ManageStoriesPage() {
         <table className="w-full min-w-[1000px] border-collapse text-left">
           <thead>
             <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-              {canMutateStories && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
+              {canReorder && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
               <th className="w-24 py-2.5 pr-4 font-medium">US ID</th>
               <th className="w-64 py-2.5 pr-4 font-medium">User Story Name</th>
               <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -313,11 +315,11 @@ export function ManageStoriesPage() {
           </thead>
           <SortableTableBody
             items={stories}
-            disabled={!canMutateStories}
+            disabled={!canReorder}
             onReorder={(orderedIds) => reorderStories(feature.id, orderedIds)}
             renderRow={(story, handle) => (
               <>
-                {canMutateStories && <SortableGrip handle={handle} />}
+                {canReorder && <SortableGrip handle={handle} />}
                 <td className="py-3 pr-4 font-mono text-2xs text-mute">{story.id}</td>
                 <td className="py-3 pr-4 text-sm font-medium text-strong">{story.title}</td>
                 <td className="py-3 pr-4">

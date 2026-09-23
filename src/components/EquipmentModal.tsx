@@ -172,7 +172,10 @@ export function EquipmentModal({
             </p>
           )}
         </Field>
-        <Field label="Document" hint="optional PDF datasheet or manual (max 10 MB)">
+        <Field
+          label="Document"
+          hint="Optional — PDF datasheet or manual (max 10 MB). You can save equipment without a file."
+        >
           {showingExisting && (
             <div className="mb-2 flex items-center gap-2 rounded-md border border-line-soft px-2.5 py-2 text-xs">
               <FileTextIcon className="h-3.5 w-3.5 shrink-0 text-mute" />
@@ -206,7 +209,7 @@ export function EquipmentModal({
           <input
             type="file"
             accept="application/pdf,.pdf"
-            aria-label="Upload PDF document"
+            aria-label="Optional PDF document upload"
             className="block w-full text-2xs text-mute file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-line-strong file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-soft hover:file:border-brand hover:file:text-strong"
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Capability, CapabilityStatus } from '../types/registry';
 import {
   MANUAL_CAPABILITY_STATUSES,
@@ -52,7 +53,7 @@ function placeMenu(btn: DOMRect, menuHeight = MENU_ESTIMATE): MenuCoords {
 export function RowActions({ capability, onEdit }: Props) {
   const { updateCapability, removeCapability, moveCapability, countsOf, lifecycleOf } =
     useRegistry();
-  const { can, isReadOnly } = useAuth();
+  const { can, role, isReadOnly } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>('root');
@@ -68,7 +69,7 @@ export function RowActions({ capability, onEdit }: Props) {
   const canDelete = can('delete_capability') && !isReadOnly;
   const canStatus =
     (can('edit_capability') || can('edit_capability_progress') || can('edit_all')) && !isReadOnly;
-  const canReorder = canEdit;
+  const canReorder = canReorderRows(role) && !isReadOnly;
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;

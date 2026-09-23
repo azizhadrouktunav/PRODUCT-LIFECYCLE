@@ -125,6 +125,19 @@ export function isReadOnlyFromPermissions(
   return set.size === 0;
 }
 
+/** Who may drag-reorder registry rows (persisted sort_order). */
+export type ReorderScope = 'equipment' | 'default';
+
+export function canReorderRows(
+  role: AppRole | null | undefined,
+  scope: ReorderScope = 'default'
+): boolean {
+  if (!role) return false;
+  if (role === 'administrator') return true;
+  if (scope === 'equipment') return role === 'technical_manager';
+  return role === 'product_owner';
+}
+
 /** Delivery capability progress stages Product Owner–style permission may set. */
 const CAPABILITY_PROGRESS_STAGES = new Set([
   'Identified',

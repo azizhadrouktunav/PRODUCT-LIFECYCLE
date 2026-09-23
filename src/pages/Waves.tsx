@@ -6,6 +6,7 @@ import { Button, Chip, PageHeader, ProgressBar, WaveTag, inputClass } from '../c
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Wave, WaveState } from '../types/registry';
 import { WAVE_STATES, sortByOrder, storyIsDone } from '../types/registry';
 import { waveCounts, waveStories } from '../utils/scope';
@@ -50,8 +51,9 @@ export function WavesPage() {
     reorderWaves,
     updateWave,
   } = useRegistry();
-  const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
+  const { can, role, capabilityVisible, entityVisible, productVisible, isReadOnly } = useAuth();
   const canManage = can('manage_waves');
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Wave | null>(null);
   const [productFilter, setProductFilter] = useState<string | null>(null);
@@ -141,7 +143,7 @@ export function WavesPage() {
 
       <SortableList
         items={visibleWaves}
-        disabled={!canManage}
+        disabled={!canReorder}
         onReorder={reorderWaves}
         className="mt-4 space-y-5"
         renderItem={({ wave: w, itemIds }, handle) => {
@@ -156,7 +158,7 @@ export function WavesPage() {
           return (
             <article className="border-t border-line pt-4">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                {canManage && <SortableGripButton handle={handle} />}
+                {canReorder && <SortableGripButton handle={handle} />}
                 <span className="rounded border border-violet/40 px-1.5 py-0.5 font-mono text-2xs text-violet">
                   {w.code}
                 </span>

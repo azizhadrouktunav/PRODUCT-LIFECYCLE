@@ -4,7 +4,9 @@ import { ArrowLeftIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Button, Field, StatusTag, inputClass } from '../components/Primitives';
 import { Modal } from '../components/Modal';
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
+import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import { childWorkItemTypes, workItemTypeDef } from '../types/registry';
 
 export function ManageWorkItemsPage() {
@@ -22,6 +24,8 @@ export function ManageWorkItemsPage() {
     reorderWorkItems,
     getWorkItem,
   } = useRegistry();
+  const { role, isReadOnly } = useAuth();
+  const canReorder = canReorderRows(role) && !isReadOnly;
 
   const capability = getCapability(capabilityId);
   const lifecycle = capability ? lifecycleOf(capability) : null;
@@ -122,11 +126,12 @@ export function ManageWorkItemsPage() {
       ) : (
         <SortableList
           items={items}
+          disabled={!canReorder}
           onReorder={(orderedIds) => reorderWorkItems(capability.id, orderedIds)}
           className="mt-4"
           renderItem={(item, handle) => (
             <div className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-line-soft py-3">
-              <SortableGripButton handle={handle} />
+              {canReorder && <SortableGripButton handle={handle} />}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-2xs text-ink-500">{item.id}</span>

@@ -6,13 +6,15 @@ import { Button, Chip, PageHeader } from '../components/Primitives';
 import { SortableGrip, SortableTableBody } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Actor } from '../types/registry';
 import { sortByOrder } from '../types/registry';
 
 export function ActorsPage() {
   const { actors, products, removeActor, reorderActors } = useRegistry();
-  const { can, productVisible } = useAuth();
+  const { can, role, productVisible, isReadOnly } = useAuth();
   const canManage = can('manage_actors');
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Actor | null>(null);
 
@@ -63,7 +65,7 @@ export function ActorsPage() {
           <table className="w-full min-w-[720px] border-collapse text-left">
             <thead>
               <tr className="text-2xs uppercase tracking-[0.14em] text-ink-500">
-                {canManage && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
+                {canReorder && <th className="w-8 py-2.5 pr-1 font-medium" aria-label="Reorder" />}
                 <th className="w-28 py-2.5 pr-4 font-medium">ID</th>
                 <th className="w-48 py-2.5 pr-4 font-medium">Name</th>
                 <th className="py-2.5 pr-4 font-medium">Description</th>
@@ -73,11 +75,11 @@ export function ActorsPage() {
             </thead>
             <SortableTableBody
               items={sorted}
-              disabled={!canManage}
+              disabled={!canReorder}
               onReorder={reorderActors}
               renderRow={(actor, handle) => (
                 <>
-                  {canManage && <SortableGrip handle={handle} />}
+                  {canReorder && <SortableGrip handle={handle} />}
                   <td className="py-3 pr-4 font-mono text-2xs text-mute">{actor.id}</td>
                   <td className="py-3 pr-4 text-sm font-medium text-strong">{actor.name}</td>
                   <td className="py-3 pr-4">

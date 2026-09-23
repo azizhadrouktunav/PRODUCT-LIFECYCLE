@@ -9,6 +9,7 @@ import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Lifecycle, LifecycleTemplate } from '../types/registry';
 import {
   DECOMPOSITION_LABEL,
@@ -28,8 +29,9 @@ export function LifecyclesPage() {
     reorderLifecycles,
     getProduct,
   } = useRegistry();
-  const { can, entityVisible } = useAuth();
+  const { can, role, entityVisible, isReadOnly } = useAuth();
   const canManage = can('manage_lifecycles');
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Lifecycle | null>(null);
 
@@ -149,7 +151,7 @@ export function LifecyclesPage() {
       <h2 className="mt-8 text-2xs uppercase tracking-[0.14em] text-ink-500">Lifecycles</h2>
       <SortableList
         items={visible}
-        disabled={!canManage}
+        disabled={!canReorder}
         onReorder={reorderLifecycles}
         className="mt-3 space-y-6"
         renderItem={(lc, handle) => {
@@ -157,7 +159,7 @@ export function LifecyclesPage() {
           return (
             <section className="rounded-md border border-line-strong p-4">
               <div className="flex flex-wrap items-baseline gap-3">
-                {canManage && <SortableGripButton handle={handle} />}
+                {canReorder && <SortableGripButton handle={handle} />}
                 <h2 className="text-base font-semibold text-strong">{lc.label}</h2>
                 {canManage && (
                   <>

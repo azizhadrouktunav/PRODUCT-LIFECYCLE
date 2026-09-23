@@ -7,6 +7,7 @@ import { Button, PageHeader, TONE_DOT } from '../components/Primitives';
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { CapabilityGroup } from '../types/registry';
 import { REQUIREMENT_LABEL, sortByOrder, storyStagesOf, usesEquipment } from '../types/registry';
 
@@ -81,8 +82,9 @@ export function ProcessModal({ group, onClose }: { group: CapabilityGroup | null
 export function GroupsPage() {
   const { groups, capabilities, removeGroup, reorderGroups, getLifecycle, getProduct } =
     useRegistry();
-  const { can, capabilityVisible, entityVisible } = useAuth();
+  const { can, role, capabilityVisible, entityVisible, isReadOnly } = useAuth();
   const canManage = can('manage_groups');
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CapabilityGroup | null>(null);
   const [process, setProcess] = useState<CapabilityGroup | null>(null);
@@ -111,7 +113,7 @@ export function GroupsPage() {
 
       <SortableList
         items={visibleGroups}
-        disabled={!canManage}
+        disabled={!canReorder}
         onReorder={reorderGroups}
         className="mt-4 space-y-4"
         renderItem={(g, handle) => {
@@ -122,7 +124,7 @@ export function GroupsPage() {
           return (
             <article className="border-t border-line pt-4">
               <div className="flex flex-wrap items-baseline gap-3">
-                {canManage && <SortableGripButton handle={handle} />}
+                {canReorder && <SortableGripButton handle={handle} />}
                 <h2 className="text-base font-semibold text-strong">{g.name}</h2>
                 <span className="font-mono text-2xs text-ink-500">{g.code}</span>
                 <span className="rounded border border-line-strong px-1.5 py-0.5 text-2xs text-soft">

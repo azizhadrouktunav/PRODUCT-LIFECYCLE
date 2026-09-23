@@ -18,6 +18,7 @@ import { SortableGrip, SortableTableBody } from './SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { Capability } from '../types/registry';
 import {
   CAPABILITY_STATUSES,
@@ -33,7 +34,7 @@ const selectClass =
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50] as const;
 const ROW_HEIGHT_REM = 3.25;
 
-type SortKey = 'sortOrder' | 'id' | 'name' | 'group' | 'products' | 'breakdown' | 'progress' | 'status';
+type SortKey = 'sortOrder' | 'id' | 'name' | 'group' | 'breakdown' | 'progress' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export type RegisterFilterOption = { id: string; label: string };
@@ -43,7 +44,6 @@ const SORTABLE_COLUMNS: { key: SortKey; label: string; className: string }[] = [
   { key: 'id', label: 'ID', className: 'w-24' },
   { key: 'name', label: 'Capability', className: '' },
   { key: 'group', label: 'Group', className: 'w-36' },
-  { key: 'products', label: 'Products', className: 'w-52' },
   { key: 'breakdown', label: 'Breakdown', className: 'w-44' },
   { key: 'progress', label: 'Progress', className: 'w-44' },
   { key: 'status', label: 'Status', className: 'w-28' },
@@ -115,26 +115,25 @@ export function CapabilityRegister({
     products,
     equipment,
     getGroup,
-    getProduct,
     countsOf,
     lifecycleOf,
     reorderCapabilities,
   } = useRegistry();
-  const { can, capabilityVisible, productVisible, isReadOnly } = useAuth();
+  const { can, role, capabilityVisible, productVisible, isReadOnly } = useAuth();
   const getEquipment = (id: string) => equipment.find((e) => e.id === id);
   const { openCreate, openEdit } = useCapabilityEditor();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
-  const [productFilter, setProductFilter] = useState('all');
+  const [productFilter, setProductFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('sortOrder');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
-  const canReorder = can('edit_capability') && !isReadOnly;
+  const canReorder = canReorderRows(role) && !isReadOnly;
   const dndEnabled = canReorder && sortKey === 'sortOrder';
 
   const showStructureFilters = Array.isArray(groupOptions);
@@ -156,9 +155,19 @@ export function CapabilityRegister({
   }, [groupId]);
 
   const visibleProducts = useMemo(
-    () => products.filter((p) => productVisible(p.id)),
+    () => [...products.filter((p) => productVisible(p.id))].sort((a, b) => a.name.localeCompare(b.name)),
     [products, productVisible]
   );
+
+  useEffect(() => {
+    if (visibleProducts.length === 0) {
+      if (productFilter !== '') setProductFilter('');
+      return;
+    }
+    if (!visibleProducts.some((p) => p.id === productFilter)) {
+      setProductFilter(visibleProducts[0].id);
+    }
+  }, [visibleProducts, productFilter]);
 
   const scopedCapabilities = useMemo(() => {
     let list = capabilities.filter((c) => capabilityVisible(c));
@@ -196,11 +205,6 @@ export function CapabilityRegister({
         return c.name;
       case 'group':
         return getGroup(c.groupId)?.name ?? '';
-      case 'products':
-        return (c.productIds ?? [])
-          .map((id) => getProduct(id)?.name ?? id)
-          .join('; ')
-          .toLowerCase();
       case 'breakdown':
         if (usesEquipment(lifecycle)) return counts.equipment;
         return counts.epics * 1_000_000 + counts.features * 1_000 + counts.stories;
@@ -216,19 +220,19 @@ export function CapabilityRegister({
   }
 
   const rows = useMemo(() => {
+    if (!productFilter) return [];
     const q = query.trim().toLowerCase();
     const effectiveGroup = groupId ?? groupFilter;
     const filtered = scopedCapabilities.filter((c) => {
+      if (!(c.productIds ?? []).includes(productFilter)) return false;
       if (!groupId && effectiveGroup !== 'all' && c.groupId !== effectiveGroup) return false;
       if (statusFilter !== 'all' && (c.status ?? 'none') !== statusFilter) return false;
-      if (productFilter !== 'all' && !(c.productIds ?? []).includes(productFilter)) return false;
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
         c.id.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
-        c.jiraEpic.toLowerCase().includes(q) ||
-        (c.productIds ?? []).some((d) => d.toLowerCase().includes(q))
+        c.jiraEpic.toLowerCase().includes(q)
       );
     });
 
@@ -247,7 +251,6 @@ export function CapabilityRegister({
     groupId,
     productFilter,
     statusFilter,
-    getProduct,
     getGroup,
     countsOf,
     lifecycleOf,
@@ -286,14 +289,12 @@ export function CapabilityRegister({
   const filtered =
     structureFiltersActive ||
     (!groupId && groupFilter !== 'all') ||
-    productFilter !== 'all' ||
     statusFilter !== 'all' ||
     query.trim() !== '';
 
   function clearFilters() {
     setQuery('');
     if (!groupId) setGroupFilter('all');
-    setProductFilter('all');
     setStatusFilter('all');
     if (showStructureFilters) {
       onGroupChange?.('');
@@ -330,7 +331,11 @@ export function CapabilityRegister({
       {!hideHeader && (
         <PageHeader
           title="Capability Register"
-          count={`${scopedCapabilities.length} entries`}
+          count={
+            productFilter
+              ? `${rows.length} for ${visibleProducts.find((p) => p.id === productFilter)?.name ?? 'product'}`
+              : `${scopedCapabilities.length} entries`
+          }
           action={
             <div className="flex flex-wrap items-center gap-1.5">
               {can('import_export') && <FullDataTransfer />}
@@ -352,12 +357,29 @@ export function CapabilityRegister({
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-500" />
           <input
             className={`${inputClass} py-1.5 pl-8 text-xs`}
-            placeholder="Search name, ID, epic or product"
+            placeholder="Search name, ID or epic"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Search capabilities"
           />
         </div>
+        <select
+          className={`${selectClass} min-w-[160px] font-medium text-strong`}
+          value={productFilter}
+          onChange={(e) => setProductFilter(e.target.value)}
+          aria-label="Select product"
+          disabled={visibleProducts.length === 0}
+        >
+          {visibleProducts.length === 0 ? (
+            <option value="">No products</option>
+          ) : (
+            visibleProducts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))
+          )}
+        </select>
         {showStructureFilters && (
           <div className="flex items-center gap-1">
             <select
@@ -401,21 +423,6 @@ export function CapabilityRegister({
             ))}
           </select>
         )}
-        <select
-          className={selectClass}
-          value={productFilter}
-          onChange={(e) => setProductFilter(e.target.value)}
-          aria-label="Filter by product"
-        >
-          <option value="all">All products</option>
-          {[...visibleProducts]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-        </select>
         <select
           className={selectClass}
           value={statusFilter}
@@ -535,20 +542,6 @@ export function CapabilityRegister({
                     </td>
                   )}
                   <td className="py-3 pr-4">
-                    <div className="flex flex-wrap gap-1">
-                      {(c.productIds ?? []).slice(0, 3).map((id) => (
-                        <Chip key={id} tone="brand" title={id}>
-                          {getProduct(id)?.name ?? id}
-                        </Chip>
-                      ))}
-                      {(c.productIds ?? []).length > 3 && (
-                        <span className="text-2xs text-mute">
-                          +{(c.productIds ?? []).length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 pr-4">
                     {equipmentBound ? (
                       c.equipmentIds.length === 0 ? (
                         <span className="text-2xs text-ink-500">No equipment</span>
@@ -597,14 +590,20 @@ export function CapabilityRegister({
 
         {rows.length === 0 && (
           <div className="border-t border-line-soft py-16 text-center">
-            <p className="text-sm text-soft">No capability matches these filters.</p>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="mt-2 text-xs text-brand-bright transition-colors duration-150 ease-out hover:text-strong"
-            >
-              Clear all filters
-            </button>
+            {!productFilter ? (
+              <p className="text-sm text-soft">Select a product to view its capabilities.</p>
+            ) : (
+              <>
+                <p className="text-sm text-soft">No capability matches these filters.</p>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-2 text-xs text-brand-bright transition-colors duration-150 ease-out hover:text-strong"
+                >
+                  Clear all filters
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

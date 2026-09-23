@@ -17,6 +17,7 @@ import { Button, PageHeader, StagePill, StatusTag } from '../components/Primitiv
 import { SortableGripButton, SortableList } from '../components/SortableTableBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useRegistry } from '../contexts/RegistryContext';
+import { canReorderRows } from '../lib/rbac';
 import type { CapabilityStatus, Equipment, EquipmentType } from '../types/registry';
 import {
   MANUAL_CAPABILITY_STATUSES,
@@ -54,8 +55,9 @@ export function EquipmentPage() {
     reorderEquipment,
     updateEquipment,
   } = useRegistry();
-  const { can, capabilityVisible, entityVisible, productVisible } = useAuth();
+  const { can, role, capabilityVisible, entityVisible, productVisible, isReadOnly } = useAuth();
   const canEdit = can('manage_equipment');
+  const canReorder = canReorderRows(role, 'equipment') && !isReadOnly;
   const canImportExport = can('import_export');
   const showSettings = canEdit || canImportExport;
   const visibleEquipment = useMemo(
@@ -261,7 +263,7 @@ export function EquipmentPage() {
             >
               <SortableList
                 items={visibleEquipment}
-                disabled={!canEdit}
+                disabled={!canReorder}
                 onReorder={reorderEquipment}
                 renderItem={(e, handle) => {
                   const isActive = e.id === active.id;
@@ -276,7 +278,7 @@ export function EquipmentPage() {
                         isActive ? 'bg-ink-800' : 'hover:bg-ink-800/60'
                       }`}
                     >
-                      {canEdit && (
+                      {canReorder && (
                         <div className="shrink-0 pl-1">
                           <SortableGripButton handle={handle} />
                         </div>
