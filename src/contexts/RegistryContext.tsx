@@ -239,8 +239,8 @@ interface RegistryValue {
   getLifecycle: (id: string) => Lifecycle;
   lifecycleOf: (capability: Capability) => Lifecycle;
   lifecycleOfGroup: (groupId: string) => Lifecycle;
-  addProduct: (input: ProductInput) => Product;
-  updateProduct: (id: string, patch: Partial<ProductInput>) => void;
+  addProduct: (input: ProductInput) => Promise<Product>;
+  updateProduct: (id: string, patch: Partial<ProductInput>) => Promise<void>;
   removeProduct: (id: string) => void;
   addActor: (input: ActorInput) => Actor;
   updateActor: (id: string, patch: Partial<ActorInput>) => void;
@@ -662,7 +662,7 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addProduct = useCallback(
-    (input: ProductInput) => {
+    async (input: ProductInput) => {
       const maxOrder = products.reduce((acc, p) => Math.max(acc, p.sortOrder ?? 0), -1);
       const created: Product = {
         id: nextId('PRD', products),
@@ -671,26 +671,37 @@ export function RegistryProvider({ children }: { children: React.ReactNode }) {
         sortOrder: maxOrder + 1,
       };
       setProducts((prev) => [...prev, created]);
-      void api.upsertProduct(created).catch((err) => persistError('addProduct', err));
+      try {
+        await api.upsertProduct(created);
+      } catch (err) {
+        setProducts((prev) => prev.filter((p) => p.id !== created.id));
+        persistError('addProduct', err);
+        throw err;
+      }
       return created;
     },
     [products]
   );
 
-  const updateProduct = useCallback((id: string, patch: Partial<ProductInput>) => {
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const updated = {
-          ...p,
-          name: patch.name !== undefined ? patch.name.trim() : p.name,
-          description: patch.description !== undefined ? patch.description.trim() : p.description,
-        };
-        void api.upsertProduct(updated).catch((err) => persistError('updateProduct', err));
-        return updated;
-      })
-    );
-  }, []);
+  const updateProduct = useCallback(async (id: string, patch: Partial<ProductInput>) => {
+    const previous = products.find((p) => p.id === id);
+    if (!previous) return;
+
+    const updated: Product = {
+      ...previous,
+      name: patch.name !== undefined ? patch.name.trim() : previous.name,
+      description:
+        patch.description !== undefined ? patch.description.trim() : previous.description,
+    };
+    setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    try {
+      await api.upsertProduct(updated);
+    } catch (err) {
+      setProducts((prev) => prev.map((p) => (p.id === id ? previous : p)));
+      persistError('updateProduct', err);
+      throw err;
+    }
+  }, [products]);
 
   const removeProduct = useCallback((id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));

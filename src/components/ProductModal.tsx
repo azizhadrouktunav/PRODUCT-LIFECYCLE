@@ -17,21 +17,33 @@ export function ProductModal({
   const isEdit = !!product;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setName(product?.name ?? '');
     setDescription(product?.description ?? '');
+    setSaving(false);
+    setError(null);
   }, [open, product]);
 
   const valid = name.trim().length > 1;
 
-  function submit() {
-    if (!valid) return;
+  async function submit() {
+    if (!valid || saving) return;
+    setSaving(true);
+    setError(null);
     const payload = { name: name.trim(), description: description.trim() };
-    if (product) updateProduct(product.id, payload);
-    else addProduct(payload);
-    onClose();
+    try {
+      if (product) await updateProduct(product.id, payload);
+      else await addProduct(payload);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -43,11 +55,15 @@ export function ProductModal({
       subtitle="Products are assigned to capabilities and actors."
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!valid}>
-            {isEdit ? 'Save product' : 'Add product'}
+          <Button
+            variant="primary"
+            onClick={() => void submit()}
+            disabled={!valid || saving}
+          >
+            {saving ? 'Saving…' : isEdit ? 'Save product' : 'Add product'}
           </Button>
         </>
       }
@@ -60,6 +76,7 @@ export function ProductModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. FleetIQ"
             autoFocus
+            disabled={saving}
           />
         </Field>
         <Field label="Description">
@@ -68,8 +85,10 @@ export function ProductModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this product covers."
+            disabled={saving}
           />
         </Field>
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     </Modal>
   );
