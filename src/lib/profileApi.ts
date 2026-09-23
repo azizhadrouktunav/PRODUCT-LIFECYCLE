@@ -2,9 +2,10 @@ import { supabase } from '../utils/supabase';
 import { sessionHeaders } from './authApi';
 import { sendEmail } from './emailjs';
 import type { EmailMessage } from './emailTemplates';
-import { expiryPhrase, inviteEmail, resetEmail } from './emailTemplates';
+import { expiryPhrase, inviteEmail, resetEmail, verifyEmail } from './emailTemplates';
 import type { AppProfile, RbacAction } from './rbac';
 import { isRbacAction } from './rbac';
+import { registerAccount } from './authApi';
 
 type ProfileRow = {
   user_id: string;
@@ -199,7 +200,7 @@ async function deliver(
   const link = String(payload.link ?? '');
   const to = String(payload.email ?? '');
   if (!link || !to) {
-    return { emailed: false, emailError: 'The server did not return a set-password link.' };
+    return { emailed: false, emailError: 'The server did not return a link.' };
   }
 
   const displayName = String(payload.displayName ?? '');
@@ -225,11 +226,40 @@ export async function inviteUser(payload: {
   );
 }
 
+/** Public registration + EmailJS verification mail. */
+export async function registerWithEmail(payload: {
+  email: string;
+  password: string;
+  displayName: string;
+}): Promise<SendOutcome> {
+  const result = await registerAccount(payload);
+  return deliver(
+    {
+      email: result.email,
+      displayName: result.displayName,
+      link: result.link,
+      expiresAt: result.expiresAt,
+    },
+    verifyEmail
+  );
+}
+
+export async function setUserActivation(
+  userId: string,
+  disabled: boolean
+): Promise<void> {
+  await callAdminFunction(
+    'set-user-activation',
+    { userId, disabled },
+    'Activation update failed'
+  );
+}
+
 export async function deleteUserAccount(userId: string): Promise<void> {
   await callAdminFunction('delete-user', { userId }, 'Delete failed');
 }
 
-export type AuthUserStatus = 'pending' | 'active';
+export type AuthUserStatus = 'unverified' | 'pending' | 'active' | 'disabled';
 
 /**
  * Account status from the app_user_status view, which exposes activation state
@@ -238,16 +268,28 @@ export type AuthUserStatus = 'pending' | 'active';
 export async function fetchAuthStatuses(): Promise<Record<string, AuthUserStatus>> {
   const { data, error } = await supabase
     .from('app_user_status')
-    .select('user_id, is_active');
+    .select('user_id, status, is_active');
   if (error) throw new Error(`Load auth status: ${error.message}`);
 
   const statuses: Record<string, AuthUserStatus> = {};
   for (const row of data ?? []) {
-    const { user_id: userId, is_active: isActive } = row as {
+    const r = row as {
       user_id: string;
+      status?: string | null;
       is_active: boolean | null;
     };
-    statuses[String(userId)] = isActive ? 'active' : 'pending';
+    const id = String(r.user_id);
+    const raw = String(r.status ?? '');
+    if (
+      raw === 'unverified' ||
+      raw === 'pending' ||
+      raw === 'active' ||
+      raw === 'disabled'
+    ) {
+      statuses[id] = raw;
+    } else {
+      statuses[id] = r.is_active ? 'active' : 'pending';
+    }
   }
   return statuses;
 }

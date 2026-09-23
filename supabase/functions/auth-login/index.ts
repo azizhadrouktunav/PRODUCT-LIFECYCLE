@@ -4,8 +4,6 @@ import { adminClient, createSession, resolveSession } from "../_shared/auth.ts";
 import { accessGrant } from "../_shared/jwt.ts";
 import { verifyPassword } from "../_shared/password.ts";
 
-// Same message whether the email is unknown, the password is wrong or the
-// account is not activated: never let the login form enumerate accounts.
 const INVALID = "Invalid email or password";
 
 Deno.serve(async (req) => {
@@ -26,17 +24,38 @@ Deno.serve(async (req) => {
     const admin = adminClient();
     const { data: account, error } = await admin
       .from("app_users")
-      .select("id, email, password_hash, disabled")
+      .select("id, email, password_hash, disabled, email_verified_at")
       .eq("email", email)
       .maybeSingle();
     if (error) return jsonResponse({ error: error.message }, 500);
 
-    const ok =
-      !!account &&
-      !account.disabled &&
-      (await verifyPassword(password, account.password_hash as string | null));
-    if (!ok) {
+    if (!account) {
       return jsonResponse({ error: INVALID }, 401);
+    }
+
+    const passwordOk = await verifyPassword(
+      password,
+      account.password_hash as string | null
+    );
+    if (!passwordOk) {
+      return jsonResponse({ error: INVALID }, 401);
+    }
+
+    if (!account.email_verified_at) {
+      return jsonResponse(
+        { error: "Please verify your email before signing in. Check your inbox for the link." },
+        403
+      );
+    }
+
+    if (account.disabled) {
+      return jsonResponse(
+        {
+          error:
+            "Your account is awaiting administrator activation. You will be able to sign in once an admin enables it.",
+        },
+        403
+      );
     }
 
     const userId = String(account.id);

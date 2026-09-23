@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   BoxesIcon,
   FolderTreeIcon,
+  InboxIcon,
   LayoutDashboardIcon,
   LogOutIcon,
   MoonIcon,
@@ -25,6 +26,7 @@ const NAV = [
   { to: '/actors', label: 'Actors', icon: UsersIcon, end: false },
   { to: '/equipment', label: 'Equipment', icon: BoxesIcon, end: false },
   { to: '/waves', label: 'Waves', icon: WavesIcon, end: false },
+  { to: '/reclamations', label: 'Reclamations', icon: InboxIcon, end: false },
 ];
 
 const LOGO_URL = '/ChatGPT_Image_Sep_4,_2026,_10_17_13_AM.png';

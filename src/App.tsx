@@ -10,6 +10,8 @@ import { CapabilityDetailRoute } from './pages/CapabilityDetailRoute';
 import { DashboardPage } from './pages/Dashboard';
 import { EquipmentPage } from './pages/Equipment';
 import { LoginPage } from './pages/Login';
+import { RegisterPage } from './pages/Register';
+import { VerifyEmailPage } from './pages/VerifyEmail';
 import { ManageEpicsPage } from './pages/ManageEpics';
 import { ManageFeaturesPage } from './pages/ManageFeatures';
 import { ManageStoriesPage } from './pages/ManageStories';
@@ -21,13 +23,21 @@ import { RolesSettingsPage } from './pages/settings/Roles';
 import { UsersSettingsPage } from './pages/settings/Users';
 import { StructurePage } from './pages/Structure';
 import { WavesPage } from './pages/Waves';
+import { ReclamationsPage } from './pages/Reclamations';
 
 interface AppProps {
   theme?: 'dark' | 'light';
 }
 
-/** Reachable without a session (invite / reset links). */
-const PUBLIC_PATHS = new Set(['/set-password']);
+/** Reachable without a session (invite / reset / register / verify). */
+const PUBLIC_PATHS = new Set(['/set-password', '/register', '/verify-email']);
+
+function PublicAuthRoutes() {
+  const { pathname } = useLocation();
+  if (pathname === '/register') return <RegisterPage />;
+  if (pathname === '/verify-email') return <VerifyEmailPage />;
+  return <SetPasswordPage />;
+}
 
 function StructureRedirect({
   manage,
@@ -44,11 +54,21 @@ function StructureRedirect({
 }
 
 function AuthenticatedApp() {
+  const { role } = useAuth();
+  const visitorHome = role === 'visiteur';
+
   return (
     <RegistryProvider>
       <CapabilityEditorProvider>
         <AppShell>
           <Routes>
+            {visitorHome ? (
+              <>
+                <Route path="/reclamations" element={<ReclamationsPage />} />
+                <Route path="*" element={<Navigate to="/reclamations" replace />} />
+              </>
+            ) : (
+              <>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/structure" element={<StructurePage />} />
             <Route path="/capabilities" element={<StructureRedirect />} />
@@ -72,6 +92,7 @@ function AuthenticatedApp() {
             <Route path="/actors" element={<ActorsPage />} />
             <Route path="/equipment" element={<EquipmentPage />} />
             <Route path="/waves" element={<WavesPage />} />
+            <Route path="/reclamations" element={<ReclamationsPage />} />
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<SettingsIndexRedirect />} />
               <Route path="users" element={<UsersSettingsPage />} />
@@ -79,6 +100,8 @@ function AuthenticatedApp() {
             </Route>
             <Route path="/users" element={<Navigate to="/settings/users" replace />} />
             <Route path="*" element={<DashboardPage />} />
+              </>
+            )}
           </Routes>
         </AppShell>
       </CapabilityEditorProvider>
@@ -91,7 +114,7 @@ function AuthGate() {
   const { pathname } = useLocation();
 
   if (PUBLIC_PATHS.has(pathname)) {
-    return <SetPasswordPage />;
+    return <PublicAuthRoutes />;
   }
 
   if (loading) {

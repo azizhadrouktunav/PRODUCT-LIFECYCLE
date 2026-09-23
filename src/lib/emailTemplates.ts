@@ -88,3 +88,23 @@ export function resetEmail(params: {
     ),
   };
 }
+
+export function verifyEmail(params: {
+  displayName: string;
+  link: string;
+  expiry: string;
+}): EmailMessage {
+  const name = params.displayName ? escapeHtml(params.displayName) : 'there';
+  return {
+    subject: 'Verify your TUNAV ONE email',
+    html: layout(
+      'Confirm your email',
+      `<p style="margin:0 0 12px;">Hi ${name},</p>
+       <p style="margin:0;">Thanks for registering on TUNAV ONE.
+       Confirm your email address to continue. An administrator will activate your account afterward.
+       This link expires in ${params.expiry}.</p>`,
+      params.link,
+      'Verify my email'
+    ),
+  };
+}

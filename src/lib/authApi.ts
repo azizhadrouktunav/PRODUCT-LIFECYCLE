@@ -150,6 +150,48 @@ export async function login(email: string, password: string): Promise<SignInResu
   return { session, user: mapUser(data.user) };
 }
 
+export type RegisterOutcome = {
+  emailed: boolean;
+  email: string;
+  link?: string;
+  emailError?: string;
+};
+
+/** Public self-registration. Returns a verify link; caller mails it via EmailJS. */
+export async function registerAccount(payload: {
+  email: string;
+  password: string;
+  displayName: string;
+}): Promise<{ email: string; displayName: string; link: string; expiresAt: string }> {
+  const data = await callFunction<{
+    email?: string;
+    displayName?: string;
+    link?: string;
+    expiresAt?: string;
+  }>('register-user', payload, { withSession: false });
+  const link = String(data.link ?? '');
+  const email = String(data.email ?? payload.email);
+  if (!link) throw new Error('Registration did not return a verification link');
+  return {
+    email,
+    displayName: String(data.displayName ?? payload.displayName),
+    link,
+    expiresAt: String(data.expiresAt ?? ''),
+  };
+}
+
+export async function verifyEmailToken(token: string): Promise<string> {
+  const data = await callFunction<{ message?: string }>(
+    'verify-email',
+    { token },
+    { withSession: false }
+  );
+  return String(
+    data.message ??
+      'Email verified. An administrator must activate your account before you can sign in.'
+  );
+}
+
 /** Turn a stored token back into a user, or null when it is gone or expired. */
 export async function restoreSession(): Promise<SignInResult | null> {
   const stored = readStored();

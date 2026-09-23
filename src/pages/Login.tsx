@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Field, inputClass } from '../components/Primitives';
 
@@ -79,9 +80,20 @@ export function LoginPage() {
             />
           </Field>
           {error && <p className="text-xs text-danger">{error}</p>}
-          <Button variant="primary" type="submit" disabled={busy || !email || !password} className="w-full">
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={busy || !email || !password}
+            className="w-full"
+          >
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
+          <p className="text-center text-xs text-mute">
+            No account yet?{' '}
+            <Link to="/register" className="text-brand-bright hover:text-strong">
+              Create one
+            </Link>
+          </p>
           <p className="text-center text-xs text-mute">
             Forgot your password? Ask an Administrator to send you a reset link.
           </p>

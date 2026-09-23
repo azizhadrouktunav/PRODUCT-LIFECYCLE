@@ -11,6 +11,7 @@ export const SYSTEM_ROLE_LABEL: Record<string, string> = {
   project_manager: 'Project Manager',
   product_owner: 'Product Owner',
   ceo: 'CEO',
+  visiteur: 'Visiteur',
 };
 
 export type RbacAction =
@@ -27,7 +28,8 @@ export type RbacAction =
   | 'manage_actors'
   | 'manage_waves'
   | 'manage_products'
-  | 'import_export';
+  | 'import_export'
+  | 'manage_reclamations';
 
 export const RBAC_ACTIONS: RbacAction[] = [
   'edit_all',
@@ -44,6 +46,7 @@ export const RBAC_ACTIONS: RbacAction[] = [
   'manage_waves',
   'manage_products',
   'import_export',
+  'manage_reclamations',
 ];
 
 export const ACTION_LABEL: Record<RbacAction, string> = {
@@ -61,6 +64,7 @@ export const ACTION_LABEL: Record<RbacAction, string> = {
   manage_waves: 'Manage waves',
   manage_products: 'Manage products',
   import_export: 'Import / export',
+  manage_reclamations: 'Manage reclamations',
 };
 
 export function isRbacAction(value: string): value is RbacAction {
@@ -212,13 +216,16 @@ export function statusFromProgress(
   return 'In Progress';
 }
 
-/** Main product nav: any signed-in profile may see registry pages. */
+/** Main product nav: visitors only see reclamations; others see the registry. */
 export function navVisible(
   path: string,
   role: AppRole | null | undefined
 ): boolean {
   if (!role) return false;
   if (path.startsWith('/settings')) return false;
+  if (role === 'visiteur') {
+    return path === '/reclamations';
+  }
   return (
     path === '/' ||
     path === '/products' ||
@@ -229,6 +236,7 @@ export function navVisible(
     path === '/lifecycles' ||
     path === '/groups' ||
     path === '/actors' ||
-    path === '/waves'
+    path === '/waves' ||
+    path === '/reclamations'
   );
 }

@@ -29,3 +29,4 @@ export function expiresIn(hours: number): string {
 export const SESSION_TTL_HOURS = 24 * 7;
 export const INVITE_TTL_HOURS = 24 * 7;
 export const RESET_TTL_HOURS = 1;
+export const VERIFY_TTL_HOURS = 48;

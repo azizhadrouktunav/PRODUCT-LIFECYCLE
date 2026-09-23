@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  BanIcon,
   CheckIcon,
   CopyIcon,
   KeyRoundIcon,
-  MailIcon,
   PencilIcon,
-  PlusIcon,
   ShieldIcon,
   Trash2Icon,
 } from 'lucide-react';
@@ -17,9 +16,8 @@ import {
   deleteUserAccount,
   fetchAuthStatuses,
   fetchProfiles,
-  inviteUser,
-  resendInvite,
   resetPassword,
+  setUserActivation,
   upsertProfile,
   type AuthUserStatus,
   type SendOutcome,
@@ -31,8 +29,20 @@ import { fetchRoles } from '../../lib/rolesApi';
 const selectClass =
   'rounded-md border border-line-strong bg-ink-800 px-2.5 py-1.5 text-xs text-soft transition-colors duration-150 ease-out focus:border-brand focus:outline-none';
 
-function statusLabel(status: AuthUserStatus | undefined): 'Active' | 'Inactive' {
-  return status === 'active' ? 'Active' : 'Inactive';
+function statusLabel(
+  status: AuthUserStatus | undefined
+): 'Unverified' | 'Pending' | 'Active' | 'Disabled' {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'pending':
+      return 'Pending';
+    case 'disabled':
+      return 'Disabled';
+    case 'unverified':
+    default:
+      return 'Unverified';
+  }
 }
 
 export function UsersSettingsPage() {
@@ -49,13 +59,6 @@ export function UsersSettingsPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [authStatuses, setAuthStatuses] = useState<Record<string, AuthUserStatus>>({});
-
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviting, setInviting] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteName, setInviteName] = useState('');
-  const [inviteRole, setInviteRole] = useState('product_owner');
-  const [inviteProducts, setInviteProducts] = useState<string[]>([]);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<AppProfile | null>(null);
@@ -98,9 +101,6 @@ export function UsersSettingsPage() {
       setProfiles(list);
       setRoles(roleList);
       setAuthStatuses(statuses);
-      if (roleList.length && !roleList.some((r) => r.slug === inviteRole)) {
-        setInviteRole(roleList[0].slug);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -128,14 +128,6 @@ export function UsersSettingsPage() {
 
   function toggleEditProduct(productId: string) {
     setEditProducts((current) =>
-      current.includes(productId)
-        ? current.filter((id) => id !== productId)
-        : [...current, productId]
-    );
-  }
-
-  function toggleInviteProduct(productId: string) {
-    setInviteProducts((current) =>
       current.includes(productId)
         ? current.filter((id) => id !== productId)
         : [...current, productId]
@@ -226,12 +218,37 @@ export function UsersSettingsPage() {
     }
   }
 
-  async function onResend(profile: AppProfile) {
+  async function onActivate(profile: AppProfile) {
     setBusyId(profile.userId);
     clearFeedback();
     try {
-      const outcome = await resendInvite(profile.userId);
-      applyOutcome(outcome, profile.email, `Invite resent to ${profile.email}.`);
+      await setUserActivation(profile.userId, false);
+      setMessage(`Activated ${profile.displayName || profile.email}.`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onDeactivate(profile: AppProfile) {
+    if (user?.id === profile.userId) {
+      setError('You cannot deactivate your own account.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Deactivate ${profile.displayName || profile.email}? They will no longer be able to sign in.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(profile.userId);
+    clearFeedback();
+    try {
+      await setUserActivation(profile.userId, true);
+      setMessage(`Deactivated ${profile.displayName || profile.email}.`);
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -264,34 +281,6 @@ export function UsersSettingsPage() {
     }
   }
 
-  async function submitInvite() {
-    const email = inviteEmail.trim().toLowerCase();
-    if (!email || !inviteRole) return;
-    setInviting(true);
-    clearFeedback();
-    try {
-      const seesAll = roleSeesAllProducts(inviteRole);
-      const outcome = await inviteUser({
-        email,
-        displayName: inviteName.trim(),
-        role: inviteRole,
-        productIds: seesAll ? [] : inviteProducts,
-      });
-      setInviteOpen(false);
-      setInviteEmail('');
-      setInviteName('');
-      setInviteProducts([]);
-      applyOutcome(outcome, email, `Invite sent to ${email}.`);
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  const inviteValid = inviteEmail.trim().includes('@') && !!inviteRole;
-  const inviteSeesAll = roleSeesAllProducts(inviteRole);
   const editSeesAll = roleSeesAllProducts(editRole);
   const editValid = editName.trim().length > 0 && !!editRole;
 
@@ -301,19 +290,9 @@ export function UsersSettingsPage() {
         <div>
           <h2 className="text-base font-semibold text-strong">Users</h2>
           <p className="mt-0.5 text-xs text-mute">
-            Invite users, manage roles, and reset access.
+            Users self-register. Activate accounts, assign roles and products, reset passwords.
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setInviteOpen(true);
-            clearFeedback();
-          }}
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Invite user
-        </Button>
       </div>
 
       {error && <p className="mt-3 text-xs text-danger">{error}</p>}
@@ -352,7 +331,7 @@ export function UsersSettingsPage() {
           <ShieldIcon className="mx-auto h-8 w-8 text-ink-500" />
           <p className="mt-3 text-sm text-soft">No profiles yet.</p>
           <p className="mt-1 text-xs text-mute">
-            Invite a user to create their account and profile.
+            Users create accounts from the sign-in page.
           </p>
         </div>
       ) : (
@@ -371,7 +350,12 @@ export function UsersSettingsPage() {
               {sortedProfiles.map((p) => {
                 const status = authStatuses[p.userId];
                 const label = statusLabel(status);
-                const isInactive = label === 'Inactive';
+                const isActive = status === 'active';
+                const canActivate =
+                  status === 'pending' ||
+                  status === 'unverified' ||
+                  status === 'disabled' ||
+                  !status;
                 const isBusy = busyId === p.userId;
                 return (
                   <tr key={p.userId} className="border-t border-line-soft align-middle">
@@ -405,28 +389,41 @@ export function UsersSettingsPage() {
                         >
                           <PencilIcon className="h-3.5 w-3.5" />
                         </button>
-                        {isInactive ? (
+                        {canActivate && (
                           <button
                             type="button"
-                            aria-label={`Resend invite to ${p.email}`}
-                            title="Resend invite"
+                            aria-label={`Activate ${p.displayName || p.email}`}
+                            title="Activate"
                             disabled={isBusy}
-                            onClick={() => void onResend(p)}
+                            onClick={() => void onActivate(p)}
                             className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
                           >
-                            <MailIcon className="h-3.5 w-3.5" />
+                            <CheckIcon className="h-3.5 w-3.5" />
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label={`Reset password for ${p.email}`}
-                            title="Reset password"
-                            disabled={isBusy}
-                            onClick={() => void onResetPassword(p)}
-                            className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
-                          >
-                            <KeyRoundIcon className="h-3.5 w-3.5" />
-                          </button>
+                        )}
+                        {isActive && (
+                          <>
+                            <button
+                              type="button"
+                              aria-label={`Reset password for ${p.email}`}
+                              title="Reset password"
+                              disabled={isBusy}
+                              onClick={() => void onResetPassword(p)}
+                              className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
+                            >
+                              <KeyRoundIcon className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Deactivate ${p.displayName || p.email}`}
+                              title="Deactivate"
+                              disabled={isBusy || user?.id === p.userId}
+                              onClick={() => void onDeactivate(p)}
+                              className="rounded p-1.5 text-mute transition-colors duration-150 ease-out hover:bg-ink-700 hover:text-strong disabled:opacity-40"
+                            >
+                              <BanIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </>
                         )}
                         <button
                           type="button"
@@ -519,94 +516,6 @@ export function UsersSettingsPage() {
                       key={prod.id}
                       type="button"
                       onClick={() => toggleEditProduct(prod.id)}
-                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
-                        active
-                          ? 'border-brand bg-brand/10 text-strong'
-                          : 'border-line-strong text-mute hover:border-brand'
-                      }`}
-                    >
-                      {prod.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        width="max-w-lg"
-        title="Invite user"
-        subtitle="Emails a link to set a password. If the email cannot be delivered, the link is shown here so you can share it yourself."
-        footer={
-          <>
-            <Button variant="quiet" onClick={() => setInviteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!inviteValid || inviting}
-              onClick={() => void submitInvite()}
-            >
-              {inviting ? 'Sending…' : 'Send invite'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-5">
-          <Field label="Email" required>
-            <input
-              className={inputClass}
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="user@example.com"
-              autoFocus
-            />
-          </Field>
-          <Field label="Display name">
-            <input
-              className={inputClass}
-              value={inviteName}
-              onChange={(e) => setInviteName(e.target.value)}
-              placeholder="Full name"
-            />
-          </Field>
-          <Field label="Role" required>
-            <select
-              className={selectClass}
-              value={inviteRole}
-              onChange={(e) => {
-                const nextRole = e.target.value;
-                setInviteRole(nextRole);
-                if (roleSeesAllProducts(nextRole)) setInviteProducts([]);
-              }}
-            >
-              {roles.map((r) => (
-                <option key={r.slug} value={r.slug}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {inviteSeesAll ? (
-            <p className="text-xs text-mute">
-              This role can access all products — no assignment needed.
-            </p>
-          ) : (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-soft">Assigned products</p>
-              <div className="flex flex-wrap gap-1.5">
-                {sortedProducts.map((prod) => {
-                  const active = inviteProducts.includes(prod.id);
-                  return (
-                    <button
-                      key={prod.id}
-                      type="button"
-                      onClick={() => toggleInviteProduct(prod.id)}
                       className={`rounded-md border px-2.5 py-1 text-xs transition-colors duration-150 ease-out ${
                         active
                           ? 'border-brand bg-brand/10 text-strong'

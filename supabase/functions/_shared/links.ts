@@ -17,3 +17,7 @@ export function appBaseUrl(): string {
 export function setPasswordUrl(token: string): string {
   return `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
 }
+
+export function verifyEmailUrl(token: string): string {
+  return `${appBaseUrl()}/verify-email?token=${encodeURIComponent(token)}`;
+}
