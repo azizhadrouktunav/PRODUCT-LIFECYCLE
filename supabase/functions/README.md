@@ -98,6 +98,9 @@ npx supabase functions deploy invite-user --project-ref pxlbuncwdswxisjnszas
 npx supabase functions deploy delete-user --project-ref pxlbuncwdswxisjnszas
 npx supabase functions deploy resend-invite --project-ref pxlbuncwdswxisjnszas
 npx supabase functions deploy reset-password --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy set-user-activation --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy register-user --project-ref pxlbuncwdswxisjnszas
+npx supabase functions deploy verify-email --project-ref pxlbuncwdswxisjnszas
 ```
 
 `verify_jwt = false` is set in `supabase/config.toml` for all of them: no Supabase
