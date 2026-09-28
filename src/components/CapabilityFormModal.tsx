@@ -28,8 +28,9 @@ export function CapabilityFormModal({
   onCreated,
 }: Props) {
   const { groups, equipment, addCapability, updateCapability, getLifecycle } = useRegistry();
-  const { entityVisible } = useAuth();
+  const { can, entityVisible, role } = useAuth();
   const isEdit = !!capability;
+  const isTechnicalManagerAdd = !isEdit && role === 'technical_manager';
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -39,10 +40,14 @@ export function CapabilityFormModal({
   const [touched, setTouched] = useState(false);
 
   const eligibleGroups = useMemo(() => {
-    const visible = groups.filter((g) => entityVisible(g.productIds));
+    const visible = groups.filter((g) => {
+      if (!entityVisible(g.productIds)) return false;
+      if (isTechnicalManagerAdd) return usesEquipment(getLifecycle(g.track));
+      return true;
+    });
     if (productIds.length === 0) return visible;
     return visible.filter((g) => sharesProducts(g.productIds, productIds));
-  }, [groups, entityVisible, productIds]);
+  }, [groups, entityVisible, getLifecycle, isTechnicalManagerAdd, productIds]);
 
   const eligibleEquipment = useMemo(() => {
     const visible = equipment.filter((e) => entityVisible(e.productIds));
@@ -81,7 +86,12 @@ export function CapabilityFormModal({
   const trackId = groups.find((g) => g.id === groupId)?.track ?? '';
   const lifecycle = getLifecycle(trackId);
   const isHardware = usesEquipment(lifecycle);
-  const valid = name.trim().length > 1 && productIds.length > 0 && groupId !== '';
+  const canCreateCapability = can('add_capability') || isTechnicalManagerAdd;
+  const valid =
+    name.trim().length > 1 &&
+    productIds.length > 0 &&
+    groupId !== '' &&
+    (isEdit || (canCreateCapability && (!isTechnicalManagerAdd || isHardware)));
 
   function toggleEquip(id: string) {
     setEquipmentIds((prev) =>
@@ -123,6 +133,8 @@ export function CapabilityFormModal({
       subtitle={
         isEdit
           ? `${capability?.id} · progress and status follow the lifecycle automatically`
+          : isTechnicalManagerAdd
+            ? 'Technical Managers can add hardware capabilities only for their assigned products.'
           : 'An ID is assigned automatically. Next you will break it into epics, features and user stories.'
       }
       footer={
@@ -162,6 +174,8 @@ export function CapabilityFormModal({
             <p className="rounded-md border border-line-strong bg-ink-900 p-3 text-xs text-mute">
               {productIds.length === 0
                 ? 'Select products first, then pick a group that shares them.'
+                : isTechnicalManagerAdd
+                  ? 'No hardware group shares these assigned products.'
                 : 'No group shares these products. Create one on Capability Groups.'}
             </p>
           ) : (

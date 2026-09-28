@@ -23,7 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCapabilityEditor } from '../contexts/CapabilityEditorContext';
 import { useRegistry } from '../contexts/RegistryContext';
 import type { CapabilityGroup, Lifecycle, LifecycleTemplate } from '../types/registry';
-import { DECOMPOSITION_LABEL } from '../types/registry';
+import { DECOMPOSITION_LABEL, usesEquipment } from '../types/registry';
 import { ProcessModal } from './Groups';
 
 export function StructurePage() {
@@ -37,7 +37,7 @@ export function StructurePage() {
     removeGroup,
     getLifecycle,
   } = useRegistry();
-  const { can, entityVisible, capabilityVisible } = useAuth();
+  const { can, entityVisible, capabilityVisible, productVisible, role } = useAuth();
   const { openCreate } = useCapabilityEditor();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -48,6 +48,15 @@ export function StructurePage() {
   const canManageLc = can('manage_lifecycles');
   const canManageGroups = can('manage_groups');
   const canAddCap = can('add_capability');
+  const technicalManagerCanAddHardware =
+    role === 'technical_manager' &&
+    can('manage_equipment') &&
+    groups.some((g) => {
+      if (!entityVisible(g.productIds)) return false;
+      if (selectedGroupId && g.id !== selectedGroupId) return false;
+      if (selectedLifecycleId && g.track !== selectedLifecycleId) return false;
+      return usesEquipment(getLifecycle(g.track)) && (g.productIds ?? []).some(productVisible);
+    });
 
   const [addingLc, setAddingLc] = useState(false);
   const [editingLc, setEditingLc] = useState<Lifecycle | null>(null);
@@ -238,7 +247,7 @@ export function StructurePage() {
                 Add group
               </Button>
             )}
-            {canAddCap && (
+            {(canAddCap || technicalManagerCanAddHardware) && (
               <Button
                 variant="primary"
                 onClick={() =>

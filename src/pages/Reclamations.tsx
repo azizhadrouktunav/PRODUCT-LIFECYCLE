@@ -13,6 +13,7 @@ import {
   buildReclamation,
   deleteReclamation,
   fetchReclamations,
+  isAssignee,
   nextReclamationId,
   upsertReclamation,
 } from '../lib/reclamationsApi';
@@ -62,9 +63,10 @@ function formatDate(iso: string): string {
 }
 
 export function ReclamationsPage() {
-  const { user, profile, can } = useAuth();
+  const { user, profile, can, role } = useAuth();
   const { products } = useRegistry();
   const canManage = can('manage_reclamations');
+  const isAdmin = canManage || role === 'administrator';
   const userId = user?.id ?? profile?.userId ?? '';
 
   const [items, setItems] = useState<Reclamation[]>([]);
@@ -73,7 +75,7 @@ export function ReclamationsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Reclamation | null>(null);
 
-  const [scope, setScope] = useState<ScopeFilter>(canManage ? 'all' : 'mine');
+  const [scope, setScope] = useState<ScopeFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<ReclamationCategory | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<ReclamationStatus | 'all'>('all');
 
@@ -94,14 +96,10 @@ export function ReclamationsPage() {
     void reload();
   }, [reload]);
 
-  useEffect(() => {
-    if (!canManage && scope === 'all') setScope('mine');
-  }, [canManage, scope]);
-
   const filtered = useMemo(() => {
     return items.filter((r) => {
       if (scope === 'mine' && r.createdBy !== userId) return false;
-      if (scope === 'assigned' && r.assigneeId !== userId) return false;
+      if (scope === 'assigned' && !isAssignee(r, userId)) return false;
       if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       return true;
@@ -125,9 +123,12 @@ export function ReclamationsPage() {
     const existing = editing;
     const id = existing?.id ?? nextReclamationId(items);
     const rec = buildReclamation(id, input, userId, authorName, existing);
-    // Authors without manage cannot change status away from existing/Open via modal
-    if (!canManage && !(existing && existing.assigneeId === userId)) {
+    const mayTreat =
+      !!existing &&
+      (existing.category === 'support' ? isAdmin : isAssignee(existing, userId));
+    if (!mayTreat) {
       rec.status = existing?.status ?? 'Open';
+      rec.response = existing?.response ?? '';
     }
     await upsertReclamation(rec);
     await reload();
@@ -143,14 +144,26 @@ export function ReclamationsPage() {
     }
   }
 
+  function canTreatRow(r: Reclamation): boolean {
+    if (r.category === 'support') return isAdmin;
+    return isAssignee(r, userId);
+  }
+
+  function canReassignRow(r: Reclamation | null): boolean {
+    if (!r) return true;
+    if (r.category === 'support') return isAdmin;
+    if (r.category === 'demande') return r.createdBy === userId || isAssignee(r, userId);
+    return isAssignee(r, userId);
+  }
+
   function canEditRow(r: Reclamation): boolean {
-    if (canManage) return true;
-    if (r.assigneeId === userId) return true;
-    return r.createdBy === userId && r.status === 'Open';
+    return canReassignRow(r) || canTreatRow(r);
   }
 
   function canDeleteRow(r: Reclamation): boolean {
-    return canManage || (r.createdBy === userId && r.status === 'Open');
+    if (r.category === 'support') return isAdmin;
+    if (r.category === 'demande') return r.createdBy === userId;
+    return isAssignee(r, userId);
   }
 
   const modalTarget = editing;
@@ -182,7 +195,7 @@ export function ReclamationsPage() {
           onChange={(e) => setScope(e.target.value as ScopeFilter)}
           aria-label="Scope filter"
         >
-          {canManage && <option value="all">All</option>}
+          <option value="all">All</option>
           <option value="mine">Mine</option>
           <option value="assigned">Assigned to me</option>
         </select>
@@ -259,6 +272,11 @@ export function ReclamationsPage() {
                         {r.description}
                       </p>
                     )}
+                    {r.response && (
+                      <p className="mt-1 line-clamp-2 max-w-md text-xs text-soft">
+                        Reply: {r.response}
+                      </p>
+                    )}
                   </td>
                   <td className="py-3 pr-4 text-xs text-mute">
                     {productLabels(r.productIds)}
@@ -314,10 +332,10 @@ export function ReclamationsPage() {
       <ReclamationModal
         open={modalOpen}
         reclamation={modalTarget}
-        canManageStatus={
-          canManage || (!!modalTarget && modalTarget.assigneeId === userId)
-        }
-        canReassign={canManage || !modalTarget}
+        canManageStatus={!!modalTarget && canTreatRow(modalTarget)}
+        canReassign={!modalTarget || canReassignRow(modalTarget)}
+        canReply={!!modalTarget && canTreatRow(modalTarget)}
+        allowSupport={isAdmin}
         onClose={() => {
           setAdding(false);
           setEditing(null);

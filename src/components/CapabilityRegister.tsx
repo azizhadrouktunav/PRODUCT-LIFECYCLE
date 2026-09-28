@@ -116,6 +116,7 @@ export function CapabilityRegister({
     equipment,
     getGroup,
     countsOf,
+    getLifecycle,
     lifecycleOf,
     reorderCapabilities,
   } = useRegistry();
@@ -135,6 +136,15 @@ export function CapabilityRegister({
 
   const canReorder = canReorderRows(role) && !isReadOnly;
   const dndEnabled = canReorder && sortKey === 'sortOrder';
+  const technicalManagerCanAddHardware =
+    role === 'technical_manager' &&
+    can('manage_equipment') &&
+    groups.some((g) => {
+      if (groupId && g.id !== groupId) return false;
+      if (lifecycleId && g.track !== lifecycleId) return false;
+      return usesEquipment(getLifecycle(g.track)) && (g.productIds ?? []).some(productVisible);
+    });
+  const canAddCapability = can('add_capability') || technicalManagerCanAddHardware;
 
   const showStructureFilters = Array.isArray(groupOptions);
 
@@ -322,6 +332,29 @@ export function CapabilityRegister({
     ? undefined
     : `min(${pageSize * ROW_HEIGHT_REM + 2.75}rem, 70vh)`;
 
+  const productSelect = (
+    <label className="inline-flex items-center gap-1.5 text-xs text-mute">
+      Product
+      <select
+        className={`${selectClass} min-w-[160px] font-medium text-strong`}
+        value={productFilter}
+        onChange={(e) => setProductFilter(e.target.value)}
+        aria-label="Select product"
+        disabled={visibleProducts.length === 0}
+      >
+        {visibleProducts.length === 0 ? (
+          <option value="">No products</option>
+        ) : (
+          visibleProducts.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))
+        )}
+      </select>
+    </label>
+  );
+
   return (
     <div
       className={
@@ -338,8 +371,9 @@ export function CapabilityRegister({
           }
           action={
             <div className="flex flex-wrap items-center gap-1.5">
+              {productSelect}
               {can('import_export') && <FullDataTransfer />}
-              {can('add_capability') && (
+              {canAddCapability && (
                 <Button variant="primary" onClick={handleAdd}>
                   <PlusIcon className="h-3.5 w-3.5" />
                   Add capability
@@ -363,23 +397,7 @@ export function CapabilityRegister({
             aria-label="Search capabilities"
           />
         </div>
-        <select
-          className={`${selectClass} min-w-[160px] font-medium text-strong`}
-          value={productFilter}
-          onChange={(e) => setProductFilter(e.target.value)}
-          aria-label="Select product"
-          disabled={visibleProducts.length === 0}
-        >
-          {visibleProducts.length === 0 ? (
-            <option value="">No products</option>
-          ) : (
-            visibleProducts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))
-          )}
-        </select>
+        {hideHeader && productSelect}
         {showStructureFilters && (
           <div className="flex items-center gap-1">
             <select

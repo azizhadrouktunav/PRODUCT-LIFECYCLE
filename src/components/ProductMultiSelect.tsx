@@ -10,10 +10,12 @@ function toggle(list: string[], id: string, set: (next: string[]) => void) {
 export function ProductMultiSelect({
   productIds,
   onChange,
+  required = true,
   emptyHint = 'No products yet. Add products first, then assign them here.',
 }: {
   productIds: string[];
   onChange: (next: string[]) => void;
+  required?: boolean;
   emptyHint?: string;
 }) {
   const { products } = useRegistry();
@@ -25,7 +27,7 @@ export function ProductMultiSelect({
   return (
     <div>
       <span className="mb-1.5 flex items-baseline gap-2 text-xs font-medium text-soft">
-        Products <span className="text-brand-bright">*</span>
+        Products {required && <span className="text-brand-bright">*</span>}
         <span className="font-normal text-mute">
           {productIds.length > 0 ? `${productIds.length} selected` : 'select one or more'}
         </span>

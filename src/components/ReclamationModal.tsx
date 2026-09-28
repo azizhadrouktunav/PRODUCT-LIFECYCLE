@@ -16,6 +16,7 @@ import type {
 import {
   RECLAMATION_CATEGORIES,
   RECLAMATION_STATUSES,
+  assigneeFieldLabel,
   assigneeRoleForCategory,
 } from '../types/reclamations';
 
@@ -34,6 +35,8 @@ export function ReclamationModal({
   reclamation = null,
   canManageStatus,
   canReassign,
+  canReply,
+  allowSupport,
   onSave,
 }: {
   open: boolean;
@@ -41,43 +44,53 @@ export function ReclamationModal({
   reclamation?: Reclamation | null;
   canManageStatus: boolean;
   canReassign: boolean;
+  canReply: boolean;
+  allowSupport: boolean;
   onSave: (input: ReclamationInput) => void | Promise<void>;
 }) {
   const isEdit = !!reclamation;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<ReclamationCategory>('technique');
+  const [category, setCategory] = useState<ReclamationCategory>('demande');
   const [status, setStatus] = useState<ReclamationStatus>('Open');
   const [productIds, setProductIds] = useState<string[]>([]);
-  const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [response, setResponse] = useState('');
   const [assignees, setAssignees] = useState<AssignableUser[]>([]);
   const [loadingAssignees, setLoadingAssignees] = useState(false);
+  const [assigningAll, setAssigningAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const roleSlug = assigneeRoleForCategory(category);
-  const needsAssignee = category === 'technique' || category === 'it';
   const needsProduct = category === 'produit';
+  const showProducts = category === 'produit' || category === 'technique' || category === 'it';
+  const categories = RECLAMATION_CATEGORIES.filter((c) => allowSupport || c.id !== 'support');
 
   useEffect(() => {
     if (!open) return;
+    const nextCategory = reclamation?.category ?? 'demande';
     setTitle(reclamation?.title ?? '');
     setDescription(reclamation?.description ?? '');
-    setCategory(reclamation?.category ?? 'technique');
+    setCategory(allowSupport || nextCategory !== 'support' ? nextCategory : 'demande');
     setStatus(reclamation?.status ?? 'Open');
     setProductIds(reclamation?.productIds ?? []);
-    setAssigneeId(reclamation?.assigneeId ?? '');
+    setAssigneeIds(reclamation?.assigneeIds ?? []);
+    setResponse(reclamation?.response ?? '');
     setError(null);
-  }, [open, reclamation]);
+  }, [open, reclamation, allowSupport]);
 
   useEffect(() => {
-    if (!open || !roleSlug) {
-      setAssignees([]);
-      return;
-    }
+    if (!open) return;
     let cancelled = false;
     setLoadingAssignees(true);
-    void listUsersByRole(roleSlug)
+    if (category === 'produit' && productIds.length === 0) {
+      setAssignees([]);
+      setLoadingAssignees(false);
+      return;
+    }
+    const productFilter = category === 'produit' ? productIds : undefined;
+    void listUsersByRole(roleSlug, productFilter)
       .then((users) => {
         if (!cancelled) setAssignees(users);
       })
@@ -93,49 +106,69 @@ export function ReclamationModal({
     return () => {
       cancelled = true;
     };
-  }, [open, roleSlug]);
+  }, [open, roleSlug, category, productIds]);
 
   useEffect(() => {
-    if (!needsAssignee) return;
-    if (assigneeId && assignees.length > 0 && !assignees.some((u) => u.userId === assigneeId)) {
-      setAssigneeId('');
-    }
-  }, [needsAssignee, assignees, assigneeId]);
+    if (assignees.length === 0) return;
+    setAssigneeIds((prev) => prev.filter((id) => assignees.some((u) => u.userId === id)));
+  }, [assignees]);
 
-  const selectedAssignee = useMemo(
-    () => assignees.find((u) => u.userId === assigneeId) ?? null,
-    [assignees, assigneeId]
+  const selected = useMemo(
+    () => assignees.filter((u) => assigneeIds.includes(u.userId)),
+    [assignees, assigneeIds]
   );
 
-  const input: ReclamationInput = useMemo(() => {
-    const assignee =
-      needsAssignee && selectedAssignee
-        ? {
-            assigneeId: selectedAssignee.userId,
-            assigneeName: userLabel(selectedAssignee),
-          }
-        : { assigneeId: null as string | null, assigneeName: '' };
-    return {
+  const input: ReclamationInput = useMemo(
+    () => ({
       title,
       description,
       category,
       status,
-      productIds: needsProduct ? productIds : [],
-      ...assignee,
-    };
-  }, [
-    title,
-    description,
-    category,
-    status,
-    productIds,
-    needsProduct,
-    needsAssignee,
-    selectedAssignee,
-  ]);
+      productIds: showProducts ? productIds : [],
+      assigneeIds,
+      assigneeName: selected.map(userLabel).join(', '),
+      response,
+    }),
+    [title, description, category, status, productIds, showProducts, assigneeIds, selected, response]
+  );
 
   const validationError = validateReclamationInput(input);
   const valid = !validationError;
+
+  function toggleAssignee(userId: string) {
+    setAssigneeIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  }
+
+  async function assignEveryoneOnProducts() {
+    if (!roleSlug) return;
+    if (category !== 'support' && productIds.length === 0) {
+      setError('Select at least one product to assign everyone with this role.');
+      return;
+    }
+    setAssigningAll(true);
+    setError(null);
+    try {
+      const users = await listUsersByRole(
+        roleSlug,
+        category === 'support' ? undefined : productIds
+      );
+      setAssignees((prev) => {
+        const byId = new Map(prev.map((u) => [u.userId, u]));
+        for (const user of users) byId.set(user.userId, user);
+        return [...byId.values()];
+      });
+      setAssigneeIds(users.map((u) => u.userId));
+      if (users.length === 0) {
+        setError('No users with this role are assigned to the selected products.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssigningAll(false);
+    }
+  }
 
   async function submit() {
     const err = validateReclamationInput(input);
@@ -156,6 +189,7 @@ export function ReclamationModal({
   }
 
   const categoryMeta = RECLAMATION_CATEGORIES.find((c) => c.id === category);
+  const canAssignAll = !!roleSlug && (category === 'support' || productIds.length > 0);
 
   return (
     <Modal
@@ -163,14 +197,14 @@ export function ReclamationModal({
       onClose={onClose}
       width="max-w-xl"
       title={isEdit ? 'Edit reclamation' : 'New reclamation'}
-      subtitle="Categorize the request and send it to the right person when required."
+      subtitle="Choose the type, then assign the people who can see and treat it."
       footer={
         <>
-          <Button variant="quiet" onClick={onClose}>
+          <Button variant="quiet" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button variant="primary" onClick={() => void submit()} disabled={!valid || saving}>
-            {isEdit ? 'Save' : 'Submit'}
+            {saving ? 'Saving…' : isEdit ? 'Save' : 'Submit'}
           </Button>
         </>
       }
@@ -183,19 +217,17 @@ export function ReclamationModal({
             disabled={isEdit && !canReassign}
             onChange={(e) => {
               setCategory(e.target.value as ReclamationCategory);
-              setAssigneeId('');
+              setAssigneeIds([]);
               setProductIds([]);
             }}
           >
-            {RECLAMATION_CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
             ))}
           </select>
-          {categoryMeta && (
-            <p className="mt-1 text-2xs text-mute">{categoryMeta.hint}</p>
-          )}
+          {categoryMeta && <p className="mt-1 text-2xs text-mute">{categoryMeta.hint}</p>}
         </Field>
 
         <Field label="Title" required>
@@ -217,35 +249,62 @@ export function ReclamationModal({
           />
         </Field>
 
-        {needsProduct && <ProductMultiSelect productIds={productIds} onChange={setProductIds} />}
+        {showProducts && (
+          <ProductMultiSelect
+            productIds={productIds}
+            onChange={setProductIds}
+            required={needsProduct}
+          />
+        )}
 
-        {needsAssignee && (
-          <Field
-            label={category === 'technique' ? 'Technical Manager' : 'Project Manager'}
-            required
-          >
-            <select
-              className={selectClass + ' w-full'}
-              value={assigneeId}
-              disabled={loadingAssignees || (isEdit && !canReassign)}
-              onChange={(e) => setAssigneeId(e.target.value)}
-            >
-              <option value="">
-                {loadingAssignees ? 'Loading…' : 'Select a person'}
-              </option>
-              {assignees.map((u) => (
-                <option key={u.userId} value={u.userId}>
-                  {userLabel(u)}
-                </option>
-              ))}
-            </select>
+        <Field
+          label={assigneeFieldLabel(category)}
+          required={category !== 'demande'}
+          hint={
+            category === 'demande'
+              ? 'Optional. Assigned people can reply.'
+              : 'Only these people can see and treat this reclamation.'
+          }
+        >
+          <div className="max-h-40 space-y-1 overflow-auto rounded-md border border-line-strong bg-ink-900 p-2">
+            {loadingAssignees && <p className="px-1 text-2xs text-mute">Loading…</p>}
             {!loadingAssignees && assignees.length === 0 && (
-              <p className="mt-1 text-2xs text-orange">
-                No users with this role yet. Ask an admin to assign the role in Settings.
+              <p className="px-1 text-2xs text-orange">
+                {category === 'produit' && productIds.length === 0
+                  ? 'Select a product to list its Product Owners.'
+                  : 'No matching users. Ask an admin to assign this role.'}
               </p>
             )}
-          </Field>
-        )}
+            {assignees.map((u) => (
+              <label
+                key={u.userId}
+                className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-xs text-soft hover:bg-ink-800"
+              >
+                <input
+                  type="checkbox"
+                  checked={assigneeIds.includes(u.userId)}
+                  disabled={!canReassign}
+                  onChange={() => toggleAssignee(u.userId)}
+                />
+                <span className="min-w-0 truncate">{userLabel(u)}</span>
+              </label>
+            ))}
+          </div>
+          {roleSlug && (
+            <button
+              type="button"
+              className="mt-2 text-xs text-brand-bright hover:text-strong disabled:opacity-40"
+              disabled={!canAssignAll || assigningAll || !canReassign}
+              onClick={() => void assignEveryoneOnProducts()}
+            >
+              {assigningAll
+                ? 'Assigning…'
+                : category === 'support'
+                  ? 'Assign every administrator'
+                  : 'Assign everyone with this role on the selected products'}
+            </button>
+          )}
+        </Field>
 
         {isEdit && canManageStatus && (
           <Field label="Status">
@@ -260,6 +319,17 @@ export function ReclamationModal({
                 </option>
               ))}
             </select>
+          </Field>
+        )}
+
+        {isEdit && canReply && (
+          <Field label="Reply" hint="Visible to people who can see this reclamation.">
+            <textarea
+              className={`${inputClass} min-h-[84px] resize-y`}
+              value={response}
+              onChange={(e) => setResponse(e.target.value)}
+              placeholder="Treatment or answer…"
+            />
           </Field>
         )}
 

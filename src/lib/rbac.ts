@@ -10,6 +10,7 @@ export const SYSTEM_ROLE_LABEL: Record<string, string> = {
   technical_manager: 'Technical Manager',
   project_manager: 'Project Manager',
   product_owner: 'Product Owner',
+  it_manager: 'IT Manager',
   ceo: 'CEO',
   visiteur: 'Visiteur',
 };

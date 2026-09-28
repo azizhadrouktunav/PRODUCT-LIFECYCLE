@@ -1,6 +1,12 @@
-export type ReclamationCategory = 'technique' | 'produit' | 'it';
+export type ReclamationCategory = 'demande' | 'technique' | 'produit' | 'it' | 'support';
 
 export type ReclamationStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+
+export type AssigneeRole =
+  | 'technical_manager'
+  | 'product_owner'
+  | 'it_manager'
+  | 'administrator';
 
 export const RECLAMATION_CATEGORIES: {
   id: ReclamationCategory;
@@ -8,19 +14,29 @@ export const RECLAMATION_CATEGORIES: {
   hint: string;
 }[] = [
   {
+    id: 'demande',
+    label: 'Demande',
+    hint: 'Everyone can create and view it. Assign people who can reply.',
+  },
+  {
     id: 'technique',
     label: 'Réclamation technique',
-    hint: 'Send to a Technical Manager',
+    hint: 'Only the assigned Technical Managers can see and treat it.',
   },
   {
     id: 'produit',
     label: 'Réclamation produit',
-    hint: 'Link one or more products',
+    hint: 'Only the assigned Product Owners of the selected products can see and treat it.',
   },
   {
     id: 'it',
     label: 'Réclamation IT',
-    hint: 'Send to a Project Manager',
+    hint: 'Only the assigned IT Managers can see and treat it.',
+  },
+  {
+    id: 'support',
+    label: 'Support',
+    hint: 'Administrators only.',
   },
 ];
 
@@ -32,18 +48,35 @@ export const RECLAMATION_STATUSES: ReclamationStatus[] = [
 ];
 
 export const RECLAMATION_CATEGORY_LABEL: Record<ReclamationCategory, string> = {
+  demande: 'Demande',
   technique: 'Réclamation technique',
   produit: 'Réclamation produit',
   it: 'Réclamation IT',
+  support: 'Support',
 };
 
-/** Role slug used for the assignee picker per category. */
-export function assigneeRoleForCategory(
-  category: ReclamationCategory
-): 'technical_manager' | 'project_manager' | null {
+/** Role slug used for the assignee picker. Demande accepts any user. */
+export function assigneeRoleForCategory(category: ReclamationCategory): AssigneeRole | null {
   if (category === 'technique') return 'technical_manager';
-  if (category === 'it') return 'project_manager';
+  if (category === 'produit') return 'product_owner';
+  if (category === 'it') return 'it_manager';
+  if (category === 'support') return 'administrator';
   return null;
+}
+
+export function assigneeFieldLabel(category: ReclamationCategory): string {
+  switch (category) {
+    case 'technique':
+      return 'Technical Managers';
+    case 'produit':
+      return 'Product Owners';
+    case 'it':
+      return 'IT Managers';
+    case 'support':
+      return 'Administrators';
+    default:
+      return 'People who can reply';
+  }
 }
 
 export interface Reclamation {
@@ -53,8 +86,10 @@ export interface Reclamation {
   category: ReclamationCategory;
   status: ReclamationStatus;
   productIds: string[];
+  assigneeIds: string[];
   assigneeId: string | null;
   assigneeName: string;
+  response: string;
   createdBy: string;
   createdByName: string;
   createdAt: string;
@@ -67,6 +102,7 @@ export type ReclamationInput = {
   category: ReclamationCategory;
   status?: ReclamationStatus;
   productIds: string[];
-  assigneeId: string | null;
+  assigneeIds: string[];
   assigneeName: string;
+  response?: string;
 };
