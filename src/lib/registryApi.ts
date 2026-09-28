@@ -625,7 +625,7 @@ export async function fetchRegistry(): Promise<RegistrySnapshot> {
     }
   }
 
-  let lifecycleTemplates = templatesMissing
+  const lifecycleTemplates = templatesMissing
     ? builtInLifecycleTemplates()
     : await ensureDefaultLifecycleTemplates(
         (lifecycleTemplatesRes.data ?? []).map((r) =>

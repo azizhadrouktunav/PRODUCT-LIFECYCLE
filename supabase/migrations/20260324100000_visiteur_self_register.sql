@@ -30,6 +30,10 @@ alter table public.app_user_tokens
   check (kind in ('invite', 'reset', 'verify'));
 
 -- 4) Richer status view for admin Users screen
+-- `create or replace view` cannot insert `status` before the existing
+-- `is_active` column, so recreate the view explicitly.
+drop view if exists public.app_user_status;
+
 create or replace view public.app_user_status as
 select
   u.id as user_id,
@@ -47,4 +51,4 @@ select
 from public.app_users u
 where public.app_has('manage_users') or u.id = public.app_uid();
 
-grant select on public.app_user_status to authenticated;
+grant select on public.app_user_status to anon, authenticated;
